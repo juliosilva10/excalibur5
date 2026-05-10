@@ -1,0 +1,42 @@
+﻿<Application x:Class="Excalibur5.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:converters="clr-namespace:Excalibur5.Converters">
+    <Application.Resources>
+
+        <!-- Paleta Deriv (baseada no Excalibur3.1) -->
+        <Color x:Key="DerivBgColor">#07121a</Color>
+        <Color x:Key="DerivCardBg">#153342</Color>
+        <Color x:Key="DerivCardBorder">#1d4957</Color>
+        <Color x:Key="DerivInputBg">#153342</Color>
+        <Color x:Key="DerivInputBorder">#1d4957</Color>
+        <Color x:Key="DerivTextColor">#a3b8cc</Color>
+        <Color x:Key="DerivValueColor">#f3fbff</Color>
+
+        <SolidColorBrush x:Key="BackgroundBrush"      Color="#07121a"/>
+        <SolidColorBrush x:Key="SurfaceBrush"         Color="#0f2030"/>
+        <SolidColorBrush x:Key="Surface2Brush"        Color="#153342"/>
+        <SolidColorBrush x:Key="AccentBrush"          Color="#00f0ff"/>
+        <SolidColorBrush x:Key="TextBrush"            Color="#f3fbff"/>
+        <SolidColorBrush x:Key="SubtleBrush"          Color="#a3b8cc"/>
+        <SolidColorBrush x:Key="BorderBrush"          Color="#1d4957"/>
+        <SolidColorBrush x:Key="SuccessBrush"         Color="#34c759"/>
+        <SolidColorBrush x:Key="RealBadgeBrush"       Color="#1a4a28"/>
+        <SolidColorBrush x:Key="VirtualBadgeBrush"    Color="#1a3a6b"/>
+        <SolidColorBrush x:Key="DerivCardBgBrush"     Color="#153342"/>
+        <SolidColorBrush x:Key="DerivCardBorderBrush" Color="#1d4957"/>
+
+        <!-- Converters -->
+        <converters:InverseBoolConverter x:Key="InverseBool"/>
+        <BooleanToVisibilityConverter   x:Key="BoolToVis"/>
+
+        <!-- Window style -->
+        <Style TargetType="Window">
+            <Setter Property="Background"  Value="{StaticResource BackgroundBrush}"/>
+            <Setter Property="Foreground"  Value="{StaticResource TextBrush}"/>
+            <Setter Property="FontFamily"  Value="Segoe UI"/>
+            <Setter Property="FontSize"    Value="13"/>
+        </Style>
+
+    </Application.Resources>
+</Application>

@@ -1,0 +1,525 @@
+<Window x:Class="Excalibur5.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="clr-namespace:Excalibur5.ViewModels"
+        mc:Ignorable="d"
+        Title="Excalibur5" Height="600" Width="1100"
+        MinWidth="900" MinHeight="400"
+        WindowStartupLocation="CenterScreen"
+        Background="#07121a"
+        Foreground="{StaticResource TextBrush}"
+        FontFamily="Segoe UI" FontSize="13">
+
+    <Window.Resources>
+
+        <!-- ===== PASSWORD BOX (estilo Excalibur3.1) ===== -->
+        <Style x:Key="TokenPasswordBox" TargetType="PasswordBox">
+            <Setter Property="Background"   Value="{StaticResource DerivCardBgBrush}"/>
+            <Setter Property="Foreground"   Value="White"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush"  Value="{StaticResource DerivCardBorderBrush}"/>
+            <Setter Property="Padding"      Value="8,2,8,2"/>
+            <Setter Property="FontSize"     Value="10"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="CaretBrush"   Value="White"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="PasswordBox">
+                        <Grid>
+                            <!-- Glow neon ao focar/hover -->
+                            <Border x:Name="GlowBorder"
+                                    CornerRadius="8"
+                                    Background="Transparent"
+                                    BorderBrush="#00f0ff"
+                                    BorderThickness="2"
+                                    Opacity="0">
+                                <Border.Effect>
+                                    <DropShadowEffect Color="#00f0ff" BlurRadius="18" ShadowDepth="0" Opacity="1"/>
+                                </Border.Effect>
+                                <Border.Margin>
+                                    <Thickness>-2,-2,-2,-2</Thickness>
+                                </Border.Margin>
+                            </Border>
+                            <!-- Corpo principal -->
+                            <Border x:Name="MainBorder"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    CornerRadius="8">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                        <GradientStop Color="#08141a" Offset="0.0"/>
+                                        <GradientStop Color="#0d1f28" Offset="0.1"/>
+                                        <GradientStop Color="#153342" Offset="0.5"/>
+                                        <GradientStop Color="#153342" Offset="1.0"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                                <ScrollViewer x:Name="PART_ContentHost"
+                                              Margin="{TemplateBinding Padding}"
+                                              VerticalAlignment="Center"/>
+                            </Border>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="GlowBorder"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="1" Duration="0:0:0.3"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                                <Trigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="GlowBorder"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="0" Duration="0:0:0.3"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.ExitActions>
+                            </Trigger>
+                            <Trigger Property="IsFocused" Value="True">
+                                <Setter TargetName="GlowBorder" Property="Opacity" Value="1"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Foreground" Value="#66ffffff"/>
+                                <Setter TargetName="MainBorder" Property="Opacity" Value="0.7"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ===== BOTÃO CONECTAR/DESCONECTAR (estilo Excalibur3.1) ===== -->
+        <!-- Um único estilo com Tag="Disconnected"|"Connected" para mudar visual -->
+        <Style x:Key="DerivToggleButtonStyle" TargetType="Button">
+            <Setter Property="Background"    Value="Transparent"/>
+            <Setter Property="Foreground"    Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding"       Value="10,0,10,0"/>
+            <Setter Property="FontSize"      Value="10"/>
+            <Setter Property="Height"        Value="26"/>
+            <Setter Property="Width"         Value="76"/>
+            <Setter Property="Cursor"        Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid>
+                            <!-- Glow de fundo -->
+                            <Border x:Name="GlowBorder"
+                                    CornerRadius="8"
+                                    Background="#00f0ff"
+                                    Opacity="0">
+                                <Border.Effect>
+                                    <BlurEffect Radius="20"/>
+                                </Border.Effect>
+                            </Border>
+                            <!-- Sombra inferior (volume) -->
+                            <Border x:Name="ShadowBorder"
+                                    CornerRadius="8"
+                                    Background="Black"
+                                    Opacity="0.4"
+                                    Margin="0,2,0,-2"/>
+                            <!-- Corpo principal -->
+                            <Border x:Name="MainBorder"
+                                    CornerRadius="8"
+                                    BorderThickness="1.5"
+                                    BorderBrush="#3a6b82">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                        <GradientStop Color="#2c627d" Offset="0.0"/>
+                                        <GradientStop Color="#1e465a" Offset="0.4"/>
+                                        <GradientStop Color="#153342" Offset="1.0"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                                <Grid>
+                                    <!-- Brilho superior sutil -->
+                                    <Border CornerRadius="7,7,0,0" Height="8" VerticalAlignment="Top" Opacity="0.10"
+                                            IsHitTestVisible="False">
+                                        <Border.Background>
+                                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                                <GradientStop Color="White" Offset="0.0"/>
+                                                <GradientStop Color="Transparent" Offset="1.0"/>
+                                            </LinearGradientBrush>
+                                        </Border.Background>
+                                    </Border>
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                      Margin="{TemplateBinding Padding}"/>
+                                </Grid>
+                            </Border>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <!-- Estado: Conectando (amarelo) -->
+                            <Trigger Property="Tag" Value="Connecting">
+                                <Setter TargetName="GlowBorder" Property="Background" Value="#f0c000"/>
+                                <Setter TargetName="GlowBorder" Property="Opacity" Value="0.30"/>
+                                <Setter TargetName="MainBorder" Property="BorderBrush" Value="#e8c84a"/>
+                                <Setter TargetName="MainBorder" Property="Background">
+                                    <Setter.Value>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                            <GradientStop Color="#7a5e00" Offset="0.0"/>
+                                            <GradientStop Color="#5a4400" Offset="0.4"/>
+                                            <GradientStop Color="#3a2d00" Offset="1.0"/>
+                                        </LinearGradientBrush>
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                            <!-- Estado: Conectado (verde) -->
+                            <Trigger Property="Tag" Value="Connected">
+                                <Setter TargetName="GlowBorder" Property="Background" Value="#34c759"/>
+                                <Setter TargetName="GlowBorder" Property="Opacity" Value="0.22"/>
+                                <Setter TargetName="MainBorder" Property="BorderBrush" Value="#5ec97b"/>
+                                <Setter TargetName="MainBorder" Property="Background">
+                                    <Setter.Value>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                            <GradientStop Color="#2d6e48" Offset="0.0"/>
+                                            <GradientStop Color="#235c3d" Offset="0.4"/>
+                                            <GradientStop Color="#18422d" Offset="1.0"/>
+                                        </LinearGradientBrush>
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                            <!-- Hover: desconectado -->
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="Tag" Value="Disconnected"/>
+                                    <Condition Property="IsMouseOver" Value="True"/>
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="GlowBorder" Property="Opacity" Value="0.45"/>
+                                <Setter TargetName="MainBorder" Property="BorderBrush" Value="#00f0ff"/>
+                                <Setter TargetName="MainBorder" Property="Background">
+                                    <Setter.Value>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                            <GradientStop Color="#3a7e9e" Offset="0.0"/>
+                                            <GradientStop Color="#23536b" Offset="0.4"/>
+                                            <GradientStop Color="#1a3f52" Offset="1.0"/>
+                                        </LinearGradientBrush>
+                                    </Setter.Value>
+                                </Setter>
+                            </MultiTrigger>
+                            <!-- Click: desconectado -->
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="Tag" Value="Disconnected"/>
+                                    <Condition Property="IsPressed" Value="True"/>
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="ShadowBorder" Property="Opacity" Value="0.1"/>
+                                <Setter TargetName="GlowBorder"   Property="Opacity" Value="0.6"/>
+                                <Setter TargetName="MainBorder" Property="Background">
+                                    <Setter.Value>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                            <GradientStop Color="#153342" Offset="0.0"/>
+                                            <GradientStop Color="#0d242f" Offset="1.0"/>
+                                        </LinearGradientBrush>
+                                    </Setter.Value>
+                                </Setter>
+                            </MultiTrigger>
+                            <!-- Hover: conectado -->
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="Tag" Value="Connected"/>
+                                    <Condition Property="IsMouseOver" Value="True"/>
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="GlowBorder" Property="Opacity" Value="0.58"/>
+                                <Setter TargetName="MainBorder" Property="BorderBrush" Value="#9bfbb6"/>
+                                <Setter TargetName="MainBorder" Property="Background">
+                                    <Setter.Value>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                            <GradientStop Color="#3d8b5e" Offset="0.0"/>
+                                            <GradientStop Color="#2b6b48" Offset="0.45"/>
+                                            <GradientStop Color="#1a472f" Offset="1.0"/>
+                                        </LinearGradientBrush>
+                                    </Setter.Value>
+                                </Setter>
+                            </MultiTrigger>
+                            <!-- Click: conectado -->
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="Tag" Value="Connected"/>
+                                    <Condition Property="IsPressed" Value="True"/>
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="ShadowBorder" Property="Opacity" Value="0.1"/>
+                                <Setter TargetName="GlowBorder"   Property="Opacity" Value="0.35"/>
+                                <Setter TargetName="MainBorder" Property="Background">
+                                    <Setter.Value>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                            <GradientStop Color="#235c3d" Offset="0.0"/>
+                                            <GradientStop Color="#1c4b33" Offset="1.0"/>
+                                        </LinearGradientBrush>
+                                    </Setter.Value>
+                                </Setter>
+                            </MultiTrigger>
+                            <!-- Desabilitado -->
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="MainBorder" Property="Opacity" Value="0.45"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Label pequeno (estilo Excalibur3.1) -->
+        <Style x:Key="TopLabelStyle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#90b5c9"/>
+            <Setter Property="FontSize"   Value="10"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+
+        <!-- Valor (estilo Excalibur3.1) -->
+        <Style x:Key="TopValueStyle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#f3fbff"/>
+            <Setter Property="FontSize"   Value="13"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+        </Style>
+
+    </Window.Resources>
+
+    <Grid>
+        <Grid.Background>
+            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                <GradientStop Color="#0a1821" Offset="0"/>
+                <GradientStop Color="#061018" Offset="1"/>
+            </LinearGradientBrush>
+        </Grid.Background>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- ===== HEADER CARD ===== -->
+        <Border Grid.Row="0"
+                BorderBrush="{StaticResource DerivCardBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="8"
+                Height="46"
+                Margin="8,8,8,0"
+                Padding="10,4,10,4"
+                VerticalAlignment="Top">
+            <Border.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                    <GradientStop Color="#234e63" Offset="0.0"/>
+                    <GradientStop Color="#153342" Offset="0.3"/>
+                    <GradientStop Color="#112935" Offset="1.0"/>
+                </LinearGradientBrush>
+            </Border.Background>
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="30" ShadowDepth="8" Opacity="0.7"
+                                  Direction="270" Color="Black"/>
+            </Border.Effect>
+
+            <Grid>
+                <!-- Overlay degradê azul para conta virtual -->
+                <Border CornerRadius="7"
+                        IsHitTestVisible="False"
+                        Visibility="{Binding ShowVirtualGlow, Converter={StaticResource BoolToVis}}">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0,0.5" EndPoint="1,0.5">
+                            <GradientStop Color="#00112935" Offset="0.0"/>
+                            <GradientStop Color="#00112935" Offset="0.30"/>
+                            <GradientStop Color="#662060c0" Offset="0.42"/>
+                            <GradientStop Color="#992060c0" Offset="0.50"/>
+                            <GradientStop Color="#992060c0" Offset="0.72"/>
+                            <GradientStop Color="#662060c0" Offset="0.80"/>
+                            <GradientStop Color="#00112935" Offset="0.92"/>
+                            <GradientStop Color="#00112935" Offset="1.0"/>
+                        </LinearGradientBrush>
+                    </Border.Background>
+                </Border>
+
+                <!-- Overlay degradê dourado para conta real -->
+                <Border CornerRadius="7"
+                        IsHitTestVisible="False"
+                        Visibility="{Binding ShowRealGlow, Converter={StaticResource BoolToVis}}">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0,0.5" EndPoint="1,0.5">
+                            <GradientStop Color="#00112935" Offset="0.0"/>
+                            <GradientStop Color="#00112935" Offset="0.30"/>
+                            <GradientStop Color="#66a06010" Offset="0.42"/>
+                            <GradientStop Color="#99c07818" Offset="0.50"/>
+                            <GradientStop Color="#99c07818" Offset="0.72"/>
+                            <GradientStop Color="#66a06010" Offset="0.80"/>
+                            <GradientStop Color="#00112935" Offset="0.92"/>
+                            <GradientStop Color="#00112935" Offset="1.0"/>
+                        </LinearGradientBrush>
+                    </Border.Background>
+                </Border>
+
+                <Grid>
+                <Grid.ColumnDefinitions>
+                    <!-- Token -->
+                    <ColumnDefinition Width="120"/>
+                    <!-- Espaço -->
+                    <ColumnDefinition Width="12"/>
+                    <!-- Botão -->
+                    <ColumnDefinition Width="76"/>
+                    <!-- Uptime -->
+                    <ColumnDefinition Width="Auto"/>
+                    <!-- Flex -->
+                    <ColumnDefinition Width="*"/>
+                    <!-- Conta: Saldo | Tipo | LoginId -->
+                    <ColumnDefinition Width="290"/>
+                    <!-- Status + UTC + Ping -->
+                    <ColumnDefinition Width="240"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Col 0: Token PasswordBox -->
+                <PasswordBox Grid.Column="0"
+                             x:Name="TokenBox"
+                             Style="{StaticResource TokenPasswordBox}"
+                             Height="30"
+                             VerticalAlignment="Center"
+                             IsEnabled="{Binding IsConnected, Converter={StaticResource InverseBool}}"
+                             PasswordChanged="TokenBox_PasswordChanged"
+                             ToolTip="Cole ou digite seu token da Deriv"/>
+
+                <!-- Col 2: Botão único com Tag controlando visual -->
+                <Button Grid.Column="2"
+                        VerticalAlignment="Center"
+                        Command="{Binding ToggleConnectionCommand}">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource DerivToggleButtonStyle}">
+                            <Setter Property="Content" Value="Conectar"/>
+                            <Setter Property="Tag"     Value="Disconnected"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsConnecting}" Value="True">
+                                    <Setter Property="Content" Value="Aguarde..."/>
+                                    <Setter Property="Tag"     Value="Connecting"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding IsConnected}" Value="True">
+                                    <Setter Property="Content" Value="Desconectar"/>
+                                    <Setter Property="Tag"     Value="Connected"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+
+                <!-- Col 3: Uptime -->
+                <StackPanel Grid.Column="3" Orientation="Vertical"
+                            VerticalAlignment="Center" Margin="10,0,0,0"
+                            Visibility="{Binding IsConnected, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Text="On" Style="{StaticResource TopLabelStyle}"/>
+                    <TextBlock Text="{Binding Uptime}"
+                               FontFamily="Consolas" FontSize="12" FontWeight="Normal"
+                               Foreground="#f0c000"/>
+                </StackPanel>
+
+                <!-- Col 5: Conta — Saldo | Tipo | LoginId -->
+                <StackPanel Grid.Column="5" Orientation="Horizontal"
+                            VerticalAlignment="Center" HorizontalAlignment="Left"
+                            Visibility="{Binding IsConnected, Converter={StaticResource BoolToVis}}">
+                    <StackPanel Margin="0,0,16,0">
+                        <TextBlock Text="Saldo" Style="{StaticResource TopLabelStyle}"/>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding Balance, StringFormat=N2}"
+                                       Style="{StaticResource TopValueStyle}"
+                                       Foreground="#00e8c8"/>
+                            <TextBlock Text="{Binding Currency}"
+                                       Style="{StaticResource TopValueStyle}"
+                                       Margin="4,0,0,0"/>
+                        </StackPanel>
+                    </StackPanel>
+                    <StackPanel Margin="0,0,16,0">
+                        <TextBlock Text="Tipo" Style="{StaticResource TopLabelStyle}"/>
+                        <TextBlock Text="{Binding AccountTypeLabel}" Style="{StaticResource TopValueStyle}"/>
+                    </StackPanel>
+                    <StackPanel>
+                        <TextBlock Text="Conta" Style="{StaticResource TopLabelStyle}"/>
+                        <TextBlock Text="{Binding LoginId}" Style="{StaticResource TopValueStyle}"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Col 6: Status + UTC + Ping -->
+                <StackPanel Grid.Column="6" Orientation="Horizontal"
+                            VerticalAlignment="Center" HorizontalAlignment="Right"
+                            Visibility="{Binding IsConnected, Converter={StaticResource BoolToVis}}">
+                    <StackPanel Margin="0,0,14,0">
+                        <!-- Label "Servidor" com bolinha pulsante à direita -->
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="Servidor" Style="{StaticResource TopLabelStyle}"/>
+                            <Ellipse x:Name="StatusDot"
+                                     Width="7" Height="7"
+                                     Fill="#34c759"
+                                     VerticalAlignment="Center"
+                                     Margin="5,0,0,0">
+                                <Ellipse.Effect>
+                                    <DropShadowEffect Color="#34c759" BlurRadius="6" ShadowDepth="0" Opacity="0.8"/>
+                                </Ellipse.Effect>
+                                <Ellipse.Triggers>
+                                    <EventTrigger RoutedEvent="Ellipse.Loaded">
+                                        <BeginStoryboard>
+                                            <Storyboard RepeatBehavior="Forever">
+                                                <DoubleAnimation
+                                                    Storyboard.TargetProperty="(UIElement.Effect).(DropShadowEffect.BlurRadius)"
+                                                    From="2" To="10" Duration="0:0:0.9" AutoReverse="True"/>
+                                                <DoubleAnimation
+                                                    Storyboard.TargetProperty="(UIElement.Effect).(DropShadowEffect.Opacity)"
+                                                    From="0.3" To="1.0" Duration="0:0:0.9" AutoReverse="True"/>
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </EventTrigger>
+                                </Ellipse.Triggers>
+                            </Ellipse>
+                        </StackPanel>
+                        <TextBlock Text="{Binding ServerUtc}"
+                                   Style="{StaticResource TopValueStyle}"
+                                   FontFamily="Consolas" FontSize="12" FontWeight="Normal"/>
+                    </StackPanel>
+                    <StackPanel>
+                        <TextBlock Text="Ping" Style="{StaticResource TopLabelStyle}"/>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding PingMs, Mode=OneWay}"
+                                       Style="{StaticResource TopValueStyle}"
+                                       FontFamily="Consolas" FontSize="12" FontWeight="Normal"/>
+                            <TextBlock Text=" ms"
+                                       Style="{StaticResource TopValueStyle}"
+                                       FontFamily="Consolas" FontSize="12" FontWeight="Normal"/>
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+
+                </Grid><!-- inner columns grid -->
+            </Grid><!-- overlay wrapper grid -->
+        </Border>
+
+        <!-- Status message -->
+        <TextBlock Grid.Row="0"
+                   Text="{Binding StatusMessage}"
+                   Foreground="#FF6B6B"
+                   FontSize="10"
+                   HorizontalAlignment="Left"
+                   VerticalAlignment="Bottom"
+                   Margin="20,0,0,2"
+                   Visibility="{Binding StatusMessage, Converter={StaticResource BoolToVis}}"/>
+
+        <!-- ===== MAIN CONTENT AREA ===== -->
+        <Border Grid.Row="1"
+                BorderBrush="{StaticResource DerivCardBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="8"
+                Margin="8,8,8,8">
+            <Border.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                    <GradientStop Color="#153342" Offset="0.0"/>
+                    <GradientStop Color="#0f2030" Offset="1.0"/>
+                </LinearGradientBrush>
+            </Border.Background>
+            <Border.Effect>
+                <DropShadowEffect Color="Black" BlurRadius="20" ShadowDepth="4"
+                                  Opacity="0.5" Direction="270"/>
+            </Border.Effect>
+            <TextBlock Text="Área de trading — em breve"
+                       Foreground="{StaticResource SubtleBrush}"
+                       FontSize="14"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"/>
+        </Border>
+
+    </Grid>
+</Window>

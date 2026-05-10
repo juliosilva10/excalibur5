@@ -1,0 +1,26 @@
+# Build output
+bin/
+obj/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Rider / JetBrains
+.idea/
+
+# Local user config / secrets (never commit tokens or local overrides)
+appsettings.local.json
+*.local.json
+secrets.json
+*.secrets.json
+
+# OS
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# NOTE: App ID (82663) is NOT secret and is intentionally tracked in AppConfig.cs
