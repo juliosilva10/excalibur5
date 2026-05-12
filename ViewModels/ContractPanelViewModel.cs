@@ -275,6 +275,7 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private async Task SelectCallAsync()
     {
+        if (IsBuying) return;
         SelectedContractType = ContractTypeCall;
         await BuyAsync(ContractTypeCall);
     }
@@ -282,6 +283,7 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private async Task SelectPutAsync()
     {
+        if (IsBuying) return;
         SelectedContractType = ContractTypePut;
         await BuyAsync(ContractTypePut);
     }
@@ -314,6 +316,8 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
                 LastBuyResult = $"Comprado! ID: {result.ContractId}";
             else
                 LastBuyResult = $"Erro: {result.Error}";
+
+            await ResubscribeAfterBuyAsync(contractType);
         }
         catch (Exception ex)
         {
@@ -323,11 +327,10 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
         finally
         {
             IsBuying = false;
-            ResubscribeAfterBuy(contractType);
         }
     }
 
-    private async void ResubscribeAfterBuy(string contractType)
+    private async Task ResubscribeAfterBuyAsync(string contractType)
     {
         if (!_active || !ContractsLoaded || !ValidateInputs()) return;
 

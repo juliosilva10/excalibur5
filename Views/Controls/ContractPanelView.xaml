@@ -208,6 +208,7 @@
                             </StackPanel>
                             <Button x:Name="BtnCall" Click="CallButton_Click"
                                     Style="{StaticResource DerivCallButtonStyle}"
+                                    IsEnabled="{Binding IsBuying, Converter={StaticResource InverseBool}}"
                                     Content="Comprar Call" Width="120"
                                     HorizontalAlignment="Center"/>
                         </StackPanel>
@@ -237,6 +238,7 @@
                             </StackPanel>
                             <Button x:Name="BtnPut" Click="PutButton_Click"
                                     Style="{StaticResource DerivPutButtonStyle}"
+                                    IsEnabled="{Binding IsBuying, Converter={StaticResource InverseBool}}"
                                     Content="Comprar Put" Width="120"
                                     HorizontalAlignment="Center"/>
                         </StackPanel>
