@@ -14,6 +14,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     private readonly IDerivApiService        _api;
     private readonly IDerivWebSocketService  _ws;
+    private readonly ITickStreamService      _tickStream;
+    private readonly IContractService        _contractService;
     private readonly DispatcherTimer         _timer;
     private readonly DispatcherTimer         _uptimeTimer;
     private readonly System.Diagnostics.Stopwatch _uptimeWatch = new();
@@ -37,6 +39,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
     public bool   ShowVirtualGlow  => IsConnected && IsVirtual;
     public bool   ShowRealGlow     => IsConnected && !IsVirtual && !string.IsNullOrEmpty(AccountType);
 
+    public MarketsViewModel Markets { get; }
+    public LogViewModel Log { get; } = new();
+
     partial void OnAccountTypeChanged(string value)
     {
         OnPropertyChanged(nameof(IsVirtual));
@@ -51,18 +56,39 @@ public partial class MainViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(ShowRealGlow));
     }
 
-    public MainViewModel(IDerivApiService api, IDerivWebSocketService ws)
+    public MainViewModel(IDerivApiService api, IDerivWebSocketService ws, ITickStreamService tickStream, IContractService contractService)
     {
-        _api = api;
-        _ws  = ws;
+        _api        = api;
+        _ws         = ws;
+        _tickStream = tickStream;
+        _contractService = contractService;
+
+        Markets = new MarketsViewModel(tickStream, contractService);
+
+        Markets.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(Markets.IsMarketsVisible) && Markets.IsMarketsVisible)
+                Log.IsLogVisible = false;
+            if (e.PropertyName == nameof(Markets.IsMarketsVisible) || e.PropertyName == nameof(Markets.SelectedTab))
+            {
+                SaveUiState();
+                WatchContractPanelChanges();
+            }
+        };
+        Log.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(Log.IsLogVisible) && Log.IsLogVisible)
+                Markets.IsMarketsVisible = false;
+            if (e.PropertyName == nameof(Log.IsLogVisible))
+                SaveUiState();
+        };
 
         _api.Authorized     += OnAuthorized;
         _api.BalanceUpdated += OnBalanceUpdated;
         _ws.Disconnected    += OnDisconnected;
         _ws.Connected       += OnConnected;
 
-        // 3 s interval — avoids flooding the server and racing with reconnect
-        _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(3000) };
+        _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(10) };
         _timer.Tick += OnTimerTick;
 
         _uptimeTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
@@ -126,6 +152,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
             _uptimeWatch.Restart();
             _uptimeTimer.Start();
             AppLogger.Info(Src, "Connection fully established — timer started");
+
+            await RestoreUiStateAsync();
         }
         catch (Exception ex)
         {
@@ -148,6 +176,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         AppLogger.Info(Src, "DisconnectAsync called");
         try
         {
+            await Markets.UnsubscribeAllAsync();
             await _ws.DisconnectAsync();
         }
         finally
@@ -196,7 +225,6 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     private async void OnConnected(object? sender, EventArgs e)
     {
-        // IsConnecting is only written on the UI thread — read it there too
         var isManual = await Application.Current.Dispatcher.InvokeAsync(() => IsConnecting);
         if (isManual) return;
 
@@ -219,6 +247,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 if (!_timer.IsEnabled) _timer.Start();
                 if (!_uptimeTimer.IsEnabled) { _uptimeWatch.Restart(); _uptimeTimer.Start(); }
             });
+
+            await Markets.ResubscribeActiveAsync();
             AppLogger.Info(Src, "Reconexão automática concluída");
         }
         catch (Exception ex)
@@ -266,8 +296,73 @@ public partial class MainViewModel : ObservableObject, IDisposable
         }
     }
 
+    private ContractPanelViewModel? _watchedPanel;
+    private bool _restoringState;
+
+    private void WatchContractPanelChanges()
+    {
+        if (_watchedPanel != null)
+            _watchedPanel.PropertyChanged -= OnContractPanelChanged;
+
+        _watchedPanel = Markets.SelectedTab?.ContractPanel;
+
+        if (_watchedPanel != null)
+            _watchedPanel.PropertyChanged += OnContractPanelChanged;
+    }
+
+    private void OnContractPanelChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (_restoringState) return;
+        if (e.PropertyName is nameof(ContractPanelViewModel.DurationText)
+            or nameof(ContractPanelViewModel.DurationUnit)
+            or nameof(ContractPanelViewModel.StakeText)
+            or nameof(ContractPanelViewModel.UseDuration))
+        {
+            SaveUiState();
+        }
+    }
+
+    private void SaveUiState()
+    {
+        var panel = Log.IsLogVisible ? "log" : Markets.IsMarketsVisible ? "markets" : "";
+        var market = Markets.SelectedTab?.Symbol;
+        var cp = Markets.SelectedTab?.ContractPanel;
+        UiStateStore.Save(panel, market,
+            cp?.DurationUnit.ToString(),
+            cp?.DurationText,
+            cp?.StakeText,
+            cp?.UseDuration);
+    }
+
+    private async Task RestoreUiStateAsync()
+    {
+        var state = UiStateStore.Load();
+        if (state.ActivePanel == "log")
+        {
+            Log.IsLogVisible = true;
+        }
+        else if (state.ActivePanel == "markets")
+        {
+            Markets.IsMarketsVisible = true;
+            if (!string.IsNullOrEmpty(state.SelectedMarket))
+            {
+                var tab = Markets.Tabs.FirstOrDefault(t => t.Symbol == state.SelectedMarket);
+                if (tab is not null)
+                {
+                    _restoringState = true;
+                    tab.ContractPanel.RestoreState(state.DurationUnit, state.DurationText, state.StakeText, state.UseDuration);
+                    _restoringState = false;
+                    await Markets.SelectTabAsync(tab);
+                }
+            }
+        }
+    }
+
     public void Dispose()
     {
+        SaveUiState();
+        if (_watchedPanel != null)
+            _watchedPanel.PropertyChanged -= OnContractPanelChanged;
         _timer.Stop();
         _uptimeTimer.Stop();
         _uptimeWatch.Stop();
@@ -275,6 +370,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _api.BalanceUpdated -= OnBalanceUpdated;
         _ws.Disconnected    -= OnDisconnected;
         _ws.Connected       -= OnConnected;
+        Markets.Dispose();
+        (_tickStream as IDisposable)?.Dispose();
         (_api as IDisposable)?.Dispose();
         AppLogger.Info(Src, "MainViewModel disposed");
     }

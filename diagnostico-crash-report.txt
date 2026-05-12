@@ -1,0 +1,269 @@
+﻿======================================================================
+  DIAGNOSTICO DE CRASH DE KERNEL - Excalibur5
+  Gerado em: 2026-05-11 22:19:47
+  Computador: DESKTOP-5ANQBH5
+======================================================================
+
+======================================================================
+  INFORMACOES DO SISTEMA
+======================================================================
+
+SO: Microsoft Windows 11 Enterprise LTSC 10.0.26100 (Build 26100)
+Arquitetura: 64 bits
+RAM Total: 23.7 GB
+RAM Livre: 9.2 GB
+CPU: 12th Gen Intel(R) Core(TM) i5-12500H
+
+======================================================================
+  DRIVERS DE VIDEO (GPU)
+======================================================================
+
+GPU: NVIDIA GeForce RTX 3050 Laptop GPU
+  Driver: 32.0.15.9636
+  Data do Driver: 04/22/2026 21:00:00
+  Status: OK
+  RAM Video: 4 GB
+
+GPU: Intel(R) Iris(R) Xe Graphics
+  Driver: 32.0.101.7077
+  Data do Driver: 09/15/2025 21:00:00
+  Status: OK
+  RAM Video: 2 GB
+
+Drivers de kernel de video carregados:
+  BasicDisplay | Estado: Running | Path: C:\WINDOWS\system32\DriverStore\FileRepository\basicdisplay.inf_amd64_2753efdbb0d9a226\BasicDisplay.sys
+  DXGKrnl | Estado: Running | Path: C:\WINDOWS\system32\drivers\dxgkrnl.sys
+  nvlddmkm | Estado: Running | Path: C:\WINDOWS\system32\DriverStore\FileRepository\nvdmi.inf_amd64_7e5223f579dd82cb\nvlddmkm.sys
+
+======================================================================
+  RUNTIME .NET INSTALADO
+======================================================================
+
+  Microsoft.AspNetCore.App 10.0.1 [C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App]
+  Microsoft.AspNetCore.App 10.0.5 [C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App]
+  Microsoft.NETCore.App 8.0.12 [C:\Program Files\dotnet\shared\Microsoft.NETCore.App]
+  Microsoft.NETCore.App 8.0.22 [C:\Program Files\dotnet\shared\Microsoft.NETCore.App]
+  Microsoft.NETCore.App 9.0.15 [C:\Program Files\dotnet\shared\Microsoft.NETCore.App]
+  Microsoft.NETCore.App 10.0.1 [C:\Program Files\dotnet\shared\Microsoft.NETCore.App]
+  Microsoft.NETCore.App 10.0.5 [C:\Program Files\dotnet\shared\Microsoft.NETCore.App]
+  Microsoft.WindowsDesktop.App 8.0.12 [C:\Program Files\dotnet\shared\Microsoft.WindowsDesktop.App]
+  Microsoft.WindowsDesktop.App 8.0.22 [C:\Program Files\dotnet\shared\Microsoft.WindowsDesktop.App]
+  Microsoft.WindowsDesktop.App 9.0.15 [C:\Program Files\dotnet\shared\Microsoft.WindowsDesktop.App]
+  Microsoft.WindowsDesktop.App 10.0.1 [C:\Program Files\dotnet\shared\Microsoft.WindowsDesktop.App]
+  Microsoft.WindowsDesktop.App 10.0.5 [C:\Program Files\dotnet\shared\Microsoft.WindowsDesktop.App]
+
+======================================================================
+  EVENTOS KERNEL-POWER (reinicio inesperado) - Ultimos 30 dias
+======================================================================
+
+Encontrados 5 evento(s):
+
+  [2026-05-11 22:08:41] Event ID 41
+  Mensagem: O sistema foi reiniciado sem um desligamento correto primeiro. Esse erro pode ser causado quando o sistema para de responder, trava ou fica sem energia inesperadamente.
+
+  [2026-05-11 21:57:40] Event ID 41
+  Mensagem: O sistema foi reiniciado sem um desligamento correto primeiro. Esse erro pode ser causado quando o sistema para de responder, trava ou fica sem energia inesperadamente.
+
+  [2026-05-10 23:00:30] Event ID 41
+  Mensagem: O sistema foi reiniciado sem um desligamento correto primeiro. Esse erro pode ser causado quando o sistema para de responder, trava ou fica sem energia inesperadamente.
+
+  [2026-05-10 19:51:26] Event ID 41
+  Mensagem: O sistema foi reiniciado sem um desligamento correto primeiro. Esse erro pode ser causado quando o sistema para de responder, trava ou fica sem energia inesperadamente.
+
+  [2026-05-10 10:20:31] Event ID 41
+  Mensagem: O sistema foi reiniciado sem um desligamento correto primeiro. Esse erro pode ser causado quando o sistema para de responder, trava ou fica sem energia inesperadamente.
+
+
+======================================================================
+  EVENTOS BUGCHECK (tela azul/preta) - Ultimos 30 dias
+======================================================================
+
+Encontrados 5 evento(s):
+
+  [2026-05-11 22:09:06] Event ID 1001
+  O computador foi reinicializado após uma verificação de erro. Essa verificação foi: 0x00000139 (0x0000000000000003, 0xfffffe0505bd7380, 0xfffffe0505bd72d8, 0x0000000000000000). Um despejo de memória foi salvo em: C:\WINDOWS\MEMORY.DMP. Id de Relatório: 6807e671-3229-4ab6-a174-654c6eb6ebbe.
+
+  [2026-05-11 21:58:10] Event ID 1001
+  O computador foi reinicializado após uma verificação de erro. Essa verificação foi: 0x00000139 (0x0000000000000003, 0xffff8a8f9a0f7380, 0xffff8a8f9a0f72d8, 0x0000000000000000). Um despejo de memória foi salvo em: C:\WINDOWS\MEMORY.DMP. Id de Relatório: 24f4204d-4758-471e-a68a-f9a2f315b583.
+
+  [2026-05-10 23:01:12] Event ID 1001
+  O computador foi reinicializado após uma verificação de erro. Essa verificação foi: 0x00000139 (0x0000000000000003, 0xfffff88373b57380, 0xfffff88373b572d8, 0x0000000000000000). Um despejo de memória foi salvo em: C:\WINDOWS\MEMORY.DMP. Id de Relatório: bf4e8fe0-8a93-48d6-affd-976fe74b41cf.
+
+  [2026-05-10 19:51:53] Event ID 1001
+  O computador foi reinicializado após uma verificação de erro. Essa verificação foi: 0x00000139 (0x0000000000000003, 0xffff80893301f380, 0xffff80893301f2d8, 0x0000000000000000). Um despejo de memória foi salvo em: C:\WINDOWS\MEMORY.DMP. Id de Relatório: 4f43fbcd-7a2b-4572-80b4-55dc17c7d593.
+
+  [2026-05-10 10:21:09] Event ID 1001
+  O computador foi reinicializado após uma verificação de erro. Essa verificação foi: 0x00000139 (0x0000000000000003, 0xffff8803b1bcf380, 0xffff8803b1bcf2d8, 0x0000000000000000). Um despejo de memória foi salvo em: C:\WINDOWS\MEMORY.DMP. Id de Relatório: 1affb504-774b-41ea-87aa-e89b5eb66dc1.
+
+
+======================================================================
+  ERROS CRITICOS DO SISTEMA - Ultimos 7 dias
+======================================================================
+
+Encontrados 5 evento(s) criticos:
+
+  [2026-05-11 22:08:41] Source: Microsoft-Windows-Kernel-Power
+  Event ID: 41
+  O sistema foi reiniciado sem um desligamento correto primeiro. Esse erro pode ser causado quando o sistema para de responder, trava ou fica sem energia inesperadamente.
+
+  [2026-05-11 21:57:40] Source: Microsoft-Windows-Kernel-Power
+  Event ID: 41
+  O sistema foi reiniciado sem um desligamento correto primeiro. Esse erro pode ser causado quando o sistema para de responder, trava ou fica sem energia inesperadamente.
+
+  [2026-05-10 23:00:30] Source: Microsoft-Windows-Kernel-Power
+  Event ID: 41
+  O sistema foi reiniciado sem um desligamento correto primeiro. Esse erro pode ser causado quando o sistema para de responder, trava ou fica sem energia inesperadamente.
+
+  [2026-05-10 19:51:26] Source: Microsoft-Windows-Kernel-Power
+  Event ID: 41
+  O sistema foi reiniciado sem um desligamento correto primeiro. Esse erro pode ser causado quando o sistema para de responder, trava ou fica sem energia inesperadamente.
+
+  [2026-05-10 10:20:31] Source: Microsoft-Windows-Kernel-Power
+  Event ID: 41
+  O sistema foi reiniciado sem um desligamento correto primeiro. Esse erro pode ser causado quando o sistema para de responder, trava ou fica sem energia inesperadamente.
+
+
+======================================================================
+  ERROS DE APLICACAO (Excalibur5) - Ultimos 7 dias
+======================================================================
+
+Encontrados 32 evento(s):
+
+  [2026-05-11 22:19:45] Source: .NET Runtime
+  Aplicativo: SmartShareDMR.exe
+Versão do Framework: v4.0.30319
+Descrição: O processo foi terminado devido a uma exceção sem tratamento.
+Informações da Exceção: System.IO.FileNotFoundException
+   em SmartShareDMR.MainWindow..ctor()
+
+Informações da Exceção: System.Windows.Markup.XamlParseException
+   e...
+
+  [2026-05-11 22:19:45] Source: .NET Runtime
+  Aplicativo: SmartShareDMR.exe
+Versão do Framework: v4.0.30319
+Descrição: O processo foi terminado devido a uma exceção sem tratamento.
+Informações da Exceção: System.IO.FileNotFoundException
+   em SmartShareDMR.MainWindow..ctor()
+
+Informações da Exceção: System.Windows.Markup.XamlParseException
+   e...
+
+  [2026-05-11 22:19:45] Source: .NET Runtime
+  Aplicativo: SmartShareDMR.exe
+Versão do Framework: v4.0.30319
+Descrição: O processo foi terminado devido a uma exceção sem tratamento.
+Informações da Exceção: System.IO.FileNotFoundException
+   em SmartShareDMR.MainWindow..ctor()
+
+Informações da Exceção: System.Windows.Markup.XamlParseException
+   e...
+
+  [2026-05-11 22:19:45] Source: .NET Runtime
+  Aplicativo: SmartShareDMR.exe
+Versão do Framework: v4.0.30319
+Descrição: O processo foi terminado devido a uma exceção sem tratamento.
+Informações da Exceção: System.IO.FileNotFoundException
+   em SmartShareDMR.MainWindow..ctor()
+
+Informações da Exceção: System.Windows.Markup.XamlParseException
+   e...
+
+  [2026-05-11 22:19:45] Source: .NET Runtime
+  Aplicativo: SmartShareDMR.exe
+Versão do Framework: v4.0.30319
+Descrição: O processo foi terminado devido a uma exceção sem tratamento.
+Informações da Exceção: System.IO.FileNotFoundException
+   em SmartShareDMR.MainWindow..ctor()
+
+Informações da Exceção: System.Windows.Markup.XamlParseException
+   e...
+
+  [2026-05-11 22:19:45] Source: .NET Runtime
+  Aplicativo: SmartShareDMR.exe
+Versão do Framework: v4.0.30319
+Descrição: O processo foi terminado devido a uma exceção sem tratamento.
+Informações da Exceção: System.IO.FileNotFoundException
+   em SmartShareDMR.MainWindow..ctor()
+
+Informações da Exceção: System.Windows.Markup.XamlParseException
+   e...
+
+  [2026-05-11 22:19:45] Source: .NET Runtime
+  Aplicativo: SmartShareDMR.exe
+Versão do Framework: v4.0.30319
+Descrição: O processo foi terminado devido a uma exceção sem tratamento.
+Informações da Exceção: System.IO.FileNotFoundException
+   em SmartShareDMR.MainWindow..ctor()
+
+Informações da Exceção: System.Windows.Markup.XamlParseException
+   e...
+
+  [2026-05-11 22:19:45] Source: .NET Runtime
+  Aplicativo: SmartShareDMR.exe
+Versão do Framework: v4.0.30319
+Descrição: O processo foi terminado devido a uma exceção sem tratamento.
+Informações da Exceção: System.IO.FileNotFoundException
+   em SmartShareDMR.MainWindow..ctor()
+
+Informações da Exceção: System.Windows.Markup.XamlParseException
+   e...
+
+  [2026-05-11 22:19:36] Source: .NET Runtime
+  Aplicativo: SmartShareDMR.exe
+Versão do Framework: v4.0.30319
+Descrição: O processo foi terminado devido a uma exceção sem tratamento.
+Informações da Exceção: System.IO.FileNotFoundException
+   em SmartShareDMR.MainWindow..ctor()
+
+Informações da Exceção: System.Windows.Markup.XamlParseException
+   e...
+
+  [2026-05-11 22:19:36] Source: .NET Runtime
+  Aplicativo: SmartShareDMR.exe
+Versão do Framework: v4.0.30319
+Descrição: O processo foi terminado devido a uma exceção sem tratamento.
+Informações da Exceção: System.IO.FileNotFoundException
+   em SmartShareDMR.MainWindow..ctor()
+
+Informações da Exceção: System.Windows.Markup.XamlParseException
+   e...
+
+
+======================================================================
+  MINIDUMPS (arquivos de crash)
+======================================================================
+
+Ultimos minidumps encontrados em C:\WINDOWS\Minidump :
+  051126-23218-01.dmp | 2026-05-11 22:09:06 | 4139 KB
+  051126-29125-01.dmp | 2026-05-11 21:58:10 | 5322 KB
+  051026-24500-01.dmp | 2026-05-10 23:01:12 | 5315 KB
+  051026-21796-01.dmp | 2026-05-10 19:51:53 | 5248 KB
+  051026-30531-01.dmp | 2026-05-10 10:21:09 | 5158 KB
+
+  Dica: Use WinDbg para analisar esses dumps e identificar o driver culpado.
+
+  MEMORY.DMP encontrado: 2026-05-11 22:08:55 | 2537 MB
+
+======================================================================
+  SOFTWARE DE SEGURANCA
+======================================================================
+
+  Kaspersky
+  Windows Defender
+
+======================================================================
+  RECOMENDACOES
+======================================================================
+
+1. Se houver eventos Kernel-Power (ID 41), confirma reinicio inesperado.
+2. Se houver BugCheck, o codigo do erro indica o driver culpado:
+   - nvlddmkm.sys = driver NVIDIA
+   - atikmpag.sys = driver AMD
+   - igdkmd64.sys = driver Intel
+   - dxgkrnl.sys  = DirectX kernel (geralmente ligado ao driver de GPU)
+3. Se o driver de video estiver desatualizado, atualize-o.
+4. Para testar se e a GPU, adicione no App.xaml.cs:
+   RenderOptions.ProcessRenderMode = RenderMode.SoftwareOnly;
+5. Se houver minidumps, analise com WinDbg (comando: !analyze -v)
+

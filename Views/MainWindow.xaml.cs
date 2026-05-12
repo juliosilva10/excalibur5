@@ -1,4 +1,4 @@
-﻿using System.Windows;
+using System.Windows;
 using System.Windows.Controls;
 using Excalibur5.Config;
 using Excalibur5.ViewModels;
@@ -15,7 +15,7 @@ public partial class MainWindow : Window
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        Loaded -= OnLoaded; // fire once only
+        Loaded -= OnLoaded;
         if (DataContext is MainViewModel vm)
         {
             var saved = TokenStore.Load();
@@ -24,6 +24,12 @@ public partial class MainWindow : Window
                 TokenBox.Password = saved;
                 vm.SetToken(saved);
             }
+
+            vm.Log.PropertyChanged += (_, args) =>
+            {
+                if (args.PropertyName == nameof(vm.Log.LogText))
+                    LogTextBox.ScrollToEnd();
+            };
         }
     }
 
@@ -31,6 +37,21 @@ public partial class MainWindow : Window
     {
         if (DataContext is MainViewModel vm)
             vm.SetToken(((PasswordBox)sender).Password);
+    }
+
+    private async void MarketTab_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.Tag is MarketTabViewModel tab &&
+            DataContext is MainViewModel vm)
+        {
+            await vm.Markets.SelectTabAsync(tab);
+        }
+    }
+
+    private void CopyLog_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainViewModel vm)
+            vm.Log.CopyAllCommand.Execute(null);
     }
 
     protected override void OnClosed(EventArgs e)

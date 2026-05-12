@@ -203,14 +203,22 @@ public sealed class DerivWebSocketService : IDerivWebSocketService
             Encoding.UTF8.GetBytes(json, 0, json.Length, bytes, 0);
             var segment = new ArraySegment<byte>(bytes, 0, byteCount);
 
-            await _sendLock.WaitAsync(ct);
+            var sendLock = _sendLock;
+            try
+            {
+                await sendLock.WaitAsync(ct);
+            }
+            catch (ObjectDisposedException)
+            {
+                throw new InvalidOperationException("WebSocket is reconnecting.");
+            }
             try
             {
                 await ws.SendAsync(segment, WebSocketMessageType.Text, true, ct);
             }
             finally
             {
-                _sendLock.Release();
+                try { sendLock.Release(); } catch (ObjectDisposedException) { }
             }
         }
         finally

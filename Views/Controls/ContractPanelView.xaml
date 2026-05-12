@@ -1,0 +1,249 @@
+<UserControl x:Class="Excalibur5.Views.Controls.ContractPanelView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DesignHeight="300" d:DesignWidth="600">
+
+    <Border CornerRadius="6"
+            BorderBrush="#1d4957" BorderThickness="1"
+            Margin="0,4,0,0">
+        <Border.Background>
+            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                <GradientStop Color="#0c1e2a" Offset="0"/>
+                <GradientStop Color="#07121a" Offset="1"/>
+            </LinearGradientBrush>
+        </Border.Background>
+
+        <Grid Margin="12,8,12,10">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header: tab -->
+            <Border Grid.Row="0" Margin="0,0,0,8">
+                <StackPanel Orientation="Horizontal">
+                    <Border CornerRadius="4"
+                            BorderBrush="#00f0ff" BorderThickness="1"
+                            Padding="10,3">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,1" EndPoint="0,0">
+                                <GradientStop Color="#0f2030" Offset="0"/>
+                                <GradientStop Color="#1a4a5e" Offset="0.85"/>
+                            </LinearGradientBrush>
+                        </Border.Background>
+                        <TextBlock Text="Call / Put"
+                                   Foreground="#00f0ff"
+                                   FontSize="11"
+                                   FontWeight="SemiBold"/>
+                    </Border>
+                </StackPanel>
+            </Border>
+
+            <!-- Content: 2 columns -->
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="220"/>
+                    <ColumnDefinition Width="24"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- LEFT COLUMN: Mode toggle + Duration/EndTime + Strike + Stake -->
+                <StackPanel Grid.Column="0">
+
+                    <!-- Mode toggle: Duração / Hora de Término -->
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                        <RadioButton x:Name="RbDuration" GroupName="ExpiryMode"
+                                     IsChecked="{Binding UseDuration, Mode=TwoWay}"
+                                     Content="Duração" Foreground="#a3b8cc" FontSize="11"
+                                     Margin="0,0,14,0" Cursor="Hand"
+                                     ToolTip="Definir duração do contrato"/>
+                        <RadioButton x:Name="RbEndTime" GroupName="ExpiryMode"
+                                     IsChecked="{Binding UseEndTime, Mode=OneWay}"
+                                     Click="EndTimeMode_Click"
+                                     Content="Hora de Término" Foreground="#a3b8cc" FontSize="11"
+                                     Cursor="Hand"
+                                     ToolTip="Escolher data/hora de expiração (GMT)"/>
+                    </StackPanel>
+
+                    <!-- DURATION MODE -->
+                    <StackPanel Visibility="{Binding UseDuration, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Text="Duração" Foreground="#90b5c9" FontSize="10" Margin="0,0,0,4"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <RadioButton x:Name="RbMinutes" GroupName="DurationUnit"
+                                         IsChecked="True" Click="DurationUnit_Click" Tag="Minutes"
+                                         Style="{StaticResource {x:Type RadioButton}}"
+                                         Content="Min" Foreground="#a3b8cc" FontSize="11"
+                                         Margin="0,0,10,0" Cursor="Hand"
+                                         ToolTip="Minutos"/>
+                            <RadioButton x:Name="RbHours" GroupName="DurationUnit"
+                                         Click="DurationUnit_Click" Tag="Hours"
+                                         Content="Hrs" Foreground="#a3b8cc" FontSize="11"
+                                         Margin="0,0,10,0" Cursor="Hand"
+                                         ToolTip="Horas"/>
+                            <RadioButton x:Name="RbDays" GroupName="DurationUnit"
+                                         Click="DurationUnit_Click" Tag="Days"
+                                         Content="Dias" Foreground="#a3b8cc" FontSize="11"
+                                         Cursor="Hand"
+                                         ToolTip="Dias"/>
+                        </StackPanel>
+
+                        <TextBox Style="{StaticResource DerivTextBox}"
+                                 Text="{Binding DurationText, UpdateSourceTrigger=PropertyChanged}"
+                                 Height="30" Width="120"
+                                 HorizontalAlignment="Left"
+                                 MaxLength="4"
+                                 PreviewTextInput="DurationTextBox_PreviewTextInput"
+                                 ToolTip="Tempo até o contrato expirar"/>
+                        <TextBlock Text="{Binding DurationRange}"
+                                   Foreground="#6090a8" FontSize="9"
+                                   Margin="0,3,0,0"/>
+                    </StackPanel>
+
+                    <!-- END TIME MODE -->
+                    <StackPanel Visibility="{Binding UseDuration, Converter={StaticResource InverseBoolToVis}}">
+                        <TextBlock Text="Data (GMT)" Foreground="#90b5c9" FontSize="10" Margin="0,0,0,4"/>
+                        <DatePicker x:Name="DpEndDate"
+                                    Style="{StaticResource DerivDatePicker}"
+                                    SelectedDate="{Binding SelectedEndDate, Mode=TwoWay}"
+                                    DisplayDateStart="{Binding MinEndDate, Mode=OneWay}"
+                                    DisplayDateEnd="{Binding MaxEndDate, Mode=OneWay}"
+                                    CalendarOpened="DpEndDate_CalendarOpened"
+                                    ToolTip="Data de expiração (GMT)">
+                            <DatePicker.Resources>
+                                <DataTemplate x:Key="DayTitleTemplate">
+                                    <TextBlock Text="{Binding}"
+                                               Foreground="#00f0ff"
+                                               FontSize="10"
+                                               FontWeight="SemiBold"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"
+                                               Margin="0,4,0,2"/>
+                                </DataTemplate>
+                            </DatePicker.Resources>
+                        </DatePicker>
+                    </StackPanel>
+
+                    <!-- Expiry -->
+                    <TextBlock Text="Prazo de validade:" Foreground="#90b5c9" FontSize="10" Margin="0,10,0,2"/>
+                    <TextBlock Text="{Binding ExpiryDisplay}"
+                               Foreground="#e0eef8" FontSize="11"
+                               FontFamily="Consolas"/>
+
+                    <!-- Strike price -->
+                    <TextBlock Text="Preço de exercício:" Foreground="#90b5c9" FontSize="10" Margin="0,10,0,2"/>
+                    <!-- Barrier ComboBox (both modes) -->
+                    <ComboBox x:Name="CbBarrier"
+                              Style="{StaticResource DerivComboBox}"
+                              ItemsSource="{Binding AvailableBarrierDisplays}"
+                              SelectedItem="{Binding SelectedBarrierDisplay, Mode=TwoWay}"
+                              ToolTip="Preço de exercício (barreira relativa ao spot)"/>
+                    <TextBlock Text="{Binding AbsoluteStrikeDisplay, StringFormat='Strike: {0}'}"
+                               Foreground="#e0eef8" FontSize="10"
+                               FontFamily="Consolas"
+                               Margin="0,3,0,0"
+                               ToolTip="Preço absoluto do strike (spot + offset)"/>
+
+                    <!-- Stake input -->
+                    <TextBlock Text="Entrada (Stake):" Foreground="#90b5c9" FontSize="10" Margin="0,10,0,4"/>
+                    <TextBox Style="{StaticResource DerivTextBox}"
+                             Text="{Binding StakeText, UpdateSourceTrigger=PropertyChanged}"
+                             Height="30" Width="120"
+                             HorizontalAlignment="Left"
+                             MaxLength="10"
+                             PreviewTextInput="StakeTextBox_PreviewTextInput"
+                             ToolTip="Valor da entrada em USD (máx. 2 casas decimais)"/>
+                    <TextBlock Text="{Binding StakeRange}"
+                               Foreground="#6090a8" FontSize="9"
+                               Margin="0,3,0,0"/>
+                </StackPanel>
+
+                <!-- RIGHT COLUMN: Payout + Buttons -->
+                <StackPanel Grid.Column="2">
+
+                    <!-- Payout per point (shared) -->
+                    <TextBlock Text="Pagamento por ponto:" Foreground="#90b5c9" FontSize="10" Margin="0,0,0,2"/>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{Binding CallPayoutPerPoint, StringFormat=F6}"
+                                   Foreground="#00e8c8" FontSize="14"
+                                   FontFamily="Consolas" FontWeight="Bold"
+                                   VerticalAlignment="Center"/>
+                        <Border Margin="6,0,0,0" Padding="2"
+                                CornerRadius="8" Background="#1a3a4a"
+                                VerticalAlignment="Center" Cursor="Help">
+                            <Border.ToolTip>
+                                <ToolTip MaxWidth="250">
+                                    <TextBlock TextWrapping="Wrap"
+                                               Text="O pagamento no vencimento é igual ao pagamento por ponto multiplicado pela diferença entre o preço final e o preço de exercício."/>
+                                </ToolTip>
+                            </Border.ToolTip>
+                            <TextBlock Text="?" Foreground="#00f0ff" FontSize="9"
+                                       FontWeight="Bold" HorizontalAlignment="Center"
+                                       Width="12" TextAlignment="Center"/>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- CALL block -->
+                    <Border CornerRadius="5" BorderBrush="#2a5a3a" BorderThickness="1"
+                            Margin="0,10,0,0" Padding="8,6"
+                            HorizontalAlignment="Left" Width="140">
+                        <Border.Background>
+                            <SolidColorBrush Color="#0d2818" Opacity="0.6"/>
+                        </Border.Background>
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                <TextBlock Text="Preço:" Foreground="#90b5c9" FontSize="10" VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding CallAskPrice, StringFormat=F2}"
+                                           Foreground="#f3fbff" FontSize="12"
+                                           FontFamily="Consolas" FontWeight="Bold"
+                                           Margin="6,0,0,0" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                <TextBlock Text="Payout:" Foreground="#90b5c9" FontSize="10" VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding CallPayout, StringFormat=F2}"
+                                           Foreground="#34c759" FontSize="12"
+                                           FontFamily="Consolas" FontWeight="Bold"
+                                           Margin="6,0,0,0" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <Button x:Name="BtnCall" Click="CallButton_Click"
+                                    Style="{StaticResource DerivCallButtonStyle}"
+                                    Content="Comprar Call" Width="120"
+                                    HorizontalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- PUT block -->
+                    <Border CornerRadius="5" BorderBrush="#5a2a2a" BorderThickness="1"
+                            Margin="0,8,0,0" Padding="8,6"
+                            HorizontalAlignment="Left" Width="140">
+                        <Border.Background>
+                            <SolidColorBrush Color="#280d0d" Opacity="0.6"/>
+                        </Border.Background>
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                <TextBlock Text="Preço:" Foreground="#90b5c9" FontSize="10" VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding PutAskPrice, StringFormat=F2}"
+                                           Foreground="#f3fbff" FontSize="12"
+                                           FontFamily="Consolas" FontWeight="Bold"
+                                           Margin="6,0,0,0" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                <TextBlock Text="Payout:" Foreground="#90b5c9" FontSize="10" VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding PutPayout, StringFormat=F2}"
+                                           Foreground="#FF6B6B" FontSize="12"
+                                           FontFamily="Consolas" FontWeight="Bold"
+                                           Margin="6,0,0,0" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <Button x:Name="BtnPut" Click="PutButton_Click"
+                                    Style="{StaticResource DerivPutButtonStyle}"
+                                    Content="Comprar Put" Width="120"
+                                    HorizontalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </Grid>
+        </Grid>
+    </Border>
+</UserControl>

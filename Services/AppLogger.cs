@@ -4,15 +4,13 @@ using System.Text;
 
 namespace Excalibur5.Services;
 
-/// <summary>
-/// Non-blocking async logger. Enqueues entries to a background thread so logging
-/// never stalls the UI or WebSocket threads. Rotates at 5 MB.
-/// </summary>
 public static class AppLogger
 {
     private static readonly string LogPath;
     private static readonly BlockingCollection<string> _queue = new(boundedCapacity: 2048);
     private const long MaxBytes = 5 * 1024 * 1024;
+
+    public static event Action<string>? LogEntryAdded;
 
     static AppLogger()
     {
@@ -22,10 +20,12 @@ public static class AppLogger
         Directory.CreateDirectory(dir);
         LogPath = Path.Combine(dir, "excalibur5.log");
 
+        // Clear log file on startup
+        try { File.WriteAllText(LogPath, string.Empty); } catch { }
+
         var thread = new Thread(WriteLoop) { IsBackground = true, Name = "AppLogger" };
         thread.Start();
 
-        // Flush remaining entries on process exit
         AppDomain.CurrentDomain.ProcessExit += (_, _) =>
         {
             _queue.CompleteAdding();
@@ -47,8 +47,9 @@ public static class AppLogger
     private static void Enqueue(string level, string source, string message)
     {
         if (_queue.IsAddingCompleted) return;
-        // TryAdd never blocks — drops entry only if queue is full (prevents memory pressure)
-        _queue.TryAdd($"{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss.fff}Z [{level}] [{source}] {message}");
+        var entry = $"{DateTime.UtcNow:HH:mm:ss.fff} [{level}] [{source}] {message}";
+        _queue.TryAdd(entry);
+        LogEntryAdded?.Invoke(entry);
     }
 
     private static void WriteLoop()
@@ -64,11 +65,9 @@ public static class AppLogger
                 try
                 {
                     writer.WriteLine(line);
-                    // Batch writes — flush only when queue drains
                     if (_queue.Count == 0)
                     {
                         writer.Flush();
-                        // Rotate after flush so BaseStream.Length is accurate
                         if (writer.BaseStream.Length > MaxBytes)
                         {
                             writer.BaseStream.SetLength(0);
@@ -76,9 +75,9 @@ public static class AppLogger
                         }
                     }
                 }
-                catch { /* never crash the logger */ }
+                catch { }
             }
         }
-        catch { /* never crash the app */ }
+        catch { }
     }
 }
