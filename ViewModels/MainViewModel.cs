@@ -21,6 +21,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private readonly System.Diagnostics.Stopwatch _uptimeWatch = new();
     private volatile string _token = string.Empty;
     private int _timerBusy; // 0 = idle, 1 = busy — use Interlocked for atomic check-and-set
+    private TimeSpan _serverOffset; // difference between server UTC and local UTC
 
     [ObservableProperty] private bool    _isConnected;
     [ObservableProperty] private bool    _isConnecting;
@@ -96,6 +97,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             var e = _uptimeWatch.Elapsed;
             Uptime = $"{(int)e.TotalHours:D2}:{e.Minutes:D2}:{e.Seconds:D2}";
+            if (IsConnected)
+            {
+                var serverNow = DateTimeOffset.UtcNow.Add(_serverOffset);
+                ServerUtc = serverNow.ToString("HH:mm:ss") + " UTC";
+            }
         };
 
         AppLogger.Info(Src, $"MainViewModel created — log: {AppLogger.GetLogPath()}");
@@ -145,6 +151,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             await Task.WhenAll(pingTask, timeTask);
             PingMs    = pingTask.Result;
             ServerUtc = timeTask.Result.ToString("HH:mm:ss") + " UTC";
+            _serverOffset = timeTask.Result - DateTimeOffset.UtcNow;
 
             IsConnected   = true;
             StatusMessage = string.Empty;
@@ -242,6 +249,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             {
                 PingMs        = pingTask.Result;
                 ServerUtc     = timeTask.Result.ToString("HH:mm:ss") + " UTC";
+                _serverOffset = timeTask.Result - DateTimeOffset.UtcNow;
                 IsConnected   = true;
                 StatusMessage = string.Empty;
                 if (!_timer.IsEnabled) _timer.Start();
@@ -285,6 +293,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
             PingMs    = pingTask.Result;
             ServerUtc = timeTask.Result.ToString("HH:mm:ss") + " UTC";
+            _serverOffset = timeTask.Result - DateTimeOffset.UtcNow;
         }
         catch (Exception ex)
         {
@@ -371,6 +380,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _ws.Disconnected    -= OnDisconnected;
         _ws.Connected       -= OnConnected;
         Markets.Dispose();
+        Log.Dispose();
         (_tickStream as IDisposable)?.Dispose();
         (_api as IDisposable)?.Dispose();
         AppLogger.Info(Src, "MainViewModel disposed");

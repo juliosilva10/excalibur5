@@ -841,66 +841,11 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
             await Task.Delay(300, ct);
             if (!ValidateInputs()) return;
 
-            var stake = GetStakeValue();
-            int? duration = null;
-            string? unitStr = null;
-            long? dateExpiry = null;
-            string? barrier = GetBarrierForApi();
-
-            if (UseDuration)
-            {
-                duration = GetDurationValue();
-                unitStr = GetDurationUnitString();
-            }
-            else
-            {
-                dateExpiry = GetDateExpiryUnix();
-                if (dateExpiry == null) return;
-            }
-
-            var callResponse = await _contractService.SubscribeProposalAsync(
-                Symbol, ContractTypeCall, stake, duration, unitStr, dateExpiry, barrier, ct: ct);
-
-            var putResponse = await _contractService.SubscribeProposalAsync(
-                Symbol, ContractTypePut, stake, duration, unitStr, dateExpiry, barrier, ct: ct);
-
-            await Application.Current.Dispatcher.InvokeAsync(() =>
-            {
-                _callProposalId = callResponse.ProposalId;
-                CallAskPrice = callResponse.AskPrice;
-                CallPayout = callResponse.Payout;
-                CallPayoutPerPoint = callResponse.PayoutPerPoint;
-
-                _putProposalId = putResponse.ProposalId;
-                PutAskPrice = putResponse.AskPrice;
-                PutPayout = putResponse.Payout;
-                PutPayoutPerPoint = putResponse.PayoutPerPoint;
-
-                if (callResponse.DateExpiry > 0)
-                {
-                    var expiry = DateTimeOffset.FromUnixTimeSeconds(callResponse.DateExpiry);
-                    ExpiryDisplay = expiry.ToString("dd MMM yyyy, HH:mm:ss", CultureInfo.InvariantCulture) + " GMT +0";
-                }
-
-                if (callResponse.Spot > 0)
-                {
-                    _spotForBarriers = callResponse.Spot;
-                    StrikePrice = callResponse.Spot;
-                    OnPropertyChanged(nameof(AbsoluteStrikeDisplay));
-                }
-
-                if (callResponse.BarrierChoices.Count > 0 && !_barriersFromApi)
-                    UpdateBarriersFromApi(callResponse.BarrierChoices);
-                else
-                    _barriersFromApi = true;
-
-                AppLogger.Info(Src, $"Proposals ready: CALL id={_callProposalId} ask={CallAskPrice} ppp={CallPayoutPerPoint}, PUT id={_putProposalId} ask={PutAskPrice} ppp={PutPayoutPerPoint}");
-            });
+            await SubscribeAndUpdateProposalsAsync(ct);
         }
         catch (OperationCanceledException) { }
         catch (InvalidOperationException ex) when (ex.Message.StartsWith("Barriers available are"))
         {
-            // API rejected our barrier — parse valid barriers from error message and retry
             var barriers = ParseBarriersFromError(ex.Message);
             if (barriers.Count > 0)
             {
@@ -909,63 +854,10 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
                     UpdateBarriersFromApi(barriers);
                 });
 
-                // Retry with the closest-to-zero barrier
                 try
                 {
                     await Task.Delay(100, ct);
-                    var retryBarrier = GetBarrierForApi();
-                    var stake2 = GetStakeValue();
-                    int? duration2 = null;
-                    string? unitStr2 = null;
-                    long? dateExpiry2 = null;
-
-                    if (UseDuration)
-                    {
-                        duration2 = GetDurationValue();
-                        unitStr2 = GetDurationUnitString();
-                    }
-                    else
-                    {
-                        dateExpiry2 = GetDateExpiryUnix();
-                        if (dateExpiry2 == null) return;
-                    }
-
-                    var callResponse = await _contractService.SubscribeProposalAsync(
-                        Symbol, ContractTypeCall, stake2, duration2, unitStr2, dateExpiry2, retryBarrier, ct: ct);
-
-                    var putResponse = await _contractService.SubscribeProposalAsync(
-                        Symbol, ContractTypePut, stake2, duration2, unitStr2, dateExpiry2, retryBarrier, ct: ct);
-
-                    await Application.Current.Dispatcher.InvokeAsync(() =>
-                    {
-                        _callProposalId = callResponse.ProposalId;
-                        CallAskPrice = callResponse.AskPrice;
-                        CallPayout = callResponse.Payout;
-                        CallPayoutPerPoint = callResponse.PayoutPerPoint;
-
-                        _putProposalId = putResponse.ProposalId;
-                        PutAskPrice = putResponse.AskPrice;
-                        PutPayout = putResponse.Payout;
-                        PutPayoutPerPoint = putResponse.PayoutPerPoint;
-
-                        if (callResponse.DateExpiry > 0)
-                        {
-                            var expiry = DateTimeOffset.FromUnixTimeSeconds(callResponse.DateExpiry);
-                            ExpiryDisplay = expiry.ToString("dd MMM yyyy, HH:mm:ss", CultureInfo.InvariantCulture) + " GMT +0";
-                        }
-
-                        if (callResponse.Spot > 0)
-                        {
-                            _spotForBarriers = callResponse.Spot;
-                            StrikePrice = callResponse.Spot;
-                            OnPropertyChanged(nameof(AbsoluteStrikeDisplay));
-                        }
-
-                        if (callResponse.BarrierChoices.Count > 0 && !_barriersFromApi)
-                            UpdateBarriersFromApi(callResponse.BarrierChoices);
-
-                        AppLogger.Info(Src, $"Proposals ready (retry): CALL id={_callProposalId} ask={CallAskPrice} ppp={CallPayoutPerPoint}, PUT id={_putProposalId} ask={PutAskPrice} ppp={PutPayoutPerPoint}");
-                    });
+                    await SubscribeAndUpdateProposalsAsync(ct);
                 }
                 catch (OperationCanceledException) { }
                 catch (Exception retryEx)
@@ -978,6 +870,65 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
         {
             AppLogger.Warn(Src, $"Proposal request error: {ex.Message}");
         }
+    }
+
+    private async Task SubscribeAndUpdateProposalsAsync(CancellationToken ct)
+    {
+        var stake = GetStakeValue();
+        int? duration = null;
+        string? unitStr = null;
+        long? dateExpiry = null;
+        string? barrier = GetBarrierForApi();
+
+        if (UseDuration)
+        {
+            duration = GetDurationValue();
+            unitStr = GetDurationUnitString();
+        }
+        else
+        {
+            dateExpiry = GetDateExpiryUnix();
+            if (dateExpiry == null) return;
+        }
+
+        var callResponse = await _contractService.SubscribeProposalAsync(
+            Symbol, ContractTypeCall, stake, duration, unitStr, dateExpiry, barrier, ct: ct);
+
+        var putResponse = await _contractService.SubscribeProposalAsync(
+            Symbol, ContractTypePut, stake, duration, unitStr, dateExpiry, barrier, ct: ct);
+
+        await Application.Current.Dispatcher.InvokeAsync(() =>
+        {
+            _callProposalId = callResponse.ProposalId;
+            CallAskPrice = callResponse.AskPrice;
+            CallPayout = callResponse.Payout;
+            CallPayoutPerPoint = callResponse.PayoutPerPoint;
+
+            _putProposalId = putResponse.ProposalId;
+            PutAskPrice = putResponse.AskPrice;
+            PutPayout = putResponse.Payout;
+            PutPayoutPerPoint = putResponse.PayoutPerPoint;
+
+            if (callResponse.DateExpiry > 0)
+            {
+                var expiry = DateTimeOffset.FromUnixTimeSeconds(callResponse.DateExpiry);
+                ExpiryDisplay = expiry.ToString("dd MMM yyyy, HH:mm:ss", CultureInfo.InvariantCulture) + " GMT +0";
+            }
+
+            if (callResponse.Spot > 0)
+            {
+                _spotForBarriers = callResponse.Spot;
+                StrikePrice = callResponse.Spot;
+                OnPropertyChanged(nameof(AbsoluteStrikeDisplay));
+            }
+
+            if (callResponse.BarrierChoices.Count > 0 && !_barriersFromApi)
+                UpdateBarriersFromApi(callResponse.BarrierChoices);
+            else
+                _barriersFromApi = true;
+
+            AppLogger.Info(Src, $"Proposals ready: CALL id={_callProposalId} ask={CallAskPrice} ppp={CallPayoutPerPoint}, PUT id={_putProposalId} ask={PutAskPrice} ppp={PutPayoutPerPoint}");
+        });
     }
 
     private static List<string> ParseBarriersFromError(string message)

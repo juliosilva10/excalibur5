@@ -40,7 +40,7 @@ public partial class MarketTabView : UserControl
 
         _redrawTimer = new DispatcherTimer
         {
-            Interval = TimeSpan.FromMilliseconds(100)
+            Interval = TimeSpan.FromMilliseconds(250)
         };
         _redrawTimer.Tick += (_, _) =>
         {

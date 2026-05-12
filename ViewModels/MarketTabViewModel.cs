@@ -10,7 +10,7 @@ namespace Excalibur5.ViewModels;
 public partial class MarketTabViewModel : ObservableObject, IDisposable
 {
     private const int MaxTicks = 1000;
-    private const int MaxRecentDisplay = 150;
+    private const int MaxRecentDisplay = 50;
 
     private readonly ITickStreamService _tickService;
     private readonly MarketInfo _market;
@@ -40,14 +40,13 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
         _market      = market;
         _tickService = tickService;
         ContractPanel = new ContractPanelViewModel(contractService, _market.PipSize, _market.BarrierInnerBase, _market.BarrierOuterBase);
-        _tickService.TickReceived += OnTickReceived;
     }
 
     private void OnTickReceived(object? sender, TickData tick)
     {
         if (tick.Symbol != Symbol || !_isActive) return;
 
-        Application.Current.Dispatcher.InvokeAsync(() =>
+        Application.Current?.Dispatcher?.InvokeAsync(() =>
         {
             if (_previousQuote != 0)
             {
@@ -87,6 +86,7 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
     {
         if (_isActive) return;
         _isActive = true;
+        _tickService.TickReceived += OnTickReceived;
         IsChartReady = false;
 
         try
@@ -165,6 +165,7 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
     {
         if (!_isActive) return;
         _isActive = false;
+        _tickService.TickReceived -= OnTickReceived;
 
         try
         {
@@ -182,6 +183,7 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
     public async Task ForceDeactivateAsync()
     {
         _isActive = false;
+        _tickService.TickReceived -= OnTickReceived;
         IsSubscribed = false;
         _tickService.ClearSubscription(Symbol);
         await ContractPanel.DeactivateAsync();

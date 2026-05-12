@@ -7,7 +7,7 @@ using Excalibur5.Services;
 
 namespace Excalibur5.ViewModels;
 
-public partial class LogViewModel : ObservableObject
+public partial class LogViewModel : ObservableObject, IDisposable
 {
     private const int MaxLines = 5000;
     private readonly Queue<string> _lines = new();
@@ -78,5 +78,12 @@ public partial class LogViewModel : ObservableObject
             RebuildText();
         if (!string.IsNullOrEmpty(LogText))
             Clipboard.SetText(LogText);
+    }
+
+    public void Dispose()
+    {
+        AppLogger.LogEntryAdded -= OnLogEntry;
+        _rebuildTimer?.Stop();
+        _rebuildTimer = null;
     }
 }

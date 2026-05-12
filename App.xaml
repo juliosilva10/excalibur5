@@ -32,6 +32,74 @@
         <converters:TickDirectionToColorConverter x:Key="DirToColor"/>
         <BooleanToVisibilityConverter   x:Key="BoolToVis"/>
 
+        <!-- RadioButton style: carved radial effect with cyan dot -->
+        <Style TargetType="RadioButton">
+            <Setter Property="OverridesDefaultStyle" Value="True"/>
+            <Setter Property="Foreground" Value="#a3b8cc"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <!-- Outer ring with carved/inset effect -->
+                            <Border x:Name="OuterBorder"
+                                    Width="16" Height="16"
+                                    CornerRadius="8"
+                                    BorderThickness="1.5"
+                                    BorderBrush="#1d4957">
+                                <Border.Background>
+                                    <RadialGradientBrush>
+                                        <GradientStop Color="#08141a" Offset="0.0"/>
+                                        <GradientStop Color="#0d1f28" Offset="0.5"/>
+                                        <GradientStop Color="#153342" Offset="1.0"/>
+                                    </RadialGradientBrush>
+                                </Border.Background>
+                                <!-- Inner dot -->
+                                <Ellipse x:Name="CheckDot"
+                                         Width="8" Height="8"
+                                         HorizontalAlignment="Center"
+                                         VerticalAlignment="Center"
+                                         Opacity="0">
+                                    <Ellipse.Fill>
+                                        <RadialGradientBrush>
+                                            <GradientStop Color="#00f0ff" Offset="0.0"/>
+                                            <GradientStop Color="#009db3" Offset="1.0"/>
+                                        </RadialGradientBrush>
+                                    </Ellipse.Fill>
+                                </Ellipse>
+                            </Border>
+                            <ContentPresenter Margin="6,0,0,0"
+                                              VerticalAlignment="Center"
+                                              RecognizesAccessKey="True"/>
+                        </StackPanel>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="CheckDot" Property="Opacity" Value="1"/>
+                                <Setter TargetName="OuterBorder" Property="BorderBrush" Value="#00f0ff"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="OuterBorder" Property="BorderBrush" Value="#00f0ff"/>
+                                <Setter TargetName="OuterBorder" Property="Background">
+                                    <Setter.Value>
+                                        <RadialGradientBrush>
+                                            <GradientStop Color="#0a1a24" Offset="0.0"/>
+                                            <GradientStop Color="#10283a" Offset="0.5"/>
+                                            <GradientStop Color="#1a3f52" Offset="1.0"/>
+                                        </RadialGradientBrush>
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- DayTitleTemplate: weekday header labels for Calendar -->
         <DataTemplate x:Key="DayTitleTemplate">
             <TextBlock Text="{Binding}"

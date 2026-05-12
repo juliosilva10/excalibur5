@@ -140,25 +140,6 @@ public sealed class ContractService : IContractService, IDisposable
             AvailableBarriers = ParseAvailableBarriers(root)
         };
 
-        // Debug: log first contract's keys to understand barrier structure
-        if (root.TryGetProperty("contracts_for", out var cfDebug) &&
-            cfDebug.TryGetProperty("available", out var avDebug) &&
-            avDebug.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var item in avDebug.EnumerateArray())
-            {
-                var ct2 = item.TryGetProperty("contract_type", out var ctEl) ? ctEl.GetString() : "?";
-                if (ct2 == "VANILLALONGCALL" || ct2 == "VANILLALONGPUT")
-                {
-                    var keys = string.Join(", ", item.EnumerateObject().Select(p => p.Name));
-                    AppLogger.Info(Src, $"contracts_for {ct2} keys: {keys}");
-                    if (item.TryGetProperty("available_barriers", out var abEl))
-                        AppLogger.Info(Src, $"available_barriers kind={abEl.ValueKind}, raw={abEl.ToString()?.Substring(0, Math.Min(200, abEl.ToString()?.Length ?? 0))}");
-                    break;
-                }
-            }
-        }
-
         AppLogger.Info(Src, $"contracts_for {symbol}: {result.Available.Count} contracts, spot={result.Spot}, barriers={result.AvailableBarriers.Count}");
         return result;
     }
@@ -210,24 +191,20 @@ public sealed class ContractService : IContractService, IDisposable
 
     private static List<decimal> ParseAvailableBarriers(JsonElement root)
     {
-        var barriers = new List<decimal>();
+        var seen = new HashSet<decimal>();
         if (!root.TryGetProperty("contracts_for", out var cf))
-            return barriers;
+            return new List<decimal>();
 
         // Try root-level available_barriers first
         if (cf.TryGetProperty("available_barriers", out var rootBarriers) &&
             rootBarriers.ValueKind == JsonValueKind.Array)
         {
             foreach (var b in rootBarriers.EnumerateArray())
-            {
-                var val = ParseDecimal(b);
-                if (!barriers.Contains(val))
-                    barriers.Add(val);
-            }
+                seen.Add(ParseDecimal(b));
         }
 
         // Also try per-contract available_barriers
-        if (barriers.Count == 0 &&
+        if (seen.Count == 0 &&
             cf.TryGetProperty("available", out var available) &&
             available.ValueKind == JsonValueKind.Array)
         {
@@ -239,39 +216,31 @@ public sealed class ContractService : IContractService, IDisposable
                 if (barriersEl.ValueKind == JsonValueKind.Array)
                 {
                     foreach (var b in barriersEl.EnumerateArray())
-                    {
-                        var val = ParseDecimal(b);
-                        if (!barriers.Contains(val))
-                            barriers.Add(val);
-                    }
+                        seen.Add(ParseDecimal(b));
                 }
                 else if (barriersEl.ValueKind == JsonValueKind.Object)
                 {
-                    // Some API versions return { "barriers": [...] } or numbered keys
                     foreach (var prop in barriersEl.EnumerateObject())
                     {
                         if (prop.Value.ValueKind == JsonValueKind.Array)
                         {
                             foreach (var b in prop.Value.EnumerateArray())
-                            {
-                                var val = ParseDecimal(b);
-                                if (!barriers.Contains(val))
-                                    barriers.Add(val);
-                            }
+                                seen.Add(ParseDecimal(b));
                         }
                         else
                         {
                             var val = ParseDecimal(prop.Value);
-                            if (val != 0 && !barriers.Contains(val))
-                                barriers.Add(val);
+                            if (val != 0)
+                                seen.Add(val);
                         }
                     }
                 }
 
-                if (barriers.Count > 0) break;
+                if (seen.Count > 0) break;
             }
         }
 
+        var barriers = seen.ToList();
         barriers.Sort();
         AppLogger.Info(Src, $"ParseAvailableBarriers: found {barriers.Count} barriers");
         return barriers;
