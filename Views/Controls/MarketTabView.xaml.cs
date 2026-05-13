@@ -459,7 +459,11 @@ public partial class MarketTabView : UserControl
         _tooltipText.Foreground = NeutralLightBrush;
         _tooltipBorder.Visibility = Visibility.Visible;
 
-        double labelX = Math.Min(ptX + 8, chartWidth - 180);
+        double tooltipWidth = 180;
+        double labelX = ptX + 8;
+        if (labelX + tooltipWidth > chartWidth)
+            labelX = ptX - tooltipWidth - 8;
+        labelX = Math.Max(0, labelX);
         double labelY = 8;
         Canvas.SetLeft(_tooltipBorder, labelX);
         Canvas.SetTop(_tooltipBorder, labelY);

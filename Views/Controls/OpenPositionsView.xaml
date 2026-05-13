@@ -1,0 +1,192 @@
+<UserControl x:Class="Excalibur5.Views.Controls.OpenPositionsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:converters="clr-namespace:Excalibur5.Converters"
+             xmlns:local="clr-namespace:Excalibur5.Views.Controls"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DesignHeight="300" d:DesignWidth="500">
+
+    <UserControl.Resources>
+        <converters:TimeProgressToBrushConverter x:Key="TimeToBrush"/>
+        <local:ProgressWidthConverter x:Key="ProgressWidth"/>
+        <local:ProfitToBrushConverter x:Key="ProfitToBrush"/>
+    </UserControl.Resources>
+
+    <Border CornerRadius="6"
+            BorderBrush="#1d4957" BorderThickness="1">
+        <Border.Background>
+            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                <GradientStop Color="#0c1e2a" Offset="0"/>
+                <GradientStop Color="#07121a" Offset="1"/>
+            </LinearGradientBrush>
+        </Border.Background>
+
+        <Grid Margin="8,6">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header -->
+            <TextBlock Grid.Row="0" Text="Posições Abertas"
+                       Foreground="#00f0ff" FontSize="11"
+                       FontWeight="SemiBold" Margin="0,0,0,6"/>
+
+            <!-- Column headers -->
+            <Grid Grid.Row="1" Margin="0,0,0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="70"/>
+                    <ColumnDefinition Width="42"/>
+                    <ColumnDefinition Width="50"/>
+                    <ColumnDefinition Width="60"/>
+                    <ColumnDefinition Width="60"/>
+                    <ColumnDefinition Width="60"/>
+                    <ColumnDefinition Width="65"/>
+                    <ColumnDefinition Width="50"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="Mercado" Foreground="#6090a8" FontSize="9"/>
+                <TextBlock Grid.Column="1" Text="Tipo" Foreground="#6090a8" FontSize="9"/>
+                <TextBlock Grid.Column="2" Text="Tempo" Foreground="#6090a8" FontSize="9"/>
+                <TextBlock Grid.Column="3" Text="Entrada" Foreground="#6090a8" FontSize="9"/>
+                <TextBlock Grid.Column="4" Text="Valor" Foreground="#6090a8" FontSize="9"/>
+                <TextBlock Grid.Column="5" Text="Abertura" Foreground="#6090a8" FontSize="9"/>
+                <TextBlock Grid.Column="6" Text="Lucro/Perda" Foreground="#6090a8" FontSize="9"/>
+                <TextBlock Grid.Column="7" Text="" Foreground="#6090a8" FontSize="9"/>
+            </Grid>
+
+            <!-- Positions list -->
+            <ItemsControl Grid.Row="2" ItemsSource="{Binding Positions}">
+                <ItemsControl.Template>
+                    <ControlTemplate TargetType="ItemsControl">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <ItemsPresenter/>
+                        </ScrollViewer>
+                    </ControlTemplate>
+                </ItemsControl.Template>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Grid Margin="0,2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="70"/>
+                                <ColumnDefinition Width="42"/>
+                                <ColumnDefinition Width="50"/>
+                                <ColumnDefinition Width="60"/>
+                                <ColumnDefinition Width="60"/>
+                                <ColumnDefinition Width="60"/>
+                                <ColumnDefinition Width="65"/>
+                                <ColumnDefinition Width="50"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Mercado -->
+                            <TextBlock Grid.Column="0"
+                                       Text="{Binding DisplayName}"
+                                       Foreground="#e0eef8" FontSize="10"
+                                       FontFamily="Consolas"
+                                       VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis"/>
+
+                            <!-- Tipo -->
+                            <TextBlock Grid.Column="1"
+                                       Text="{Binding ContractTypeLabel}"
+                                       FontSize="10" FontFamily="Consolas"
+                                       Foreground="{Binding ContractTypeLabel, Converter={StaticResource ProfitToBrush}, ConverterParameter=type}"
+                                       VerticalAlignment="Center"/>
+
+                            <!-- Barra de tempo -->
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="0,0,6,0">
+                                <TextBlock Text="{Binding RemainingTimeDisplay}"
+                                           Foreground="#6090a8" FontSize="8"
+                                           FontFamily="Consolas"
+                                           Margin="0,0,0,2"/>
+                                <Grid Height="3">
+                                    <Border Background="#1a2e3d" CornerRadius="1.5"/>
+                                    <Border CornerRadius="1.5"
+                                            HorizontalAlignment="Left"
+                                            Width="{Binding TimeProgress, Converter={StaticResource ProgressWidth}, ConverterParameter=44}">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Background" Value="{Binding TimeProgress, Converter={StaticResource TimeToBrush}}"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsNearExpiry}" Value="True">
+                                                        <Setter Property="Background" Value="#ff4444"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                    </Border>
+                                </Grid>
+                            </StackPanel>
+
+                            <!-- Entrada -->
+                            <TextBlock Grid.Column="3"
+                                       Text="{Binding BuyPrice, StringFormat=F2}"
+                                       Foreground="#e0eef8" FontSize="10"
+                                       FontFamily="Consolas"
+                                       VerticalAlignment="Center"/>
+
+                            <!-- Valor atual -->
+                            <TextBlock Grid.Column="4"
+                                       Text="{Binding CurrentValue, StringFormat=F2}"
+                                       Foreground="#e0eef8" FontSize="10"
+                                       FontFamily="Consolas"
+                                       VerticalAlignment="Center"/>
+
+                            <!-- Preço abertura -->
+                            <TextBlock Grid.Column="5"
+                                       Text="{Binding EntrySpotDisplay}"
+                                       Foreground="#a3b8cc" FontSize="10"
+                                       FontFamily="Consolas"
+                                       VerticalAlignment="Center"/>
+
+                            <!-- Lucro/Perda -->
+                            <TextBlock Grid.Column="6"
+                                       Text="{Binding Profit, StringFormat=F2}"
+                                       Foreground="{Binding Profit, Converter={StaticResource ProfitToBrush}}"
+                                       FontSize="10" FontFamily="Consolas"
+                                       FontWeight="Bold"
+                                       VerticalAlignment="Center"/>
+
+                            <!-- Botão Vender -->
+                            <Grid Grid.Column="7">
+                                <Button Content="Vender"
+                                        Style="{StaticResource DerivSellProfitButtonStyle}"
+                                        Command="{Binding DataContext.SellCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                        CommandParameter="{Binding ContractId}"
+                                        IsEnabled="{Binding IsValidToSell}"
+                                        Visibility="{Binding IsProfitable, Converter={StaticResource BoolToVis}}"/>
+                                <Button Content="Vender"
+                                        Style="{StaticResource DerivSellLossButtonStyle}"
+                                        Command="{Binding DataContext.SellCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                        CommandParameter="{Binding ContractId}"
+                                        IsEnabled="{Binding IsValidToSell}"
+                                        Visibility="{Binding IsProfitable, Converter={StaticResource InverseBoolToVis}}"/>
+                            </Grid>
+                        </Grid>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- Empty state -->
+            <TextBlock Grid.Row="2"
+                       Text="Nenhuma posição aberta"
+                       Foreground="#4a6a7a" FontSize="10"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                        <Setter Property="Visibility" Value="Collapsed"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding HasPositions}" Value="False">
+                                <Setter Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
+        </Grid>
+    </Border>
+</UserControl>

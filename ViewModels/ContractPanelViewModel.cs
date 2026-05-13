@@ -24,6 +24,7 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
     private string _putProposalId = string.Empty;
 
     [ObservableProperty] private string _symbol = string.Empty;
+    [ObservableProperty] private string _displayName = string.Empty;
     [ObservableProperty] private DurationUnitType _durationUnit = DurationUnitType.Minutes;
     [ObservableProperty] private string _durationText = "5";
     [ObservableProperty] private string _durationRange = "1 - 1440 minutos";
@@ -94,8 +95,11 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
         _barrierInnerBase = barrierInnerBase;
         _barrierOuterBase = barrierOuterBase;
         _contractService.ProposalUpdated += OnProposalUpdated;
+        OpenPositions = new OpenPositionsViewModel(contractService);
         UpdateDurationRange();
     }
+
+    public OpenPositionsViewModel OpenPositions { get; }
 
     partial void OnUseDurationChanged(bool value)
     {
@@ -313,7 +317,11 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
         {
             var result = await _contractService.BuyContractAsync(proposalId, price);
             if (result.Success)
+            {
                 LastBuyResult = $"Comprado! ID: {result.ContractId}";
+                var expiry = GetDateExpiryForPosition();
+                _ = OpenPositions.AddPositionAsync(result, Symbol, DisplayName, contractType, expiry);
+            }
             else
                 LastBuyResult = $"Erro: {result.Error}";
 
@@ -657,9 +665,10 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
         UpdateBarrierDisplays();
     }
 
-    public async Task LoadContractsAsync(string symbol)
+    public async Task LoadContractsAsync(string symbol, string? displayName = null)
     {
         Symbol = symbol;
+        DisplayName = displayName ?? symbol;
         _active = true;
         IsLoading = true;
 
@@ -960,6 +969,18 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
         return new DateTimeOffset(utcDt).ToUnixTimeSeconds();
     }
 
+    private long GetDateExpiryForPosition()
+    {
+        if (!UseDuration)
+        {
+            var unix = GetDateExpiryUnix();
+            return unix ?? DateTimeOffset.UtcNow.AddMinutes(5).ToUnixTimeSeconds();
+        }
+
+        var minutes = GetDurationInMinutes();
+        return DateTimeOffset.UtcNow.AddMinutes(minutes).ToUnixTimeSeconds();
+    }
+
     public void RestoreState(string? durationUnit, string? durationText, string? stakeText, bool? useDuration = null)
     {
         AppLogger.Info(Src, $"RestoreState: unit={durationUnit}, duration={durationText}, stake={stakeText}, useDuration={useDuration}");
@@ -980,5 +1001,6 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
         _barrierRefreshCts?.Cancel();
         _barrierRefreshCts?.Dispose();
         _contractService.ProposalUpdated -= OnProposalUpdated;
+        OpenPositions.Dispose();
     }
 }

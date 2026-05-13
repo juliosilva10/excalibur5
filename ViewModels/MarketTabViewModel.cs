@@ -239,7 +239,7 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
             }
 
             // Always load contracts even if tick/history failed
-            await ContractPanel.LoadContractsAsync(Symbol);
+            await ContractPanel.LoadContractsAsync(Symbol, DisplayName);
             UpdateCandlesEnabled();
         }
         catch (Exception ex)

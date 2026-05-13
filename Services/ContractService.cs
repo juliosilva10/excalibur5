@@ -13,9 +13,11 @@ public sealed class ContractService : IContractService, IDisposable
     private readonly ConcurrentDictionary<int, TaskCompletionSource<JsonElement>> _pending = new();
     private readonly ConcurrentDictionary<string, string> _activeSubIds = new();
     private readonly ConcurrentDictionary<string, string> _subIdToContractType = new();
+    private readonly ConcurrentDictionary<long, string> _openContractSubIds = new();
     private int _reqId = 20000;
 
     public event EventHandler<ProposalResponse>? ProposalUpdated;
+    public event EventHandler<OpenContractUpdate>? OpenContractUpdated;
 
     public ContractService(IDerivWebSocketService ws)
     {
@@ -55,6 +57,14 @@ public sealed class ContractService : IContractService, IDisposable
                     }
                     ProposalUpdated?.Invoke(this, withType);
                 }
+            }
+
+            if (root.TryGetProperty("msg_type", out var mt2) && mt2.GetString() == "proposal_open_contract" &&
+                root.TryGetProperty("proposal_open_contract", out var pocEl))
+            {
+                var update = ParseOpenContractUpdate(root, pocEl);
+                if (update != null)
+                    OpenContractUpdated?.Invoke(this, update);
             }
         }
     }
@@ -396,11 +406,128 @@ public sealed class ContractService : IContractService, IDisposable
         return new BuyResponse { Error = "Unexpected response" };
     }
 
+    public async Task SubscribeOpenContractAsync(long contractId, CancellationToken ct = default)
+    {
+        var reqId = Interlocked.Increment(ref _reqId);
+        var payload = JsonSerializer.Serialize(new
+        {
+            proposal_open_contract = 1,
+            contract_id = contractId,
+            subscribe = 1,
+            req_id = reqId
+        });
+
+        var root = await SendAndWaitAsync(reqId, payload, ct);
+
+        if (root.TryGetProperty("error", out var err))
+        {
+            var msg = err.TryGetProperty("message", out var m) ? m.GetString() ?? "unknown" : "unknown";
+            AppLogger.Error(Src, $"proposal_open_contract error: {msg}");
+            return;
+        }
+
+        if (root.TryGetProperty("subscription", out var sub) &&
+            sub.TryGetProperty("id", out var idEl))
+        {
+            var subId = idEl.GetString() ?? "";
+            _openContractSubIds[contractId] = subId;
+        }
+
+        if (root.TryGetProperty("proposal_open_contract", out var pocEl))
+        {
+            var update = ParseOpenContractUpdate(root, pocEl);
+            if (update != null)
+                OpenContractUpdated?.Invoke(this, update);
+        }
+
+        AppLogger.Info(Src, $"Subscribed to open contract: {contractId}");
+    }
+
+    public async Task UnsubscribeOpenContractAsync(long contractId, CancellationToken ct = default)
+    {
+        if (!_openContractSubIds.TryRemove(contractId, out var subId)) return;
+
+        var reqId = Interlocked.Increment(ref _reqId);
+        var payload = JsonSerializer.Serialize(new { forget = subId, req_id = reqId });
+
+        try
+        {
+            await SendAndWaitAsync(reqId, payload, ct);
+            AppLogger.Info(Src, $"Unsubscribed open contract: {contractId}");
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Warn(Src, $"Unsubscribe open contract error: {ex.Message}");
+        }
+    }
+
+    public async Task<SellResponse> SellContractAsync(long contractId, CancellationToken ct = default)
+    {
+        var reqId = Interlocked.Increment(ref _reqId);
+        var payload = JsonSerializer.Serialize(new
+        {
+            sell = contractId,
+            price = 0,
+            req_id = reqId
+        });
+
+        var root = await SendAndWaitAsync(reqId, payload, ct);
+
+        if (root.TryGetProperty("error", out var err))
+        {
+            var msg = err.TryGetProperty("message", out var m) ? m.GetString() ?? "unknown" : "unknown";
+            AppLogger.Error(Src, $"sell error: {msg}");
+            return new SellResponse { Error = msg };
+        }
+
+        if (root.TryGetProperty("sell", out var sellEl))
+        {
+            var response = new SellResponse
+            {
+                ContractId = contractId,
+                SoldFor = sellEl.TryGetProperty("sold_for", out var sf) ? ParseDecimal(sf) : 0m
+            };
+            AppLogger.Info(Src, $"Sell success: contract_id={contractId} sold_for={response.SoldFor}");
+            return response;
+        }
+
+        return new SellResponse { ContractId = contractId, Error = "Unexpected response" };
+    }
+
+    private static OpenContractUpdate? ParseOpenContractUpdate(JsonElement root, JsonElement pocEl)
+    {
+        var subId = "";
+        if (root.TryGetProperty("subscription", out var sub) &&
+            sub.TryGetProperty("id", out var idEl))
+            subId = idEl.GetString() ?? "";
+
+        return new OpenContractUpdate
+        {
+            ContractId = pocEl.TryGetProperty("contract_id", out var cid) ? cid.GetInt64() : 0,
+            Symbol = pocEl.TryGetProperty("underlying", out var sym) ? sym.GetString() ?? "" : "",
+            ContractType = pocEl.TryGetProperty("contract_type", out var ct) ? ct.GetString() ?? "" : "",
+            BuyPrice = pocEl.TryGetProperty("buy_price", out var bp) ? ParseDecimal(bp) : 0m,
+            BidPrice = pocEl.TryGetProperty("bid_price", out var bid) ? ParseDecimal(bid) : 0m,
+            CurrentSpot = pocEl.TryGetProperty("current_spot", out var cs) ? ParseDecimal(cs) : 0m,
+            EntrySpot = pocEl.TryGetProperty("entry_spot", out var es) ? ParseDecimal(es) : 0m,
+            EntrySpotRaw = pocEl.TryGetProperty("entry_spot", out var esRaw) ? esRaw.GetRawText().Trim('"') : "",
+            Profit = pocEl.TryGetProperty("profit", out var pf) ? ParseDecimal(pf) : 0m,
+            DateStart = pocEl.TryGetProperty("date_start", out var ds) ? ds.GetInt64() : 0,
+            DateExpiry = pocEl.TryGetProperty("date_expiry", out var de) ? de.GetInt64() : 0,
+            IsExpired = pocEl.TryGetProperty("is_expired", out var ie) && (ie.ValueKind == JsonValueKind.True || (ie.ValueKind == JsonValueKind.Number && ie.GetInt32() == 1)),
+            IsSold = pocEl.TryGetProperty("is_sold", out var isl) && (isl.ValueKind == JsonValueKind.True || (isl.ValueKind == JsonValueKind.Number && isl.GetInt32() == 1)),
+            IsValidToSell = pocEl.TryGetProperty("is_valid_to_sell", out var ivs) && (ivs.ValueKind == JsonValueKind.True || (ivs.ValueKind == JsonValueKind.Number && ivs.GetInt32() == 1)),
+            Status = pocEl.TryGetProperty("status", out var st) ? st.GetString() ?? "" : "",
+            SubscriptionId = subId
+        };
+    }
+
     public void Dispose()
     {
         _ws.MessageReceived -= OnMessage;
         _activeSubIds.Clear();
         _subIdToContractType.Clear();
+        _openContractSubIds.Clear();
         foreach (var key in _pending.Keys)
         {
             if (_pending.TryRemove(key, out var tcs))
