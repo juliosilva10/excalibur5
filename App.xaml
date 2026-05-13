@@ -30,7 +30,76 @@
         <converters:InverseBoolConverter x:Key="InverseBool"/>
         <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVis"/>
         <converters:TickDirectionToColorConverter x:Key="DirToColor"/>
+        <converters:ConfidenceToColorConverter x:Key="ConfidenceToColor"/>
         <BooleanToVisibilityConverter   x:Key="BoolToVis"/>
+
+        <!-- Confidence Slider Style: colored track (red→orange→yellow→blue→green) -->
+        <Style x:Key="ConfidenceSliderStyle" TargetType="Slider">
+            <Setter Property="Minimum" Value="0.3"/>
+            <Setter Property="Maximum" Value="1.0"/>
+            <Setter Property="TickFrequency" Value="0.05"/>
+            <Setter Property="IsSnapToTickEnabled" Value="True"/>
+            <Setter Property="Height" Value="22"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Slider">
+                        <Grid VerticalAlignment="Center">
+                            <!-- Track background (dark groove) -->
+                            <Border Height="6" CornerRadius="3"
+                                    Background="#0a1a24"
+                                    BorderBrush="#1d4957" BorderThickness="1"/>
+                            <!-- Track with thumb -->
+                            <Track x:Name="PART_Track" Margin="8,0">
+                                <Track.DecreaseRepeatButton>
+                                    <RepeatButton Command="Slider.DecreaseLarge" Focusable="False">
+                                        <RepeatButton.Template>
+                                            <ControlTemplate TargetType="RepeatButton">
+                                                <Border Height="6" CornerRadius="3,0,0,3"
+                                                        Background="{Binding Value, RelativeSource={RelativeSource AncestorType=Slider}, Converter={StaticResource ConfidenceToColor}}"/>
+                                            </ControlTemplate>
+                                        </RepeatButton.Template>
+                                    </RepeatButton>
+                                </Track.DecreaseRepeatButton>
+                                <Track.IncreaseRepeatButton>
+                                    <RepeatButton Command="Slider.IncreaseLarge" Focusable="False">
+                                        <RepeatButton.Template>
+                                            <ControlTemplate TargetType="RepeatButton">
+                                                <Border Background="Transparent"/>
+                                            </ControlTemplate>
+                                        </RepeatButton.Template>
+                                    </RepeatButton>
+                                </Track.IncreaseRepeatButton>
+                                <Track.Thumb>
+                                    <Thumb>
+                                        <Thumb.Style>
+                                            <Style TargetType="Thumb">
+                                                <Setter Property="Width" Value="16"/>
+                                                <Setter Property="Height" Value="16"/>
+                                                <Setter Property="Template">
+                                                    <Setter.Value>
+                                                        <ControlTemplate TargetType="Thumb">
+                                                            <Grid>
+                                                                <Ellipse Fill="#0c1e2a"
+                                                                         Stroke="#00f0ff"
+                                                                         StrokeThickness="1.5"/>
+                                                                <Ellipse Width="8" Height="8"
+                                                                         Fill="#00f0ff"
+                                                                         HorizontalAlignment="Center"
+                                                                         VerticalAlignment="Center"/>
+                                                            </Grid>
+                                                        </ControlTemplate>
+                                                    </Setter.Value>
+                                                </Setter>
+                                            </Style>
+                                        </Thumb.Style>
+                                    </Thumb>
+                                </Track.Thumb>
+                            </Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
         <!-- RadioButton style: carved radial effect with cyan dot -->
         <Style TargetType="RadioButton">
@@ -77,6 +146,74 @@
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsChecked" Value="True">
                                 <Setter TargetName="CheckDot" Property="Opacity" Value="1"/>
+                                <Setter TargetName="OuterBorder" Property="BorderBrush" Value="#00f0ff"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="OuterBorder" Property="BorderBrush" Value="#00f0ff"/>
+                                <Setter TargetName="OuterBorder" Property="Background">
+                                    <Setter.Value>
+                                        <RadialGradientBrush>
+                                            <GradientStop Color="#0a1a24" Offset="0.0"/>
+                                            <GradientStop Color="#10283a" Offset="0.5"/>
+                                            <GradientStop Color="#1a3f52" Offset="1.0"/>
+                                        </RadialGradientBrush>
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- CheckBox style: rounded corners with cyan checkmark -->
+        <Style TargetType="CheckBox">
+            <Setter Property="OverridesDefaultStyle" Value="True"/>
+            <Setter Property="Foreground" Value="#a3b8cc"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Border x:Name="OuterBorder"
+                                    Width="16" Height="16"
+                                    CornerRadius="4"
+                                    BorderThickness="1.5"
+                                    BorderBrush="#1d4957">
+                                <Border.Background>
+                                    <RadialGradientBrush>
+                                        <GradientStop Color="#08141a" Offset="0.0"/>
+                                        <GradientStop Color="#0d1f28" Offset="0.5"/>
+                                        <GradientStop Color="#153342" Offset="1.0"/>
+                                    </RadialGradientBrush>
+                                </Border.Background>
+                                <!-- Checkmark -->
+                                <Path x:Name="CheckMark"
+                                      Data="M3,8 L6,11 L12,4"
+                                      Stroke="#00f0ff"
+                                      StrokeThickness="2"
+                                      StrokeStartLineCap="Round"
+                                      StrokeEndLineCap="Round"
+                                      StrokeLineJoin="Round"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center"
+                                      Width="14" Height="14"
+                                      Stretch="Uniform"
+                                      Margin="2"
+                                      Opacity="0"/>
+                            </Border>
+                            <ContentPresenter Margin="6,0,0,0"
+                                              VerticalAlignment="Center"
+                                              RecognizesAccessKey="True"/>
+                        </StackPanel>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="CheckMark" Property="Opacity" Value="1"/>
                                 <Setter TargetName="OuterBorder" Property="BorderBrush" Value="#00f0ff"/>
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
@@ -247,6 +384,95 @@
                                         </Storyboard>
                                     </BeginStoryboard>
                                 </Trigger.ExitActions>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Toggle/Pause Button Style (amber/yellow) -->
+        <Style x:Key="DerivToggleButtonStyle" TargetType="Button">
+            <Setter Property="Background"    Value="Transparent"/>
+            <Setter Property="Foreground"    Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding"       Value="10,0,10,0"/>
+            <Setter Property="FontSize"      Value="11"/>
+            <Setter Property="Height"        Value="30"/>
+            <Setter Property="Width"         Value="70"/>
+            <Setter Property="Cursor"        Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid>
+                            <Border x:Name="GlowBorder"
+                                    CornerRadius="8"
+                                    Background="#f0c040"
+                                    Opacity="0.22">
+                                <Border.Effect>
+                                    <BlurEffect Radius="20"/>
+                                </Border.Effect>
+                            </Border>
+                            <Border x:Name="ShadowBorder"
+                                    CornerRadius="8"
+                                    Background="Black"
+                                    Opacity="0.4"
+                                    Margin="0,2,0,-2"/>
+                            <Border x:Name="MainBorder"
+                                    CornerRadius="8"
+                                    BorderThickness="1.5"
+                                    BorderBrush="#c9a83e">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                        <GradientStop Color="#6e5a1e" Offset="0.0"/>
+                                        <GradientStop Color="#5c4a18" Offset="0.4"/>
+                                        <GradientStop Color="#423510" Offset="1.0"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                                <Grid>
+                                    <Border CornerRadius="7,7,0,0" Height="8" VerticalAlignment="Top" Opacity="0.10"
+                                            IsHitTestVisible="False">
+                                        <Border.Background>
+                                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                                <GradientStop Color="White" Offset="0.0"/>
+                                                <GradientStop Color="Transparent" Offset="1.0"/>
+                                            </LinearGradientBrush>
+                                        </Border.Background>
+                                    </Border>
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                      Margin="{TemplateBinding Padding}"/>
+                                </Grid>
+                            </Border>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="GlowBorder" Property="Opacity" Value="0.58"/>
+                                <Setter TargetName="MainBorder" Property="BorderBrush" Value="#f5d060"/>
+                                <Setter TargetName="MainBorder" Property="Background">
+                                    <Setter.Value>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                            <GradientStop Color="#8b7028" Offset="0.0"/>
+                                            <GradientStop Color="#6b5820" Offset="0.45"/>
+                                            <GradientStop Color="#4a3d14" Offset="1.0"/>
+                                        </LinearGradientBrush>
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ShadowBorder" Property="Opacity" Value="0.1"/>
+                                <Setter TargetName="GlowBorder"   Property="Opacity" Value="0.7"/>
+                                <Setter TargetName="MainBorder" Property="Background">
+                                    <Setter.Value>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                            <GradientStop Color="#5c4a18" Offset="0.0"/>
+                                            <GradientStop Color="#4b3c12" Offset="1.0"/>
+                                        </LinearGradientBrush>
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="MainBorder" Property="Opacity" Value="0.45"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>

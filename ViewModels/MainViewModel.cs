@@ -42,6 +42,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     public MarketsViewModel Markets { get; }
     public LogViewModel Log { get; } = new();
+    public StrategyViewModel Strategy { get; }
 
     partial void OnAccountTypeChanged(string value)
     {
@@ -65,23 +66,36 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _contractService = contractService;
 
         Markets = new MarketsViewModel(tickStream, contractService);
+        Strategy = new StrategyViewModel(contractService);
 
         Markets.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(Markets.IsMarketsVisible) && Markets.IsMarketsVisible)
+            {
                 Log.IsLogVisible = false;
+                Strategy.IsBotVisible = false;
+            }
             if (e.PropertyName == nameof(Markets.IsMarketsVisible) || e.PropertyName == nameof(Markets.SelectedTab))
             {
                 SaveUiState();
                 WatchContractPanelChanges();
+                Strategy.SetActiveMarketTab(Markets.SelectedTab);
             }
         };
         Log.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(Log.IsLogVisible) && Log.IsLogVisible)
+            {
                 Markets.IsMarketsVisible = false;
+                Strategy.IsBotVisible = false;
+            }
             if (e.PropertyName == nameof(Log.IsLogVisible))
                 SaveUiState();
+        };
+        Strategy.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(Strategy.IsBotVisible) && Strategy.IsBotVisible)
+                Log.IsLogVisible = false;
         };
 
         _api.Authorized     += OnAuthorized;
@@ -380,6 +394,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _ws.Disconnected    -= OnDisconnected;
         _ws.Connected       -= OnConnected;
         Markets.Dispose();
+        Strategy.Dispose();
         Log.Dispose();
         (_tickStream as IDisposable)?.Dispose();
         (_api as IDisposable)?.Dispose();

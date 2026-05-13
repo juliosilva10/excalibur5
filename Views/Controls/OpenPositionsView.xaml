@@ -62,7 +62,7 @@
                 <ItemsControl.Template>
                     <ControlTemplate TargetType="ItemsControl">
                         <ScrollViewer VerticalScrollBarVisibility="Auto"
-                                      HorizontalScrollBarVisibility="Disabled">
+                                      HorizontalScrollBarVisibility="Auto">
                             <ItemsPresenter/>
                         </ScrollViewer>
                     </ControlTemplate>

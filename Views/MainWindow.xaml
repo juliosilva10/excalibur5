@@ -520,6 +520,7 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
                 <!-- Sidebar -->
@@ -736,6 +737,11 @@
                         </Border>
                     </Grid>
                 </Grid>
+
+                <!-- Strategy Bot Panel (right side) -->
+                <controls:StrategyPanelView Grid.Column="2"
+                                             DataContext="{Binding Strategy}"
+                                             Visibility="{Binding IsBotVisible, Converter={StaticResource BoolToVis}}"/>
             </Grid>
         </Border>
 
