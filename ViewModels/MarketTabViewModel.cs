@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Windows;
+using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Excalibur5.Models;
@@ -12,10 +13,14 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
 {
     private const int MaxTicks = 1000;
     private const int MaxRecentDisplay = 50;
+    private const int TickWatchdogSeconds = 30;
 
     private readonly ITickStreamService _tickService;
     private readonly MarketInfo _market;
     private bool _isActive;
+    private DispatcherTimer? _watchdogTimer;
+    private DateTime _lastTickTime = DateTime.UtcNow;
+    private bool _isResubscribing;
 
     public ContractPanelViewModel ContractPanel { get; }
 
@@ -95,6 +100,7 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
     private void OnTickReceived(object? sender, TickData tick)
     {
         if (tick.Symbol != Symbol || !_isActive) return;
+        _lastTickTime = DateTime.UtcNow;
 
         Application.Current?.Dispatcher?.InvokeAsync(() =>
         {
@@ -232,6 +238,7 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
             {
                 await _tickService.SubscribeAsync(Symbol);
                 IsSubscribed = true;
+                StartWatchdog();
             }
             catch (Exception ex)
             {
@@ -253,6 +260,7 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
         if (!_isActive) return;
         _isActive = false;
         _tickService.TickReceived -= OnTickReceived;
+        StopWatchdog();
 
         try
         {
@@ -271,14 +279,58 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
     {
         _isActive = false;
         _tickService.TickReceived -= OnTickReceived;
+        StopWatchdog();
         IsSubscribed = false;
         _tickService.ClearSubscription(Symbol);
         await ContractPanel.DeactivateAsync();
     }
 
+    private void StartWatchdog()
+    {
+        _lastTickTime = DateTime.UtcNow;
+        _watchdogTimer ??= new DispatcherTimer { Interval = TimeSpan.FromSeconds(10) };
+        _watchdogTimer.Tick += OnWatchdogTick;
+        _watchdogTimer.Start();
+    }
+
+    private void StopWatchdog()
+    {
+        if (_watchdogTimer == null) return;
+        _watchdogTimer.Stop();
+        _watchdogTimer.Tick -= OnWatchdogTick;
+    }
+
+    private async void OnWatchdogTick(object? sender, EventArgs e)
+    {
+        if (!_isActive || _isResubscribing) return;
+
+        var elapsed = (DateTime.UtcNow - _lastTickTime).TotalSeconds;
+        if (elapsed < TickWatchdogSeconds) return;
+
+        _isResubscribing = true;
+        AppLogger.Warn("MarketTab", $"Watchdog: no ticks for {Symbol} in {elapsed:F0}s — resubscribing");
+
+        try
+        {
+            _tickService.ClearSubscription(Symbol);
+            await _tickService.SubscribeAsync(Symbol);
+            _lastTickTime = DateTime.UtcNow;
+            AppLogger.Info("MarketTab", $"Watchdog: resubscribed {Symbol} successfully");
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Warn("MarketTab", $"Watchdog: resubscribe failed for {Symbol}: {ex.Message}");
+        }
+        finally
+        {
+            _isResubscribing = false;
+        }
+    }
+
     public void Dispose()
     {
         _tickService.TickReceived -= OnTickReceived;
+        StopWatchdog();
         ContractPanel.PropertyChanged -= OnContractPanelPropertyChanged;
         ContractPanel.Dispose();
     }
