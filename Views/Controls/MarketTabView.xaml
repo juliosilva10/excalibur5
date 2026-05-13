@@ -79,6 +79,71 @@
                             MouseLeftButtonDown="ChartCanvas_MouseLeftButtonDown"
                             Background="Transparent"/>
 
+                    <!-- Chart type button - square with rounded corners -->
+                    <Border x:Name="ChartTypeButton" Grid.Column="0" Grid.Row="0"
+                            HorizontalAlignment="Left" VerticalAlignment="Top"
+                            Margin="6,6,0,0" Panel.ZIndex="20"
+                            Cursor="Hand" CornerRadius="4"
+                            Background="#1a2e3d" BorderBrush="#2a5568"
+                            BorderThickness="1"
+                            Width="26" Height="26"
+                            MouseLeftButtonDown="ChartTypeButton_Down"
+                            MouseEnter="ChartTypeButton_MouseEnter"
+                            MouseLeave="ChartTypeButton_MouseLeave">
+                        <!-- Line icon (default) -->
+                        <Canvas x:Name="ButtonLineIcon" Width="14" Height="10"
+                                HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <Line X1="0" Y1="8" X2="4" Y2="3" Stroke="#34c759" StrokeThickness="1.2"/>
+                            <Line X1="4" Y1="3" X2="9" Y2="6" Stroke="#34c759" StrokeThickness="1.2"/>
+                            <Line X1="9" Y1="6" X2="14" Y2="1" Stroke="#34c759" StrokeThickness="1.2"/>
+                        </Canvas>
+                    </Border>
+
+                    <!-- Chart type popup menu -->
+                    <Popup x:Name="ChartTypePopup" Grid.Column="0" Grid.Row="0"
+                           PlacementTarget="{Binding ElementName=ChartTypeButton}"
+                           Placement="Bottom"
+                           StaysOpen="True"
+                           PopupAnimation="Fade"
+                           AllowsTransparency="True">
+                        <Border Background="#0f2030" BorderBrush="#1d4957"
+                                BorderThickness="1" CornerRadius="6"
+                                Padding="4" Margin="0,2,0,0">
+                            <StackPanel>
+                                <Border x:Name="LineOption" Background="Transparent"
+                                        CornerRadius="4" Padding="8,5" Cursor="Hand"
+                                        MouseLeftButtonUp="ChartTypeLine_Click"
+                                        MouseEnter="MenuOption_MouseEnter"
+                                        MouseLeave="MenuOption_MouseLeave">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Canvas Width="16" Height="10" Margin="0,0,8,0">
+                                            <Line X1="0" Y1="8" X2="5" Y2="3" Stroke="#34c759" StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                            <Line X1="5" Y1="3" X2="10" Y2="6" Stroke="#34c759" StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                            <Line X1="10" Y1="6" X2="16" Y2="1" Stroke="#34c759" StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                        </Canvas>
+                                        <TextBlock Text="Gráfico de linha" Foreground="#e0eef8" FontSize="12" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Border>
+                                <Border x:Name="CandlesOption" Background="Transparent"
+                                        CornerRadius="4" Padding="8,5" Cursor="Hand"
+                                        MouseLeftButtonUp="ChartTypeCandles_Click"
+                                        MouseEnter="MenuOption_MouseEnter"
+                                        MouseLeave="MenuOption_MouseLeave"
+                                        IsEnabled="{Binding IsCandlesEnabled}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Canvas Width="16" Height="12" Margin="0,0,8,0">
+                                            <Line X1="4" Y1="0" X2="4" Y2="12" Stroke="#34c759" StrokeThickness="1"/>
+                                            <Rectangle Canvas.Left="2" Canvas.Top="3" Width="4" Height="5" Fill="#34c759"/>
+                                            <Line X1="12" Y1="0" X2="12" Y2="12" Stroke="#FF6B6B" StrokeThickness="1"/>
+                                            <Rectangle Canvas.Left="10" Canvas.Top="2" Width="4" Height="6" Fill="#FF6B6B"/>
+                                        </Canvas>
+                                        <TextBlock Text="Gráfico de candles" Foreground="#e0eef8" FontSize="12" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </Border>
+                    </Popup>
+
                     <!-- Y axis (values) -->
                     <Canvas x:Name="YAxisCanvas" Grid.Column="1" Grid.Row="0"
                             Width="52" ClipToBounds="True"/>

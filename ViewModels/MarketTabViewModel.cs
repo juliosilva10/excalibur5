@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using Excalibur5.Models;
 using Excalibur5.Services;
 
@@ -24,22 +25,71 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool           _isSelected;
     [ObservableProperty] private bool           _isChartReady;
     [ObservableProperty] private string         _tickVariation = string.Empty;
+    [ObservableProperty] private ChartType      _chartType = ChartType.Line;
+    [ObservableProperty] private bool           _isCandlesEnabled;
 
     private decimal _previousQuote;
 
+    [RelayCommand]
+    private void SetChartType(ChartType type) => ChartType = type;
+
+    partial void OnChartTypeChanged(ChartType value)
+    {
+        if (value == ChartType.Candles && !_candlesLoaded && _isActive)
+            _ = LoadCandlesAsync();
+    }
+
+    public async Task LoadCandlesAsync()
+    {
+        try
+        {
+            var candles = await _tickService.GetCandleHistoryAsync(Symbol, 60, 500);
+            await Application.Current.Dispatcher.InvokeAsync(() =>
+            {
+                CandleValues.Clear();
+                CandleValues.AddRange(candles);
+                _candlesLoaded = true;
+                OnPropertyChanged(nameof(CandleValues));
+            });
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Warn("MarketTab", $"Candle history load failed for {Symbol}: {ex.Message}");
+        }
+    }
+
     public string Symbol      => _market.Symbol;
     public string DisplayName => _market.DisplayName;
+    public string FullName    => _market.FullName;
 
     public ObservableCollection<TickData> RecentTicks { get; } = new();
     public ObservableCollection<decimal>  ChartValues { get; } = new();
     public List<long> ChartEpochs { get; } = new();
     public List<TickDirection> ChartDirections { get; } = new();
+    public List<CandleData> CandleValues { get; } = new();
+    private bool _candlesLoaded;
+    private int _candleGranularity = 60;
+
+    public event EventHandler? CandleUpdated;
 
     public MarketTabViewModel(MarketInfo market, ITickStreamService tickService, IContractService contractService)
     {
         _market      = market;
         _tickService = tickService;
         ContractPanel = new ContractPanelViewModel(contractService, _market.PipSize, _market.BarrierInnerBase, _market.BarrierOuterBase);
+        ContractPanel.PropertyChanged += OnContractPanelPropertyChanged;
+    }
+
+    private void OnContractPanelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(ContractPanelViewModel.DurationUnit) or nameof(ContractPanelViewModel.DurationText))
+            UpdateCandlesEnabled();
+    }
+
+    private void UpdateCandlesEnabled()
+    {
+        IsCandlesEnabled = ContractPanel.DurationUnit != DurationUnitType.Minutes
+            || (int.TryParse(ContractPanel.DurationText, out var val) && val >= 1);
     }
 
     private void OnTickReceived(object? sender, TickData tick)
@@ -73,6 +123,9 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
                 ChartEpochs.RemoveAt(0);
                 ChartDirections.RemoveAt(0);
             }
+
+            if (_candlesLoaded && CandleValues.Count > 0)
+                UpdateCandleWithTick(tick);
         });
     }
 
@@ -80,6 +133,37 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
     {
         var dotIndex = quoteRaw.IndexOf('.');
         return dotIndex < 0 ? 0 : quoteRaw.Length - dotIndex - 1;
+    }
+
+    private void UpdateCandleWithTick(TickData tick)
+    {
+        var lastCandle = CandleValues[^1];
+        long candleStart = lastCandle.Epoch;
+        long tickEpoch = tick.Epoch;
+
+        if (tickEpoch < candleStart + _candleGranularity)
+        {
+            lastCandle.Close = tick.Quote;
+            if (tick.Quote > lastCandle.High) lastCandle.High = tick.Quote;
+            if (tick.Quote < lastCandle.Low) lastCandle.Low = tick.Quote;
+        }
+        else
+        {
+            long newEpoch = candleStart + _candleGranularity;
+            while (newEpoch + _candleGranularity <= tickEpoch)
+                newEpoch += _candleGranularity;
+
+            CandleValues.Add(new CandleData
+            {
+                Epoch = newEpoch,
+                Open = tick.Quote,
+                High = tick.Quote,
+                Low = tick.Quote,
+                Close = tick.Quote
+            });
+        }
+
+        CandleUpdated?.Invoke(this, EventArgs.Empty);
     }
 
     public async Task ActivateAsync()
@@ -97,6 +181,8 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
                 ChartValues.Clear();
                 ChartEpochs.Clear();
                 ChartDirections.Clear();
+                CandleValues.Clear();
+                _candlesLoaded = false;
             });
 
             // Load history — non-fatal if it fails (chart will be empty but contracts still load)
@@ -154,6 +240,7 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
 
             // Always load contracts even if tick/history failed
             await ContractPanel.LoadContractsAsync(Symbol);
+            UpdateCandlesEnabled();
         }
         catch (Exception ex)
         {
@@ -192,6 +279,7 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
     public void Dispose()
     {
         _tickService.TickReceived -= OnTickReceived;
+        ContractPanel.PropertyChanged -= OnContractPanelPropertyChanged;
         ContractPanel.Dispose();
     }
 }

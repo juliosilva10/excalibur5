@@ -220,6 +220,40 @@ public sealed class TickStreamService : ITickStreamService, IDisposable
         return result;
     }
 
+    public async Task<List<CandleData>> GetCandleHistoryAsync(string symbol, int granularity = 60, int count = 1000, CancellationToken ct = default)
+    {
+        var reqId = Interlocked.Increment(ref _reqId);
+        var payload = JsonSerializer.Serialize(new { ticks_history = symbol, count, end = "latest", style = "candles", granularity, req_id = reqId });
+
+        var root = await SendAndWaitAsync(reqId, payload, ct);
+
+        if (root.TryGetProperty("error", out var err))
+        {
+            var msg = err.TryGetProperty("message", out var m) ? m.GetString() : "unknown";
+            AppLogger.Error(Src, $"Candle history error for {symbol}: {msg}");
+            return new List<CandleData>();
+        }
+
+        var result = new List<CandleData>();
+        if (!root.TryGetProperty("candles", out var candles) || candles.ValueKind != JsonValueKind.Array)
+            return result;
+
+        for (int i = 0; i < candles.GetArrayLength(); i++)
+        {
+            var c = candles[i];
+            var epoch = c.TryGetProperty("epoch", out var ep) ? ep.GetInt64() : 0;
+            var open  = c.TryGetProperty("open", out var o) ? decimal.Parse(o.GetRawText(), System.Globalization.CultureInfo.InvariantCulture) : 0m;
+            var high  = c.TryGetProperty("high", out var h) ? decimal.Parse(h.GetRawText(), System.Globalization.CultureInfo.InvariantCulture) : 0m;
+            var low   = c.TryGetProperty("low", out var l) ? decimal.Parse(l.GetRawText(), System.Globalization.CultureInfo.InvariantCulture) : 0m;
+            var close = c.TryGetProperty("close", out var cl) ? decimal.Parse(cl.GetRawText(), System.Globalization.CultureInfo.InvariantCulture) : 0m;
+
+            result.Add(new CandleData { Epoch = epoch, Open = open, High = high, Low = low, Close = close });
+        }
+
+        AppLogger.Info(Src, $"Candle history loaded for {symbol}: {result.Count} candles (granularity={granularity}s)");
+        return result;
+    }
+
     private async Task<JsonElement> SendAndWaitAsync(int reqId, string json, CancellationToken ct, int timeoutMs = 15000)
     {
         var tcs = new TaskCompletionSource<JsonElement>(TaskCreationOptions.RunContinuationsAsynchronously);

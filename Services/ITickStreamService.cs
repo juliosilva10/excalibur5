@@ -10,6 +10,7 @@ public interface ITickStreamService
     Task UnsubscribeAsync(string symbol, CancellationToken ct = default);
     Task UnsubscribeAllAsync(CancellationToken ct = default);
     Task<List<TickData>> GetHistoryAsync(string symbol, int count = 1000, CancellationToken ct = default);
+    Task<List<CandleData>> GetCandleHistoryAsync(string symbol, int granularity = 60, int count = 1000, CancellationToken ct = default);
 
     /// <summary>Clears local subscription tracking without sending forget to server.</summary>
     void ClearSubscription(string symbol);
