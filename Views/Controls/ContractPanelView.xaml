@@ -26,9 +26,23 @@
             <!-- Header: tab -->
             <Border Grid.Row="0" Margin="0,0,0,8">
                 <StackPanel Orientation="Horizontal">
+                    <!-- Call / Put tab (default) -->
                     <Border CornerRadius="4"
                             BorderBrush="#00f0ff" BorderThickness="1"
                             Padding="10,3">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Visibility" Value="Visible"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding DataContext.Recover.IsRecoverVisible, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding DataContext.Strategy.IsBotVisible, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
                         <Border.Background>
                             <LinearGradientBrush StartPoint="0,1" EndPoint="0,0">
                                 <GradientStop Color="#0f2030" Offset="0"/>
@@ -36,6 +50,56 @@
                             </LinearGradientBrush>
                         </Border.Background>
                         <TextBlock Text="Call / Put"
+                                   Foreground="#00f0ff"
+                                   FontSize="11"
+                                   FontWeight="SemiBold"/>
+                    </Border>
+                    <!-- Recover tab (when active) -->
+                    <Border CornerRadius="4"
+                            BorderBrush="#00f0ff" BorderThickness="1"
+                            Padding="10,3">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding DataContext.Recover.IsRecoverVisible, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,1" EndPoint="0,0">
+                                <GradientStop Color="#0f2030" Offset="0"/>
+                                <GradientStop Color="#1a4a5e" Offset="0.85"/>
+                            </LinearGradientBrush>
+                        </Border.Background>
+                        <TextBlock Text="Recover — Martingale"
+                                   Foreground="#00f0ff"
+                                   FontSize="11"
+                                   FontWeight="SemiBold"/>
+                    </Border>
+                    <!-- Bot tab (when active) -->
+                    <Border CornerRadius="4"
+                            BorderBrush="#00f0ff" BorderThickness="1"
+                            Padding="10,3">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding DataContext.Strategy.IsBotVisible, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,1" EndPoint="0,0">
+                                <GradientStop Color="#0f2030" Offset="0"/>
+                                <GradientStop Color="#1a4a5e" Offset="0.85"/>
+                            </LinearGradientBrush>
+                        </Border.Background>
+                        <TextBlock Text="Estratégia Automatizada"
                                    Foreground="#00f0ff"
                                    FontSize="11"
                                    FontWeight="SemiBold"/>
@@ -48,13 +112,26 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="220"/>
                     <ColumnDefinition Width="24"/>
-                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="160"/>
                     <ColumnDefinition Width="16"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
 
-                <!-- LEFT COLUMN: Mode toggle + Duration/EndTime + Strike + Stake -->
+                <!-- LEFT COLUMN: Mode toggle + Duration/EndTime + Strike + Stake (hidden when Recover active) -->
                 <StackPanel Grid.Column="0">
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                            <Setter Property="Visibility" Value="Visible"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding DataContext.Recover.IsRecoverVisible, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding DataContext.Strategy.IsBotVisible, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
 
                     <!-- Mode toggle: Duração / Hora de Término -->
                     <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
@@ -150,20 +227,44 @@
 
                     <!-- Stake input -->
                     <TextBlock Text="Entrada (Stake):" Foreground="#90b5c9" FontSize="10" Margin="0,10,0,4"/>
-                    <TextBox Style="{StaticResource DerivTextBox}"
-                             Text="{Binding StakeText, UpdateSourceTrigger=PropertyChanged}"
-                             Height="30" Width="120"
-                             HorizontalAlignment="Left"
-                             MaxLength="10"
-                             PreviewTextInput="StakeTextBox_PreviewTextInput"
-                             ToolTip="Valor da entrada em USD (máx. 2 casas decimais)"/>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBox Style="{StaticResource DerivTextBox}"
+                                 Text="{Binding StakeText, UpdateSourceTrigger=PropertyChanged}"
+                                 Height="30" Width="120"
+                                 MaxLength="10"
+                                 PreviewTextInput="StakeTextBox_PreviewTextInput"
+                                 ToolTip="Valor da entrada em USD (máx. 2 casas decimais)"/>
+                        <StackPanel Margin="8,0,0,0">
+                            <TextBlock Text="Recover" Foreground="#90b5c9" FontSize="9" Margin="0,0,0,2"/>
+                            <ComboBox Style="{StaticResource DerivComboBox}"
+                                      ItemsSource="{Binding RecoverModes}"
+                                      SelectedItem="{Binding RecoverMode, Mode=TwoWay}"
+                                      Width="90" Height="24"
+                                      FontSize="10"
+                                      Foreground="#00f0ff"
+                                      ToolTip="Modo de recuperação (Martingale)"/>
+                        </StackPanel>
+                    </StackPanel>
                     <TextBlock Text="{Binding StakeRange}"
                                Foreground="#6090a8" FontSize="9"
                                Margin="0,3,0,0"/>
                 </StackPanel>
 
-                <!-- RIGHT COLUMN: Payout + Buttons -->
+                <!-- RIGHT COLUMN: Payout + Buttons (hidden when Recover active) -->
                 <StackPanel Grid.Column="2">
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                            <Setter Property="Visibility" Value="Visible"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding DataContext.Recover.IsRecoverVisible, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding DataContext.Strategy.IsBotVisible, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
 
                     <!-- Payout per point (shared) -->
                     <TextBlock Text="Pagamento por ponto:" Foreground="#90b5c9" FontSize="10" Margin="0,0,0,2"/>
@@ -246,6 +347,356 @@
                                     HorizontalAlignment="Center"/>
                         </StackPanel>
                     </Border>
+                </StackPanel>
+
+                <!-- BOT PANEL (visible when Bot active, spans cols 0-4) -->
+                <ScrollViewer Grid.Column="0" Grid.ColumnSpan="5"
+                              VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                              DataContext="{Binding DataContext.Strategy, RelativeSource={RelativeSource AncestorType=Window}}">
+                    <ScrollViewer.Style>
+                        <Style TargetType="ScrollViewer">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsBotVisible}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ScrollViewer.Style>
+                    <StackPanel Margin="4,0,0,0">
+                        <!-- Duração / Hora de Término toggle -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <RadioButton GroupName="BotExpiryMode"
+                                         IsChecked="{Binding UseDuration, Mode=TwoWay}"
+                                         Content="Duração" Foreground="#a3b8cc" FontSize="11"
+                                         Margin="0,0,14,0" Cursor="Hand"
+                                         ToolTip="Definir duração do contrato"/>
+                            <RadioButton GroupName="BotExpiryMode"
+                                         IsChecked="{Binding UseEndTime, Mode=OneWay}"
+                                         Click="BotEndTimeMode_Click"
+                                         Content="Hora de Término" Foreground="#a3b8cc" FontSize="11"
+                                         Cursor="Hand"
+                                         ToolTip="Escolher data/hora de expiração (GMT)"/>
+                        </StackPanel>
+
+                        <!-- DURATION MODE -->
+                        <StackPanel Visibility="{Binding UseDuration, Converter={StaticResource BoolToVis}}">
+                            <TextBlock Text="Duração" Foreground="#90b5c9" FontSize="10" Margin="0,0,0,4"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                <RadioButton GroupName="BotDurationUnit" IsChecked="True"
+                                             Click="BotDurationUnit_Click" Tag="Minutes"
+                                             Content="Min" Foreground="#a3b8cc" FontSize="11"
+                                             Margin="0,0,10,0" Cursor="Hand" ToolTip="Minutos"/>
+                                <RadioButton GroupName="BotDurationUnit"
+                                             Click="BotDurationUnit_Click" Tag="Hours"
+                                             Content="Hrs" Foreground="#a3b8cc" FontSize="11"
+                                             Margin="0,0,10,0" Cursor="Hand" ToolTip="Horas"/>
+                                <RadioButton GroupName="BotDurationUnit"
+                                             Click="BotDurationUnit_Click" Tag="Days"
+                                             Content="Dias" Foreground="#a3b8cc" FontSize="11"
+                                             Cursor="Hand" ToolTip="Dias"/>
+                            </StackPanel>
+                            <TextBox Style="{StaticResource DerivTextBox}"
+                                     Text="{Binding DurationText, UpdateSourceTrigger=PropertyChanged}"
+                                     Height="30" Width="120" HorizontalAlignment="Left" MaxLength="4"
+                                     PreviewTextInput="BotDurationTextBox_PreviewTextInput"
+                                     ToolTip="Tempo até o contrato expirar"/>
+                            <TextBlock Text="{Binding DurationRange}" Foreground="#6090a8" FontSize="9" Margin="0,3,0,0"/>
+                        </StackPanel>
+
+                        <!-- END TIME MODE -->
+                        <StackPanel Visibility="{Binding UseDuration, Converter={StaticResource InverseBoolToVis}}">
+                            <TextBlock Text="Data (GMT)" Foreground="#90b5c9" FontSize="10" Margin="0,0,0,4"/>
+                            <DatePicker Style="{StaticResource DerivDatePicker}"
+                                        SelectedDate="{Binding SelectedEndDate, Mode=TwoWay}"
+                                        ToolTip="Data de expiração (GMT)"/>
+                        </StackPanel>
+
+                        <!-- Prazo de validade -->
+                        <TextBlock Text="Prazo de validade:" Foreground="#90b5c9" FontSize="10" Margin="0,10,0,2"/>
+                        <TextBlock Text="{Binding ExpiryDisplay}" Foreground="#e0eef8" FontSize="11" FontFamily="Consolas"/>
+
+                        <!-- Preço de exercício -->
+                        <TextBlock Text="Preço de exercício:" Foreground="#90b5c9" FontSize="10" Margin="0,10,0,2"/>
+                        <ComboBox Style="{StaticResource DerivComboBox}"
+                                  ItemsSource="{Binding AvailableBarrierDisplays}"
+                                  SelectedItem="{Binding SelectedBarrierDisplay, Mode=TwoWay}"
+                                  ToolTip="Preço de exercício (barreira relativa ao spot)"/>
+
+                        <!-- Pagamento por ponto -->
+                        <TextBlock Text="Pagamento por ponto:" Foreground="#90b5c9" FontSize="10" Margin="0,10,0,2"/>
+                        <TextBlock Text="{Binding PayoutPerPointDisplay}" Foreground="#00e8c8" FontSize="14"
+                                   FontFamily="Consolas" FontWeight="Bold"/>
+
+                        <!-- Separator -->
+                        <Border Height="1" Background="#1d4957" Margin="0,10,0,10"/>
+
+                        <!-- Direction -->
+                        <TextBlock Text="Direção" Foreground="#90b5c9" FontSize="10" Margin="0,0,0,4"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <RadioButton Content="Call" Tag="Call" GroupName="BotDirection"
+                                         Click="BotDirection_Click"
+                                         Foreground="#a3b8cc" FontSize="11" Margin="0,0,10,0" Cursor="Hand"
+                                         ToolTip="Apenas operações Call (alta)"/>
+                            <RadioButton Content="Put" Tag="Put" GroupName="BotDirection"
+                                         Click="BotDirection_Click"
+                                         Foreground="#a3b8cc" FontSize="11" Margin="0,0,10,0" Cursor="Hand"
+                                         ToolTip="Apenas operações Put (baixa)"/>
+                            <RadioButton Content="Ambos" Tag="Ambos" GroupName="BotDirection"
+                                         IsChecked="True" Click="BotDirection_Click"
+                                         Foreground="#a3b8cc" FontSize="11" Cursor="Hand"
+                                         ToolTip="Operar em ambas as direções"/>
+                        </StackPanel>
+
+                        <!-- Stake + TP/SL + Max -->
+                        <Grid Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="12"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="12"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="12"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Stake (USD)" Foreground="#90b5c9" FontSize="10" Margin="0,0,0,4"/>
+                                <TextBox Style="{StaticResource DerivTextBox}"
+                                         Text="{Binding StakeText, UpdateSourceTrigger=PropertyChanged}"
+                                         Height="28" Width="80" MaxLength="10"
+                                         ToolTip="Valor da entrada em USD"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="TP (USD)" Foreground="#90b5c9" FontSize="10" Margin="0,0,0,4"/>
+                                <TextBox Style="{StaticResource DerivTextBox}"
+                                         Text="{Binding TakeProfitText, UpdateSourceTrigger=PropertyChanged}"
+                                         Height="28" Width="70" MaxLength="10"
+                                         ToolTip="Take Profit em USD"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="4">
+                                <TextBlock Text="SL (USD)" Foreground="#90b5c9" FontSize="10" Margin="0,0,0,4"/>
+                                <TextBox Style="{StaticResource DerivTextBox}"
+                                         Text="{Binding StopLossText, UpdateSourceTrigger=PropertyChanged}"
+                                         Height="28" Width="70" MaxLength="10"
+                                         ToolTip="Stop Loss em USD"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="6">
+                                <TextBlock Text="Max." Foreground="#90b5c9" FontSize="10" Margin="0,0,0,4"/>
+                                <TextBox Style="{StaticResource DerivTextBox}"
+                                         Text="{Binding MaxContractsText, UpdateSourceTrigger=PropertyChanged}"
+                                         Height="28" Width="70" MaxLength="2"
+                                         ToolTip="Máximo de contratos simultâneos"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- Recover -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="Recover:" Foreground="#90b5c9" FontSize="10" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <ComboBox Style="{StaticResource DerivComboBox}"
+                                      ItemsSource="{Binding RecoverModes}"
+                                      SelectedItem="{Binding RecoverMode, Mode=TwoWay}"
+                                      Width="100" Height="24"
+                                      FontSize="10"
+                                      Foreground="#00f0ff"
+                                      ToolTip="Modo de recuperação (Martingale)"/>
+                        </StackPanel>
+
+                        <!-- Separator -->
+                        <Border Height="1" Background="#1d4957" Margin="0,0,0,10"/>
+
+                        <!-- Indicators -->
+                        <TextBlock Text="Indicadores" Foreground="#90b5c9" FontSize="10" Margin="0,0,0,6"/>
+                        <Grid Margin="0,0,0,10">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox Grid.Row="0" Grid.Column="0" Content="EMA 9/21" IsChecked="{Binding EnableEma}"
+                                      Foreground="#a3b8cc" FontSize="11" Margin="0,0,12,4" Cursor="Hand"
+                                      ToolTip="Cruzamento de médias EMA 9/21"/>
+                            <CheckBox Grid.Row="0" Grid.Column="1" Content="RSI (14)" IsChecked="{Binding EnableRsi}"
+                                      Foreground="#a3b8cc" FontSize="11" Margin="0,0,12,4" Cursor="Hand"
+                                      ToolTip="Índice de Força Relativa (14 períodos)"/>
+                            <CheckBox Grid.Row="0" Grid.Column="2" Content="S/R" IsChecked="{Binding EnableSupportResistance}"
+                                      Foreground="#a3b8cc" FontSize="11" Margin="0,0,12,4" Cursor="Hand"
+                                      ToolTip="Suporte e Resistência"/>
+                            <CheckBox Grid.Row="0" Grid.Column="3" Content="MACD" IsChecked="{Binding EnableMacd}"
+                                      Foreground="#a3b8cc" FontSize="11" Margin="0,0,12,4" Cursor="Hand"
+                                      ToolTip="Moving Average Convergence Divergence"/>
+                            <CheckBox Grid.Row="1" Grid.Column="0" Content="Bollinger" IsChecked="{Binding EnableBollinger}"
+                                      Foreground="#a3b8cc" FontSize="11" Margin="0,0,12,4" Cursor="Hand"
+                                      ToolTip="Bandas de Bollinger"/>
+                            <CheckBox Grid.Row="1" Grid.Column="1" Content="Candles" IsChecked="{Binding EnableCandlePattern}"
+                                      Foreground="#a3b8cc" FontSize="11" Margin="0,0,12,4" Cursor="Hand"
+                                      ToolTip="Padrões de candlestick"/>
+                            <CheckBox Grid.Row="1" Grid.Column="2" Content="Momentum" IsChecked="{Binding EnableMomentum}"
+                                      Foreground="#a3b8cc" FontSize="11" Margin="0,0,12,4" Cursor="Hand"
+                                      ToolTip="Indicador de momentum"/>
+                        </Grid>
+
+                        <!-- Confidence + Trailing -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8"
+                                    ToolTip="Confiança mínima para abrir posição">
+                            <TextBlock Text="Confiança mín:" Foreground="#90b5c9" FontSize="10" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <Slider Width="120"
+                                    Style="{StaticResource ConfidenceSliderStyle}"
+                                    Value="{Binding ConfidenceThreshold}"
+                                    VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding ConfidenceThreshold, StringFormat=P0}"
+                                       Foreground="#e0eef8" FontSize="11"
+                                       FontFamily="Consolas" Margin="8,0,0,0"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <CheckBox Content="Trailing Stop (TP 70%→BE, 90%→50%)"
+                                  IsChecked="{Binding EnableTrailingStop}"
+                                  Foreground="#a3b8cc" FontSize="11" Margin="0,0,0,10" Cursor="Hand"
+                                  ToolTip="Ajusta Stop Loss dinamicamente conforme lucro"/>
+
+                        <!-- Separator -->
+                        <Border Height="1" Background="#1d4957" Margin="0,0,0,10"/>
+
+                        <!-- Status -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                            <Ellipse Width="8" Height="8" Margin="0,0,6,0" VerticalAlignment="Center">
+                                <Ellipse.Style>
+                                    <Style TargetType="Ellipse">
+                                        <Setter Property="Fill" Value="#4a6a7a"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsRunning}" Value="True">
+                                                <Setter Property="Fill" Value="#34c759"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding IsPaused}" Value="True">
+                                                <Setter Property="Fill" Value="#f0c040"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Ellipse.Style>
+                            </Ellipse>
+                            <TextBlock Foreground="#e0eef8" FontSize="11" VerticalAlignment="Center">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Text" Value="Inativo"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsRunning}" Value="True">
+                                                <Setter Property="Text" Value="Ativo"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding IsPaused}" Value="True">
+                                                <Setter Property="Text" Value="Pausado"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </StackPanel>
+                        <TextBlock Text="{Binding CurrentSignalText}"
+                                   Foreground="#00e8c8" FontSize="11"
+                                   FontFamily="Consolas" Margin="0,4,0,4"
+                                   TextWrapping="Wrap" MaxWidth="300"/>
+                        <TextBlock Text="{Binding LastTradeText}"
+                                   Foreground="#f0c040" FontSize="10"
+                                   FontFamily="Consolas" Margin="0,0,0,4"
+                                   TextWrapping="Wrap" MaxWidth="300"/>
+                        <TextBlock Text="{Binding StatsText}"
+                                   Foreground="#e0eef8" FontSize="10"
+                                   FontFamily="Consolas" Margin="0,0,0,10"/>
+
+                        <!-- Buttons -->
+                        <StackPanel Orientation="Horizontal">
+                            <Button Command="{Binding StartCommand}"
+                                    Style="{StaticResource DerivCallButtonStyle}"
+                                    Width="70" Margin="0,0,6,0"
+                                    IsEnabled="{Binding IsRunning, Converter={StaticResource InverseBool}}">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Path Data="M0,0 L8,5 L0,10 Z" Fill="White" Width="8" Height="10"
+                                          Stretch="Uniform" Margin="0,0,4,0"/>
+                                    <TextBlock Text="Iniciar" Foreground="White" FontSize="11" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
+                            <Button Command="{Binding PauseCommand}"
+                                    Style="{StaticResource DerivToggleButtonStyle}"
+                                    Width="70" Margin="0,0,6,0"
+                                    IsEnabled="{Binding IsRunning}">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Canvas Width="10" Height="11" Margin="0,0,4,0">
+                                        <Rectangle Canvas.Left="0" Width="3.5" Height="11" RadiusX="1" RadiusY="1" Fill="White"/>
+                                        <Rectangle Canvas.Left="5.5" Width="3.5" Height="11" RadiusX="1" RadiusY="1" Fill="White"/>
+                                    </Canvas>
+                                    <TextBlock Text="Pausar" Foreground="White" FontSize="11" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
+                            <Button Command="{Binding StopCommand}"
+                                    Style="{StaticResource DerivPutButtonStyle}"
+                                    Width="70"
+                                    IsEnabled="{Binding IsRunning}">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Rectangle Width="10" Height="10" RadiusX="2" RadiusY="2" Fill="White" Margin="0,0,4,0"/>
+                                    <TextBlock Text="Parar" Foreground="White" FontSize="11" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- RECOVER PANEL (visible when Recover active, spans cols 0-2) -->
+                <StackPanel Grid.Column="0" Grid.ColumnSpan="3"
+                            DataContext="{Binding DataContext.Recover, RelativeSource={RelativeSource AncestorType=Window}}">
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsRecoverVisible}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+
+                    <!-- Enable toggle -->
+                    <CheckBox Content="Ativar Martingale"
+                              IsChecked="{Binding IsEnabled}"
+                              Foreground="#a3b8cc" FontSize="11" Margin="0,0,0,12" Cursor="Hand"/>
+
+                    <!-- Stake -->
+                    <TextBlock Text="Stake (USD)" Foreground="#90b5c9" FontSize="10" Margin="0,0,0,4"/>
+                    <TextBox Style="{StaticResource DerivTextBox}"
+                             Text="{Binding StakeText, UpdateSourceTrigger=PropertyChanged}"
+                             Height="30" Width="120"
+                             HorizontalAlignment="Left"
+                             MaxLength="10"
+                             PreviewTextInput="RecoverDecimalInput_PreviewTextInput"
+                             DataObject.Pasting="RecoverDecimalInput_Pasting"/>
+
+                    <!-- Fator -->
+                    <TextBlock Text="Fator (multiplicador)" Foreground="#90b5c9" FontSize="10" Margin="0,10,0,4"/>
+                    <TextBox Style="{StaticResource DerivTextBox}"
+                             Text="{Binding FactorText, UpdateSourceTrigger=PropertyChanged}"
+                             Height="30" Width="120"
+                             HorizontalAlignment="Left"
+                             MaxLength="10"
+                             PreviewTextInput="RecoverDecimalInput_PreviewTextInput"
+                             DataObject.Pasting="RecoverDecimalInput_Pasting"/>
+
+                    <!-- Nível -->
+                    <TextBlock Text="Nível (máximo)" Foreground="#90b5c9" FontSize="10" Margin="0,10,0,4"/>
+                    <TextBox Style="{StaticResource DerivTextBox}"
+                             Text="{Binding MaxLevelText, UpdateSourceTrigger=PropertyChanged}"
+                             Height="30" Width="120"
+                             HorizontalAlignment="Left"
+                             MaxLength="3"
+                             PreviewTextInput="RecoverIntegerInput_PreviewTextInput"
+                             DataObject.Pasting="RecoverIntegerInput_Pasting"/>
+
+                    <!-- Info -->
+                    <TextBlock Text="Ao perder, stake × fator até nível máximo. Ao vencer ou atingir nível, reseta."
+                               Foreground="#6090a8" FontSize="9"
+                               TextWrapping="Wrap"
+                               Margin="0,12,0,0"/>
                 </StackPanel>
 
                 <!-- POSITIONS TABLE -->

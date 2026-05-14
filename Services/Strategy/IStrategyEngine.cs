@@ -8,6 +8,8 @@ public interface IStrategyEngine
     event EventHandler<TradeSignal>? SignalGenerated;
     void Start(StrategyConfig config);
     void Stop();
+    void BeginBulkFeed();
+    void EndBulkFeed();
     void FeedCandle(CandleData candle);
     void RecordTradeResult(IReadOnlyList<IndicatorType> contributors, bool won);
     bool IsRunning { get; }

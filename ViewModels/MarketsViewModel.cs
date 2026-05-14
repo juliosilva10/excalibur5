@@ -25,6 +25,12 @@ public partial class MarketsViewModel : ObservableObject, IDisposable
             Tabs.Add(new MarketTabViewModel(market, tickService, contractService));
     }
 
+    public void SetRecoverViewModel(RecoverViewModel recoverVm)
+    {
+        foreach (var tab in Tabs)
+            tab.SetRecoverViewModel(recoverVm);
+    }
+
     [RelayCommand]
     private void ToggleMarkets()
     {

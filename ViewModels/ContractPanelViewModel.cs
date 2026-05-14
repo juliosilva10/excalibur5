@@ -23,6 +23,15 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
     private string _callProposalId = string.Empty;
     private string _putProposalId = string.Empty;
 
+    // Martingale state
+    private RecoverViewModel? _recoverVm;
+    private int _martingaleLevel;
+    private decimal _baseStake;
+    private long _lastBoughtContractId;
+
+    [ObservableProperty] private string _recoverMode = string.Empty;
+    public List<string> RecoverModes { get; } = ["", "Martingale"];
+
     [ObservableProperty] private string _symbol = string.Empty;
     [ObservableProperty] private string _displayName = string.Empty;
     [ObservableProperty] private DurationUnitType _durationUnit = DurationUnitType.Minutes;
@@ -95,8 +104,55 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
         _barrierInnerBase = barrierInnerBase;
         _barrierOuterBase = barrierOuterBase;
         _contractService.ProposalUpdated += OnProposalUpdated;
+        _contractService.OpenContractUpdated += OnMartingaleContractUpdated;
         OpenPositions = new OpenPositionsViewModel(contractService);
         UpdateDurationRange();
+    }
+
+    public void SetRecoverViewModel(RecoverViewModel recoverVm)
+    {
+        _recoverVm = recoverVm;
+    }
+
+    partial void OnRecoverModeChanged(string value)
+    {
+        if (value == "Martingale")
+        {
+            _baseStake = GetStakeValue();
+            if (_baseStake <= 0)
+                _baseStake = decimal.TryParse(StakeText, NumberStyles.Any, CultureInfo.InvariantCulture, out var v) ? v : 10m;
+            _martingaleLevel = 0;
+        }
+        else
+        {
+            if (_martingaleLevel > 0 && _baseStake > 0)
+                StakeText = _baseStake.ToString("F2", CultureInfo.InvariantCulture);
+            _martingaleLevel = 0;
+        }
+    }
+
+    private void OnMartingaleContractUpdated(object? sender, OpenContractUpdate update)
+    {
+        if (RecoverMode != "Martingale" || _recoverVm == null) return;
+        if (update.ContractId != _lastBoughtContractId) return;
+        if (!update.IsExpired && !update.IsSold && update.Status is not ("sold" or "won" or "lost")) return;
+
+        Application.Current?.Dispatcher?.InvokeAsync(() =>
+        {
+            bool isLoss = update.Profit < 0;
+            if (isLoss && _martingaleLevel < _recoverVm.MaxLevel)
+            {
+                _martingaleLevel++;
+                var newStake = _recoverVm.CalculateStake(_martingaleLevel);
+                StakeText = newStake.ToString("F2", CultureInfo.InvariantCulture);
+            }
+            else
+            {
+                _martingaleLevel = 0;
+                StakeText = _baseStake.ToString("F2", CultureInfo.InvariantCulture);
+            }
+            _lastBoughtContractId = 0;
+        });
     }
 
     public OpenPositionsViewModel OpenPositions { get; }
@@ -319,6 +375,7 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
             if (result.Success)
             {
                 LastBuyResult = $"Comprado! ID: {result.ContractId}";
+                _lastBoughtContractId = result.ContractId;
                 var expiry = GetDateExpiryForPosition();
                 _ = OpenPositions.AddPositionAsync(result, Symbol, DisplayName, contractType, expiry);
             }
@@ -460,6 +517,14 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
                 var fmt = offset.ToString($"F{_pipSize}", CultureInfo.InvariantCulture);
                 AvailableBarrierDisplays.Add($"{sign}{fmt}");
             }
+        }
+
+        // Restore persisted barrier if available
+        if (_pendingBarrierRestore != null && AvailableBarrierDisplays.Contains(_pendingBarrierRestore))
+        {
+            SelectedBarrierDisplay = _pendingBarrierRestore;
+            _pendingBarrierRestore = null;
+            return;
         }
 
         // Default select the entry closest to spot
@@ -981,9 +1046,11 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
         return DateTimeOffset.UtcNow.AddMinutes(minutes).ToUnixTimeSeconds();
     }
 
-    public void RestoreState(string? durationUnit, string? durationText, string? stakeText, bool? useDuration = null)
+    private string? _pendingBarrierRestore;
+
+    public void RestoreState(string? durationUnit, string? durationText, string? stakeText, bool? useDuration = null, string? selectedBarrier = null)
     {
-        AppLogger.Info(Src, $"RestoreState: unit={durationUnit}, duration={durationText}, stake={stakeText}, useDuration={useDuration}");
+        AppLogger.Info(Src, $"RestoreState: unit={durationUnit}, duration={durationText}, stake={stakeText}, useDuration={useDuration}, barrier={selectedBarrier}");
         if (useDuration.HasValue)
             UseDuration = useDuration.Value;
         if (!string.IsNullOrEmpty(durationUnit) && Enum.TryParse<DurationUnitType>(durationUnit, out var unit))
@@ -992,6 +1059,8 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
             DurationText = durationText;
         if (!string.IsNullOrEmpty(stakeText))
             StakeText = stakeText;
+        if (!string.IsNullOrEmpty(selectedBarrier))
+            _pendingBarrierRestore = selectedBarrier;
     }
 
     public void Dispose()
@@ -1001,6 +1070,7 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
         _barrierRefreshCts?.Cancel();
         _barrierRefreshCts?.Dispose();
         _contractService.ProposalUpdated -= OnProposalUpdated;
+        _contractService.OpenContractUpdated -= OnMartingaleContractUpdated;
         OpenPositions.Dispose();
     }
 }

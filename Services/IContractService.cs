@@ -13,7 +13,7 @@ public interface IContractService
     Task UnsubscribeAllProposalsAsync(CancellationToken ct = default);
     void ClearSubscription(string contractType);
     Task<BuyResponse> BuyContractAsync(string proposalId, decimal price, CancellationToken ct = default);
-    Task<BuyResponse> BuyDirectAsync(string symbol, string contractType, decimal stake, int duration, string durationUnit, CancellationToken ct = default);
+    Task<BuyResponse> BuyDirectAsync(string symbol, string contractType, decimal stake, int duration, string durationUnit, string? barrier = null, CancellationToken ct = default);
     Task SubscribeOpenContractAsync(long contractId, CancellationToken ct = default);
     Task UnsubscribeOpenContractAsync(long contractId, CancellationToken ct = default);
     Task<SellResponse> SellContractAsync(long contractId, CancellationToken ct = default);

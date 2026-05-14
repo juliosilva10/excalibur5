@@ -15,12 +15,14 @@ public sealed class StrategyExecutor : IDisposable
     private string _symbol = string.Empty;
     private bool _active;
     private int _buyingCount;
+    private int _martingaleLevel;
 
     public StrategyStats Stats { get; } = new();
     public int ActivePositionCount => _positions.Count;
 
     public event EventHandler? StatsUpdated;
     public event EventHandler<string>? TradeExecuted;
+    public event EventHandler<BotPositionOpened>? PositionOpened;
 
     public StrategyExecutor(IContractService contractService, IStrategyEngine engine)
     {
@@ -36,7 +38,8 @@ public sealed class StrategyExecutor : IDisposable
         _symbol = symbol;
         _active = true;
         _buyingCount = 0;
-        AppLogger.Info(Src, $"Executor started for {symbol}, TP={config.TakeProfitUsd}, SL={config.StopLossUsd}, trailing={config.EnableTrailingStop}");
+        _martingaleLevel = 0;
+        AppLogger.Info(Src, $"Executor started for {symbol}, TP={config.TakeProfitUsd}, SL={config.StopLossUsd}, trailing={config.EnableTrailingStop}, recover={config.RecoverMode}");
     }
 
     public void Stop()
@@ -48,35 +51,43 @@ public sealed class StrategyExecutor : IDisposable
     private async void OnSignalGenerated(object? sender, TradeSignal signal)
     {
         if (!_active) return;
-        if (_positions.Count + _buyingCount >= _config.MaxConcurrentContracts)
+
+        var currentBuying = Interlocked.Increment(ref _buyingCount);
+        if (_positions.Count + currentBuying > _config.MaxConcurrentContracts)
         {
+            Interlocked.Decrement(ref _buyingCount);
             AppLogger.Info(Src, $"Signal ignored — max contracts reached ({_positions.Count}/{_config.MaxConcurrentContracts})");
             return;
         }
 
-        Interlocked.Increment(ref _buyingCount);
         try
         {
             string contractType = signal.Direction == SignalDirection.Call
                 ? "VANILLALONGCALL"
                 : "VANILLALONGPUT";
 
+            var stake = GetCurrentStake();
+
             var result = await _contractService.BuyDirectAsync(
                 _symbol,
                 contractType,
-                _config.Stake,
-                _config.DurationMinutes,
-                "m");
+                stake,
+                _config.DurationSeconds,
+                "s",
+                _config.Barrier);
 
             if (result.ContractId > 0)
             {
+                var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
                 var tracked = new TrackedPosition
                 {
                     ContractId = result.ContractId,
                     Direction = signal.Direction,
                     BuyPrice = result.BuyPrice,
                     Signal = signal,
-                    DynamicStopLoss = -_config.StopLossUsd
+                    DynamicStopLoss = -_config.StopLossUsd,
+                    EntryEpoch = now,
+                    ExpiryEpoch = now + _config.DurationSeconds
                 };
                 lock (_positions)
                     _positions[result.ContractId] = tracked;
@@ -85,16 +96,19 @@ public sealed class StrategyExecutor : IDisposable
 
                 var dirLabel = signal.Direction == SignalDirection.Call ? "CALL" : "PUT";
                 TradeExecuted?.Invoke(this, $"Comprou {dirLabel} — {signal.Reason}");
-                AppLogger.Info(Src, $"Bought {dirLabel} contract {result.ContractId}, stake={_config.Stake}");
+                AppLogger.Info(Src, $"Bought {dirLabel} contract {result.ContractId}, stake={stake}");
+                PositionOpened?.Invoke(this, new BotPositionOpened(result, contractType));
             }
             else
             {
                 AppLogger.Warn(Src, $"Buy returned no contract ID: {result.Error}");
+                TradeExecuted?.Invoke(this, $"Erro: {result.Error}");
             }
         }
         catch (Exception ex)
         {
             AppLogger.Warn(Src, $"Buy failed: {ex.Message}");
+            TradeExecuted?.Invoke(this, $"Erro: {ex.Message}");
         }
         finally
         {
@@ -108,6 +122,8 @@ public sealed class StrategyExecutor : IDisposable
         lock (_positions)
         {
             if (!_positions.TryGetValue(update.ContractId, out tracked))
+                return;
+            if (tracked.IsSelling)
                 return;
         }
 
@@ -127,7 +143,6 @@ public sealed class StrategyExecutor : IDisposable
         {
             decimal tp = _config.TakeProfitUsd;
 
-            // At 90% TP: move SL to 50% of TP
             if (update.Profit >= tp * 0.9m)
             {
                 decimal newSl = tp * 0.5m;
@@ -137,7 +152,6 @@ public sealed class StrategyExecutor : IDisposable
                     AppLogger.Info(Src, $"Trailing SL → +{newSl:F2} for {update.ContractId}");
                 }
             }
-            // At 70% TP: move SL to breakeven
             else if (update.Profit >= tp * 0.7m)
             {
                 if (tracked.DynamicStopLoss < 0)
@@ -152,17 +166,29 @@ public sealed class StrategyExecutor : IDisposable
         if (update.Profit >= _config.TakeProfitUsd)
         {
             if (!update.IsValidToSell) return;
+            tracked.IsSelling = true;
             AppLogger.Info(Src, $"TP hit for {update.ContractId}: profit={update.Profit:F2} >= {_config.TakeProfitUsd}");
             await SellPositionAsync(update.ContractId, tracked, update.Profit);
             return;
         }
 
-        // Check Stop Loss (dynamic or fixed)
-        decimal effectiveSl = _config.EnableTrailingStop ? tracked.DynamicStopLoss : -_config.StopLossUsd;
+        // Time-based dynamic stop loss
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var totalDuration = tracked.ExpiryEpoch - tracked.EntryEpoch;
+        var timeRemaining = Math.Max(tracked.ExpiryEpoch - now, 1);
+        var timeRatio = totalDuration > 0 ? (decimal)timeRemaining / totalDuration : 0m;
+        var timeSl = -(_config.StopLossUsd * timeRatio);
+
+        // Use the tighter of trailing SL and time-based SL
+        decimal effectiveSl = _config.EnableTrailingStop
+            ? Math.Max(tracked.DynamicStopLoss, timeSl)
+            : timeSl;
+
         if (update.Profit <= effectiveSl)
         {
             if (!update.IsValidToSell) return;
-            AppLogger.Info(Src, $"SL hit for {update.ContractId}: profit={update.Profit:F2} <= {effectiveSl:F2}");
+            tracked.IsSelling = true;
+            AppLogger.Info(Src, $"SL hit for {update.ContractId}: profit={update.Profit:F2} <= {effectiveSl:F2} (time ratio={timeRatio:F2})");
             await SellPositionAsync(update.ContractId, tracked, update.Profit);
         }
     }
@@ -194,11 +220,31 @@ public sealed class StrategyExecutor : IDisposable
     private void RecordResult(TrackedPosition tracked, decimal profit)
     {
         if (profit >= 0)
+        {
             Stats.RecordWin(profit);
+            _martingaleLevel = 0;
+        }
         else
+        {
             Stats.RecordLoss(profit);
+            if (_config.RecoverMode == "Martingale" && _martingaleLevel < _config.MartingaleMaxLevel)
+                _martingaleLevel++;
+            else
+                _martingaleLevel = 0;
+        }
 
         StatsUpdated?.Invoke(this, EventArgs.Empty);
+    }
+
+    private decimal GetCurrentStake()
+    {
+        if (_config.RecoverMode != "Martingale" || _martingaleLevel <= 0)
+            return _config.Stake;
+
+        var stake = _config.Stake;
+        for (int i = 0; i < _martingaleLevel; i++)
+            stake *= _config.MartingaleFactor;
+        return Math.Round(stake, 2);
     }
 
     private void RemovePosition(long contractId)
@@ -220,5 +266,10 @@ public sealed class StrategyExecutor : IDisposable
         public decimal BuyPrice { get; init; }
         public TradeSignal Signal { get; init; } = null!;
         public decimal DynamicStopLoss { get; set; }
+        public long EntryEpoch { get; init; }
+        public long ExpiryEpoch { get; init; }
+        public bool IsSelling { get; set; }
     }
 }
+
+public sealed record BotPositionOpened(BuyResponse BuyResult, string ContractType);

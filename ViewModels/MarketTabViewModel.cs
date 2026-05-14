@@ -85,6 +85,11 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
         ContractPanel.PropertyChanged += OnContractPanelPropertyChanged;
     }
 
+    public void SetRecoverViewModel(RecoverViewModel recoverVm)
+    {
+        ContractPanel.SetRecoverViewModel(recoverVm);
+    }
+
     private void OnContractPanelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(ContractPanelViewModel.DurationUnit) or nameof(ContractPanelViewModel.DurationText))
@@ -324,6 +329,21 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
         catch (Exception ex)
         {
             AppLogger.Warn("MarketTab", $"Watchdog: resubscribe failed for {Symbol}: {ex.Message}");
+            // Force full reactivation cycle on next watchdog tick
+            try
+            {
+                _tickService.TickReceived -= OnTickReceived;
+                await _tickService.ForgetAllTicksAsync();
+                await _tickService.SubscribeAsync(Symbol);
+                _tickService.TickReceived += OnTickReceived;
+                _lastTickTime = DateTime.UtcNow;
+                AppLogger.Info("MarketTab", $"Watchdog: full re-subscribe for {Symbol} succeeded");
+            }
+            catch (Exception ex2)
+            {
+                AppLogger.Error("MarketTab", $"Watchdog: full re-subscribe also failed for {Symbol}: {ex2.Message}");
+                _tickService.TickReceived += OnTickReceived;
+            }
         }
         finally
         {

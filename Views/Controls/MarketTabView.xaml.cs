@@ -39,6 +39,12 @@ public partial class MarketTabView : UserControl
     private int _visibleCandleStart;
     private int _visibleCandleEnd;
 
+    // Pan (drag) state
+    private bool _isDragging;
+    private Point _dragStart;
+    private int _dragStartViewEnd;
+    private int _dragStartCandleViewEnd;
+
     public MarketTabView()
     {
         InitializeComponent();
@@ -194,6 +200,7 @@ public partial class MarketTabView : UserControl
                 _candleViewEnd = total;
 
             RedrawChart();
+            RefreshTooltipAtMouse();
             e.Handled = true;
             return;
         }
@@ -225,19 +232,87 @@ public partial class MarketTabView : UserControl
         }
 
         RedrawChart();
+        RefreshTooltipAtMouse();
         e.Handled = true;
+    }
+
+    private void RefreshTooltipAtMouse()
+    {
+        if (_isPinned) return;
+        var vm = Vm;
+        if (vm == null) return;
+
+        if (!ChartCanvas.IsMouseOver) return;
+        var pos = Mouse.GetPosition(ChartCanvas);
+        double chartWidth = ChartCanvas.ActualWidth;
+        double drawWidth = chartWidth - PadRight;
+
+        if (vm.ChartType == ChartType.Candles && vm.CandleValues.Count > 0)
+        {
+            int numVisible = _visibleCandleEnd - _visibleCandleStart;
+            if (numVisible < 1) return;
+            double gap = drawWidth / numVisible;
+            int candleIdx = (int)(pos.X / gap);
+            candleIdx = Math.Clamp(candleIdx, 0, numVisible - 1);
+            ShowCandleMarkerAt(_visibleCandleStart + candleIdx, pos, numVisible);
+        }
+        else if (vm.ChartValues.Count >= 2)
+        {
+            int count = _visibleEnd - _visibleStart;
+            if (count < 2) return;
+            int localIdx = (int)Math.Round(pos.X / drawWidth * (count - 1));
+            localIdx = Math.Clamp(localIdx, 0, count - 1);
+            ShowMarkerAt(_visibleStart + localIdx);
+        }
     }
 
     private void ChartCanvas_MouseMove(object sender, MouseEventArgs e)
     {
-        if (_isPinned) return;
-
         var vm = Vm;
         if (vm == null) return;
 
         var pos = e.GetPosition(ChartCanvas);
         double chartWidth = ChartCanvas.ActualWidth;
         double drawWidth = chartWidth - PadRight;
+
+        if (_isDragging)
+        {
+            double dx = pos.X - _dragStart.X;
+            if (Math.Abs(dx) < 3) return;
+
+            if (vm.ChartType == ChartType.Candles)
+            {
+                int total = vm.CandleValues.Count;
+                var (cStart, cEnd) = GetVisibleCandleRange(vm);
+                int numVisible = cEnd - cStart;
+                if (numVisible < 1) return;
+                double pixelsPerCandle = drawWidth / numVisible;
+                int shift = (int)(dx / pixelsPerCandle);
+                int newEnd = Math.Clamp(_dragStartCandleViewEnd - shift, numVisible, total);
+                if (newEnd != _candleViewEnd)
+                {
+                    _candleViewEnd = newEnd;
+                    RedrawChart();
+                }
+            }
+            else
+            {
+                int total = vm.ChartValues.Count;
+                int visible = GetVisibleCount();
+                if (visible < 2) return;
+                double pixelsPerTick = drawWidth / (visible - 1);
+                int shift = (int)(dx / pixelsPerTick);
+                int newEnd = Math.Clamp(_dragStartViewEnd - shift, visible, total);
+                if (newEnd != _viewEnd)
+                {
+                    _viewEnd = newEnd;
+                    RedrawChart();
+                }
+            }
+            return;
+        }
+
+        if (_isPinned) return;
 
         if (vm.ChartType == ChartType.Candles && vm.CandleValues.Count > 0)
         {
@@ -264,29 +339,70 @@ public partial class MarketTabView : UserControl
     private void ChartCanvas_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         var vm = Vm;
-        if (vm == null || vm.ChartValues.Count < 2) return;
+        if (vm == null) return;
 
-        var pos = e.GetPosition(ChartCanvas);
-        int count = _visibleEnd - _visibleStart;
-        if (count < 2) return;
+        _isDragging = true;
+        _dragStart = e.GetPosition(ChartCanvas);
 
-        double chartWidth = ChartCanvas.ActualWidth;
-        double drawWidth = chartWidth - PadRight;
-        int localIdx = (int)Math.Round(pos.X / drawWidth * (count - 1));
-        localIdx = Math.Clamp(localIdx, 0, count - 1);
-        int globalIdx = _visibleStart + localIdx;
-
-        if (_isPinned && _pinnedGlobalIdx == globalIdx)
+        if (vm.ChartType == ChartType.Candles)
         {
-            _isPinned = false;
-            _pinnedGlobalIdx = -1;
-            HideMarker();
+            int total = vm.CandleValues.Count;
+            _dragStartCandleViewEnd = _candleViewEnd < 0 ? total : _candleViewEnd;
         }
         else
         {
-            _isPinned = true;
-            _pinnedGlobalIdx = globalIdx;
-            ShowMarkerAt(globalIdx);
+            int total = vm.ChartValues.Count;
+            _dragStartViewEnd = _viewEnd < 0 ? total : _viewEnd;
+        }
+
+        ChartCanvas.CaptureMouse();
+        e.Handled = true;
+    }
+
+    private void ChartCanvas_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (!_isDragging) return;
+
+        var pos = e.GetPosition(ChartCanvas);
+        double dx = Math.Abs(pos.X - _dragStart.X);
+        double dy = Math.Abs(pos.Y - _dragStart.Y);
+        bool wasDrag = dx > 4 || dy > 4;
+
+        _isDragging = false;
+        ChartCanvas.ReleaseMouseCapture();
+
+        if (!wasDrag)
+        {
+            var vm = Vm;
+            if (vm == null) return;
+
+            if (vm.ChartType == ChartType.Candles)
+            {
+                // no pin for candles
+            }
+            else if (vm.ChartValues.Count >= 2)
+            {
+                int count = _visibleEnd - _visibleStart;
+                if (count < 2) return;
+                double chartWidth = ChartCanvas.ActualWidth;
+                double drawWidth = chartWidth - PadRight;
+                int localIdx = (int)Math.Round(pos.X / drawWidth * (count - 1));
+                localIdx = Math.Clamp(localIdx, 0, count - 1);
+                int globalIdx = _visibleStart + localIdx;
+
+                if (_isPinned && _pinnedGlobalIdx == globalIdx)
+                {
+                    _isPinned = false;
+                    _pinnedGlobalIdx = -1;
+                    HideMarker();
+                }
+                else
+                {
+                    _isPinned = true;
+                    _pinnedGlobalIdx = globalIdx;
+                    ShowMarkerAt(globalIdx);
+                }
+            }
         }
 
         e.Handled = true;
@@ -451,11 +567,11 @@ public partial class MarketTabView : UserControl
 
         var dt = c.Epoch > 0 ? DateTimeOffset.FromUnixTimeSeconds(c.Epoch).ToString("dd/MM HH:mm") : "";
         _tooltipText!.Text = $"{dt}\n" +
-                             $"OPEN  {c.Open.ToString("F" + pipSize)}\n" +
-                             $"CLOSE  {c.Close.ToString("F" + pipSize)}\n" +
-                             $"HIGH  {c.High.ToString("F" + pipSize)}\n" +
-                             $"LOW  {c.Low.ToString("F" + pipSize)}\n" +
-                             $"{vm.FullName.ToUpper()}  {c.Close.ToString("F" + pipSize)}";
+                             $"{"OPEN",-6}{c.Open.ToString("F" + pipSize)}\n" +
+                             $"{"CLOSE",-6}{c.Close.ToString("F" + pipSize)}\n" +
+                             $"{"HIGH",-6}{c.High.ToString("F" + pipSize)}\n" +
+                             $"{"LOW",-6}{c.Low.ToString("F" + pipSize)}\n" +
+                             $"{vm.FullName.ToUpper(),-6}{c.Close.ToString("F" + pipSize)}";
         _tooltipText.Foreground = NeutralLightBrush;
         _tooltipBorder.Visibility = Visibility.Visible;
 
@@ -481,7 +597,7 @@ public partial class MarketTabView : UserControl
 
     private void ChartCanvas_MouseLeave(object sender, MouseEventArgs e)
     {
-        if (!_isPinned)
+        if (!_isPinned && !_isDragging)
             HideMarker();
     }
 
@@ -577,6 +693,7 @@ public partial class MarketTabView : UserControl
 
         if (_chartLine == null)
         {
+            ClearChartElements();
             _chartLine = new Polyline
             {
                 StrokeThickness    = 1.2,
@@ -584,12 +701,7 @@ public partial class MarketTabView : UserControl
                 StrokeStartLineCap = PenLineCap.Round,
                 StrokeEndLineCap   = PenLineCap.Round,
             };
-            ChartCanvas.Children.Clear();
             ChartCanvas.Children.Add(_chartLine);
-            _crosshairLine = null;
-            _tooltipBorder = null;
-            _tooltipText = null;
-            _tooltipDot = null;
         }
 
         _chartLine.Stroke = lineBrush;
@@ -845,14 +957,23 @@ public partial class MarketTabView : UserControl
         }
     }
 
-    private void DrawCandles(int startIdx, int endIdx, double chartWidth, double chartHeight)
+    private void ClearChartElements()
     {
+        var preserve = new List<UIElement>();
+        if (_crosshairLine != null) preserve.Add(_crosshairLine);
+        if (_tooltipDot != null) preserve.Add(_tooltipDot);
+        if (_tooltipBorder != null) preserve.Add(_tooltipBorder);
+
         ChartCanvas.Children.Clear();
         _chartLine = null;
-        _crosshairLine = null;
-        _tooltipBorder = null;
-        _tooltipText = null;
-        _tooltipDot = null;
+
+        foreach (var el in preserve)
+            ChartCanvas.Children.Add(el);
+    }
+
+    private void DrawCandles(int startIdx, int endIdx, double chartWidth, double chartHeight)
+    {
+        ClearChartElements();
 
         var vm = Vm;
         if (vm == null || vm.CandleValues.Count == 0) return;

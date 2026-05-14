@@ -140,8 +140,111 @@
                        HorizontalAlignment="Center"
                        Margin="0,68,0,0"/>
 
-            <!-- Bot button -->
+            <!-- Recover + Bot buttons -->
             <StackPanel Grid.Row="1" VerticalAlignment="Top" Margin="0,12,0,0">
+
+                <!-- Recover button -->
+                <Button Command="{Binding Recover.ToggleRecoverCommand}"
+                        ToolTip="Recover (Martingale)"
+                        Margin="8,0,8,0"
+                        Width="40" Height="40"
+                        Cursor="Hand"
+                        FocusVisualStyle="{x:Null}">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Grid>
+                                <Border x:Name="GlowBg"
+                                        CornerRadius="10"
+                                        Opacity="0">
+                                    <Border.Background>
+                                        <RadialGradientBrush>
+                                            <GradientStop Color="#5500f0ff" Offset="0"/>
+                                            <GradientStop Color="#0000f0ff" Offset="1"/>
+                                        </RadialGradientBrush>
+                                    </Border.Background>
+                                </Border>
+                                <Border x:Name="MainBody"
+                                        CornerRadius="10"
+                                        BorderThickness="1"
+                                        BorderBrush="#2a5568">
+                                    <Border.Background>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                            <GradientStop Color="#1e465a" Offset="0.0"/>
+                                            <GradientStop Color="#153342" Offset="0.5"/>
+                                            <GradientStop Color="#112935" Offset="1.0"/>
+                                        </LinearGradientBrush>
+                                    </Border.Background>
+                                    <Border.Effect>
+                                        <DropShadowEffect Color="Black" BlurRadius="4" ShadowDepth="2"
+                                                          Direction="270" Opacity="0.5"/>
+                                    </Border.Effect>
+                                    <Grid>
+                                        <Border CornerRadius="9,9,0,0" Height="6" VerticalAlignment="Top"
+                                                Opacity="0.12" IsHitTestVisible="False">
+                                            <Border.Background>
+                                                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                                    <GradientStop Color="White" Offset="0"/>
+                                                    <GradientStop Color="Transparent" Offset="1"/>
+                                                </LinearGradientBrush>
+                                            </Border.Background>
+                                        </Border>
+                                        <!-- Recover icon (circular arrows) -->
+                                        <Canvas Width="18" Height="18" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                            <Path Data="M 9,2 A 7,7 0 1 1 2,9" Stroke="#00f0ff" StrokeThickness="1.4" Fill="Transparent"/>
+                                            <Path Data="M 9,2 L 7,0 M 9,2 L 11,0" Stroke="#00f0ff" StrokeThickness="1.3"/>
+                                            <Path Data="M 9,16 A 7,7 0 1 1 16,9" Stroke="#00f0ff" StrokeThickness="1.4" Fill="Transparent"/>
+                                            <Path Data="M 9,16 L 7,18 M 9,16 L 11,18" Stroke="#00f0ff" StrokeThickness="1.3"/>
+                                        </Canvas>
+                                    </Grid>
+                                </Border>
+                            </Grid>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Trigger.EnterActions>
+                                        <BeginStoryboard>
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="GlowBg"
+                                                                 Storyboard.TargetProperty="Opacity"
+                                                                 To="1" Duration="0:0:0.25"/>
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </Trigger.EnterActions>
+                                    <Trigger.ExitActions>
+                                        <BeginStoryboard>
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="GlowBg"
+                                                                 Storyboard.TargetProperty="Opacity"
+                                                                 To="0" Duration="0:0:0.25"/>
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </Trigger.ExitActions>
+                                    <Setter TargetName="MainBody" Property="BorderBrush" Value="#00f0ff"/>
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter TargetName="MainBody" Property="Background">
+                                        <Setter.Value>
+                                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                                <GradientStop Color="#112935" Offset="0.0"/>
+                                                <GradientStop Color="#0c1e2a" Offset="1.0"/>
+                                            </LinearGradientBrush>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Trigger>
+                                <DataTrigger Binding="{Binding Recover.IsRecoverVisible}" Value="True">
+                                    <Setter TargetName="GlowBg" Property="Opacity" Value="0.7"/>
+                                    <Setter TargetName="MainBody" Property="BorderBrush" Value="#00f0ff"/>
+                                </DataTrigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+                <TextBlock Text="Recover"
+                           FontSize="9"
+                           Foreground="#e0eef8"
+                           HorizontalAlignment="Center"
+                           Margin="0,4,0,12"/>
+
+                <!-- Bot button -->
                 <Button Command="{Binding Strategy.ToggleBotCommand}"
                         ToolTip="Bot (Estratégia Automatizada)"
                         Margin="8,0,8,0"
@@ -186,13 +289,20 @@
                                                 </LinearGradientBrush>
                                             </Border.Background>
                                         </Border>
-                                        <!-- Bot icon (robot/gear) -->
-                                        <Canvas Width="18" Height="16" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                            <Ellipse Canvas.Left="5" Canvas.Top="0" Width="8" Height="8"
-                                                     Stroke="#00f0ff" StrokeThickness="1.3"/>
-                                            <Line X1="9" Y1="8" X2="9" Y2="10" Stroke="#00f0ff" StrokeThickness="1.3"/>
-                                            <Rectangle Canvas.Left="3" Canvas.Top="10" Width="12" Height="6"
+                                        <!-- Bot icon (robot) -->
+                                        <Canvas Width="18" Height="18" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                            <!-- Antenna -->
+                                            <Line X1="9" Y1="0" X2="9" Y2="3" Stroke="#00f0ff" StrokeThickness="1.2"/>
+                                            <Ellipse Canvas.Left="7.5" Canvas.Top="0" Width="3" Height="3" Fill="#00f0ff"/>
+                                            <!-- Head -->
+                                            <Rectangle Canvas.Left="3" Canvas.Top="4" Width="12" Height="8"
                                                        Stroke="#00f0ff" StrokeThickness="1.3" RadiusX="2" RadiusY="2"/>
+                                            <!-- Eyes -->
+                                            <Ellipse Canvas.Left="5.5" Canvas.Top="6.5" Width="2.5" Height="2.5" Fill="#00f0ff"/>
+                                            <Ellipse Canvas.Left="10" Canvas.Top="6.5" Width="2.5" Height="2.5" Fill="#00f0ff"/>
+                                            <!-- Body -->
+                                            <Rectangle Canvas.Left="5" Canvas.Top="13" Width="8" Height="4"
+                                                       Stroke="#00f0ff" StrokeThickness="1.2" RadiusX="1" RadiusY="1"/>
                                         </Canvas>
                                     </Grid>
                                 </Border>

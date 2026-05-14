@@ -14,6 +14,7 @@ public sealed class StrategyEngine : IStrategyEngine
     private readonly SignalFilter _filter = new();
     private StrategyConfig _config = new();
     private long _lastSignalEpoch;
+    private bool _suppressSignals;
 
     public event EventHandler<TradeSignal>? SignalGenerated;
     public bool IsRunning { get; private set; }
@@ -26,6 +27,7 @@ public sealed class StrategyEngine : IStrategyEngine
         _candles.Clear();
         _indicators.Clear();
         _lastSignalEpoch = 0;
+        _suppressSignals = false;
         _filter.Reset();
 
         foreach (var type in config.EnabledIndicators)
@@ -37,6 +39,15 @@ public sealed class StrategyEngine : IStrategyEngine
 
         IsRunning = true;
         AppLogger.Info(Src, $"Started with {_indicators.Count} indicators, threshold={config.ConfidenceThreshold:P0}");
+    }
+
+    public void BeginBulkFeed() => _suppressSignals = true;
+
+    public void EndBulkFeed()
+    {
+        _suppressSignals = false;
+        if (_candles.Count > 0)
+            _lastSignalEpoch = _candles[^1].Epoch;
     }
 
     public void Stop()
@@ -63,6 +74,7 @@ public sealed class StrategyEngine : IStrategyEngine
                 _candles.RemoveAt(0);
         }
 
+        if (_suppressSignals) return;
         if (_candles.Count < MinCandlesRequired) return;
         if (candle.Epoch <= _lastSignalEpoch) return;
 

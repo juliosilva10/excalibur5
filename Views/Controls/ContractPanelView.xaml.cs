@@ -202,4 +202,87 @@ public partial class ContractPanelView : UserControl
         }
         return null;
     }
+
+    private void RecoverDecimalInput_PreviewTextInput(object sender, TextCompositionEventArgs e)
+    {
+        if (sender is not TextBox tb) { e.Handled = true; return; }
+        var future = tb.Text.Remove(tb.SelectionStart, tb.SelectionLength).Insert(tb.SelectionStart, e.Text);
+        e.Handled = !Regex.IsMatch(future, @"^\d*\.?\d{0,2}$");
+    }
+
+    private void RecoverDecimalInput_Pasting(object sender, DataObjectPastingEventArgs e)
+    {
+        if (e.DataObject.GetDataPresent(typeof(string)))
+        {
+            var text = (string)e.DataObject.GetData(typeof(string))!;
+            if (!Regex.IsMatch(text, @"^\d*\.?\d{0,2}$"))
+                e.CancelCommand();
+        }
+        else
+        {
+            e.CancelCommand();
+        }
+    }
+
+    private void RecoverIntegerInput_PreviewTextInput(object sender, TextCompositionEventArgs e)
+    {
+        if (sender is not TextBox tb) { e.Handled = true; return; }
+        var future = tb.Text.Remove(tb.SelectionStart, tb.SelectionLength).Insert(tb.SelectionStart, e.Text);
+        e.Handled = !Regex.IsMatch(future, @"^\d+$");
+    }
+
+    private void RecoverIntegerInput_Pasting(object sender, DataObjectPastingEventArgs e)
+    {
+        if (e.DataObject.GetDataPresent(typeof(string)))
+        {
+            var text = (string)e.DataObject.GetData(typeof(string))!;
+            if (!Regex.IsMatch(text, @"^\d+$"))
+                e.CancelCommand();
+        }
+        else
+        {
+            e.CancelCommand();
+        }
+    }
+
+    private void BotDurationUnit_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is RadioButton rb && rb.Tag is string unit)
+        {
+            var vm = FindStrategyVm();
+            if (vm != null) vm.DurationUnit = unit;
+        }
+    }
+
+    private void BotEndTimeMode_Click(object sender, RoutedEventArgs e)
+    {
+        var vm = FindStrategyVm();
+        if (vm != null) vm.UseDuration = false;
+    }
+
+    private void BotDurationMode_Click(object sender, RoutedEventArgs e)
+    {
+        var vm = FindStrategyVm();
+        if (vm != null) vm.UseDuration = true;
+    }
+
+    private void BotDurationTextBox_PreviewTextInput(object sender, TextCompositionEventArgs e)
+    {
+        e.Handled = !Regex.IsMatch(e.Text, @"^[0-9]$");
+    }
+
+    private void BotDirection_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is RadioButton rb && rb.Tag is string tag)
+        {
+            var vm = FindStrategyVm();
+            if (vm != null) vm.DirectionMode = tag;
+        }
+    }
+
+    private StrategyViewModel? FindStrategyVm()
+    {
+        var mainVm = Window.GetWindow(this)?.DataContext as MainViewModel;
+        return mainVm?.Strategy;
+    }
 }

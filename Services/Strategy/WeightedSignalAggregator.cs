@@ -95,7 +95,8 @@ public sealed class WeightedSignalAggregator
         if (!_history.TryGetValue(type, out var queue) || queue.Count == 0)
             return 0.5;
 
-        return (double)queue.Count(w => w) / queue.Count;
+        double rate = (double)queue.Count(w => w) / queue.Count;
+        return Math.Max(rate, 0.3);
     }
 
     public void Reset() => _history.Clear();

@@ -18,7 +18,7 @@
         <!-- ===== PASSWORD BOX (estilo Excalibur3.1) ===== -->
         <Style x:Key="TokenPasswordBox" TargetType="PasswordBox">
             <Setter Property="Background"   Value="{StaticResource DerivCardBgBrush}"/>
-            <Setter Property="Foreground"   Value="White"/>
+            <Setter Property="Foreground"   Value="#00f0ff"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="BorderBrush"  Value="{StaticResource DerivCardBorderBrush}"/>
             <Setter Property="Padding"      Value="8,2,8,2"/>
@@ -363,8 +363,8 @@
                     <ColumnDefinition Width="Auto"/>
                     <!-- Flex -->
                     <ColumnDefinition Width="*"/>
-                    <!-- Conta: Saldo | Tipo | LoginId -->
-                    <ColumnDefinition Width="290"/>
+                    <!-- Conta: Saldo Inicial | Saldo | Tipo | LoginId -->
+                    <ColumnDefinition Width="400"/>
                     <!-- Status + UTC + Ping -->
                     <ColumnDefinition Width="240"/>
                 </Grid.ColumnDefinitions>
@@ -382,11 +382,13 @@
                 <!-- Col 2: Botão único com Tag controlando visual -->
                 <Button Grid.Column="2"
                         VerticalAlignment="Center"
-                        Command="{Binding ToggleConnectionCommand}">
+                        Command="{Binding ToggleConnectionCommand}"
+                        HorizontalContentAlignment="Center">
                     <Button.Style>
                         <Style TargetType="Button" BasedOn="{StaticResource DerivToggleButtonStyle}">
                             <Setter Property="Content" Value="Conectar"/>
                             <Setter Property="Tag"     Value="Disconnected"/>
+                            <Setter Property="FontSize" Value="9"/>
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding IsConnecting}" Value="True">
                                     <Setter Property="Content" Value="Aguarde..."/>
@@ -411,17 +413,73 @@
                                Foreground="#f0c000"/>
                 </StackPanel>
 
-                <!-- Col 5: Conta — Saldo | Tipo | LoginId -->
+                <!-- Col 5: Conta — Saldo Inicial | Saldo | Tipo | LoginId -->
                 <StackPanel Grid.Column="5" Orientation="Horizontal"
                             VerticalAlignment="Center" HorizontalAlignment="Left"
-                            Visibility="{Binding IsConnected, Converter={StaticResource BoolToVis}}">
+                            Visibility="{Binding IsConnected, Converter={StaticResource BoolToVis}}"
+                            Margin="-30,0,0,0">
                     <StackPanel Margin="0,0,16,0">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Saldo Inicial" Style="{StaticResource TopLabelStyle}"/>
+                            <Button Command="{Binding RefreshBalanceCommand}"
+                                    ToolTip="Atualizar saldo inicial"
+                                    Width="10" Height="10"
+                                    VerticalAlignment="Center"
+                                    Margin="4,0,0,0"
+                                    Cursor="Hand"
+                                    FocusVisualStyle="{x:Null}">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border x:Name="RefreshBorder" RenderTransformOrigin="0.5,0.5">
+                                            <Border.RenderTransform>
+                                                <RotateTransform x:Name="RefreshRotate" Angle="0"/>
+                                            </Border.RenderTransform>
+                                            <Path x:Name="RefreshPath"
+                                                  Data="M 5,0.5 A 4.5,4.5 0 1 1 0.5,5 M 5,0.5 L 3.5,0 M 5,0.5 L 5,2.2"
+                                                  Stroke="#6090a8" StrokeThickness="1.2" Fill="Transparent"
+                                                  Width="10" Height="10" Stretch="Uniform"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="RefreshPath" Property="Stroke" Value="#00f0ff"/>
+                                            </Trigger>
+                                            <DataTrigger Binding="{Binding IsRefreshingBalance}" Value="True">
+                                                <DataTrigger.EnterActions>
+                                                    <BeginStoryboard x:Name="SpinStoryboard">
+                                                        <Storyboard>
+                                                            <DoubleAnimation
+                                                                Storyboard.TargetName="RefreshRotate"
+                                                                Storyboard.TargetProperty="Angle"
+                                                                From="360" To="0" Duration="0:0:0.6"
+                                                                RepeatBehavior="Forever"/>
+                                                        </Storyboard>
+                                                    </BeginStoryboard>
+                                                </DataTrigger.EnterActions>
+                                                <DataTrigger.ExitActions>
+                                                    <StopStoryboard BeginStoryboardName="SpinStoryboard"/>
+                                                </DataTrigger.ExitActions>
+                                            </DataTrigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Button.Template>
+                            </Button>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding InitialBalance, StringFormat=N2}"
+                                       Style="{StaticResource TopValueStyle}"
+                                       Foreground="#5a9e94"/>
+                            <TextBlock Text="USD"
+                                       Style="{StaticResource TopValueStyle}"
+                                       Foreground="#8aa8b8" Margin="4,0,0,0"/>
+                        </StackPanel>
+                    </StackPanel>
+                    <StackPanel Margin="36,0,16,0">
                         <TextBlock Text="Saldo" Style="{StaticResource TopLabelStyle}"/>
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="{Binding Balance, StringFormat=N2}"
                                        Style="{StaticResource TopValueStyle}"
                                        Foreground="#00e8c8"/>
-                            <TextBlock Text="{Binding Currency}"
+                            <TextBlock Text="USD"
                                        Style="{StaticResource TopValueStyle}"
                                        Margin="4,0,0,0"/>
                         </StackPanel>
@@ -738,27 +796,9 @@
                     </Grid>
                 </Grid>
 
-                <!-- Anchor for bot popup positioning -->
-                <Border x:Name="BotPopupAnchor"
-                        Grid.Column="1"
-                        Width="0"
-                        HorizontalAlignment="Right"
-                        VerticalAlignment="Top"/>
-
             </Grid>
 
         </Border>
-
-        <!-- Strategy Bot Panel (flyout externo à direita da janela) -->
-        <Popup x:Name="BotPopup"
-               IsOpen="{Binding Strategy.IsBotVisible}"
-               Placement="Custom"
-               CustomPopupPlacementCallback="BotPopup_Placement"
-               PlacementTarget="{Binding ElementName=MainContentBorder}"
-               AllowsTransparency="True"
-               StaysOpen="True">
-            <controls:StrategyPanelView DataContext="{Binding Strategy}"/>
-        </Popup>
 
     </Grid>
 </Window>

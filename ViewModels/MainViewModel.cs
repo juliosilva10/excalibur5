@@ -29,6 +29,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string  _loginId      = string.Empty;
     [ObservableProperty] private string  _accountType  = string.Empty;
     [ObservableProperty] private decimal _balance;
+    [ObservableProperty] private decimal _initialBalance;
+    [ObservableProperty] private bool    _isRefreshingBalance;
     [ObservableProperty] private string  _currency     = string.Empty;
     [ObservableProperty] private long    _pingMs;
     [ObservableProperty] private string  _serverUtc    = string.Empty;
@@ -43,6 +45,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     public MarketsViewModel Markets { get; }
     public LogViewModel Log { get; } = new();
     public StrategyViewModel Strategy { get; }
+    public RecoverViewModel Recover { get; } = new();
 
     partial void OnAccountTypeChanged(string value)
     {
@@ -66,13 +69,17 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _contractService = contractService;
 
         Markets = new MarketsViewModel(tickStream, contractService);
+        Markets.SetRecoverViewModel(Recover);
         Strategy = new StrategyViewModel(contractService);
+        Strategy.SetRecoverViewModel(Recover);
 
         Markets.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(Markets.IsMarketsVisible) && Markets.IsMarketsVisible)
             {
                 Log.IsLogVisible = false;
+                Strategy.IsBotVisible = false;
+                Recover.IsRecoverVisible = false;
             }
             if (e.PropertyName == nameof(Markets.IsMarketsVisible) || e.PropertyName == nameof(Markets.SelectedTab))
             {
@@ -86,9 +93,29 @@ public partial class MainViewModel : ObservableObject, IDisposable
             if (e.PropertyName == nameof(Log.IsLogVisible) && Log.IsLogVisible)
             {
                 Markets.IsMarketsVisible = false;
+                Strategy.IsBotVisible = false;
+                Recover.IsRecoverVisible = false;
             }
             if (e.PropertyName == nameof(Log.IsLogVisible))
                 SaveUiState();
+        };
+        Strategy.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(Strategy.IsBotVisible) && Strategy.IsBotVisible)
+            {
+                Markets.IsMarketsVisible = false;
+                Log.IsLogVisible = false;
+                Recover.IsRecoverVisible = false;
+            }
+        };
+        Recover.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(Recover.IsRecoverVisible) && Recover.IsRecoverVisible)
+            {
+                Markets.IsMarketsVisible = false;
+                Log.IsLogVisible = false;
+                Strategy.IsBotVisible = false;
+            }
         };
 
         _api.Authorized     += OnAuthorized;
@@ -219,6 +246,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             LoginId     = e.LoginId;
             AccountType = e.IsVirtual ? "virtual" : "real";
             Balance     = e.Balance;
+            InitialBalance = e.Balance;
             Currency    = e.Currency;
             AppLogger.Info(Src, $"UI updated: {e.LoginId} {e.Balance} {e.Currency}");
         }).Task.ContinueWith(t =>
@@ -235,6 +263,15 @@ public partial class MainViewModel : ObservableObject, IDisposable
         }).Task.ContinueWith(t =>
             AppLogger.Error(Src, "OnBalanceUpdated dispatcher error", t.Exception?.InnerException),
             TaskContinuationOptions.OnlyOnFaulted);
+    }
+
+    [RelayCommand]
+    private async Task RefreshBalanceAsync()
+    {
+        IsRefreshingBalance = true;
+        InitialBalance = Balance;
+        await Task.Delay(600);
+        IsRefreshingBalance = false;
     }
 
     private async void OnConnected(object? sender, EventArgs e)
@@ -280,7 +317,6 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             if (!IsConnecting)
             {
-                IsConnected   = false;
                 StatusMessage = "Reconectando...";
                 AppLogger.Warn(Src, "OnDisconnected (unexpected) — showing reconnect status");
             }
@@ -332,7 +368,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
         if (e.PropertyName is nameof(ContractPanelViewModel.DurationText)
             or nameof(ContractPanelViewModel.DurationUnit)
             or nameof(ContractPanelViewModel.StakeText)
-            or nameof(ContractPanelViewModel.UseDuration))
+            or nameof(ContractPanelViewModel.UseDuration)
+            or nameof(ContractPanelViewModel.SelectedBarrierDisplay))
         {
             SaveUiState();
         }
@@ -347,7 +384,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
             cp?.DurationUnit.ToString(),
             cp?.DurationText,
             cp?.StakeText,
-            cp?.UseDuration);
+            cp?.UseDuration,
+            cp?.SelectedBarrierDisplay);
     }
 
     private async Task RestoreUiStateAsync()
@@ -366,7 +404,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 if (tab is not null)
                 {
                     _restoringState = true;
-                    tab.ContractPanel.RestoreState(state.DurationUnit, state.DurationText, state.StakeText, state.UseDuration);
+                    tab.ContractPanel.RestoreState(state.DurationUnit, state.DurationText, state.StakeText, state.UseDuration, state.SelectedBarrierDisplay);
                     _restoringState = false;
                     await Markets.SelectTabAsync(tab);
                 }
@@ -388,6 +426,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _ws.Connected       -= OnConnected;
         Markets.Dispose();
         Strategy.Dispose();
+        Recover.Dispose();
         Log.Dispose();
         (_tickStream as IDisposable)?.Dispose();
         (_api as IDisposable)?.Dispose();

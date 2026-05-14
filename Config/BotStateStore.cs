@@ -32,13 +32,14 @@ public static class BotStateStore
 
 public class BotState
 {
-    public int Timeframe { get; set; } = 60;
+    public bool UseDuration { get; set; } = true;
+    public string DurationUnit { get; set; } = "Minutes";
+    public string DurationText { get; set; } = "5";
     public string DirectionMode { get; set; } = "Ambos";
     public string StakeText { get; set; } = "10";
     public string TakeProfitText { get; set; } = "5.00";
     public string StopLossText { get; set; } = "3.00";
     public string MaxContractsText { get; set; } = "3";
-    public int DurationMinutes { get; set; } = 5;
     public double ConfidenceThreshold { get; set; } = 0.70;
     public bool EnableEma { get; set; } = true;
     public bool EnableRsi { get; set; } = true;
@@ -48,4 +49,5 @@ public class BotState
     public bool EnableCandlePattern { get; set; } = true;
     public bool EnableMomentum { get; set; } = true;
     public bool EnableTrailingStop { get; set; } = true;
+    public string RecoverMode { get; set; } = string.Empty;
 }

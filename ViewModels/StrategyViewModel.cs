@@ -1,3 +1,5 @@
+using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -20,16 +22,29 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
     private EventHandler? _candleHandler;
     private MarketTabViewModel? _activeMarketTab;
     private bool _restoringState;
+    private RecoverViewModel? _recoverVm;
 
     // Config
-    [ObservableProperty] private int _timeframe = 60;
+    [ObservableProperty] private bool _useDuration = true;
+    [ObservableProperty] private string _durationUnit = "Minutes";
+    [ObservableProperty] private string _durationText = "5";
+    [ObservableProperty] private string _durationRange = "Intervalo: 1 - 1440 minutos";
+    [ObservableProperty] private DateTime _selectedEndDate = DateTime.UtcNow.Date.AddDays(1);
+    [ObservableProperty] private string _expiryDisplay = string.Empty;
+    [ObservableProperty] private string _selectedBarrierDisplay = string.Empty;
+    [ObservableProperty] private string _payoutPerPointDisplay = "0.000000";
     [ObservableProperty] private string _directionMode = "Ambos"; // "Call", "Put", "Ambos"
     [ObservableProperty] private string _stakeText = "10";
     [ObservableProperty] private string _takeProfitText = "5.00";
     [ObservableProperty] private string _stopLossText = "3.00";
     [ObservableProperty] private string _maxContractsText = "3";
-    [ObservableProperty] private int _durationMinutes = 5;
     [ObservableProperty] private double _confidenceThreshold = 0.70;
+    [ObservableProperty] private string _recoverMode = string.Empty;
+    [ObservableProperty] private int _timeframe = 60;
+
+    public ObservableCollection<string> AvailableBarrierDisplays { get; } = new();
+    public bool UseEndTime => !UseDuration;
+    public List<string> RecoverModes { get; } = ["", "Martingale"];
 
     // Indicators
     [ObservableProperty] private bool _enableEma = true;
@@ -56,18 +71,25 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
         RestoreState();
     }
 
+    public void SetRecoverViewModel(RecoverViewModel recoverVm)
+    {
+        _recoverVm = recoverVm;
+    }
+
     private void RestoreState()
     {
         _restoringState = true;
         var s = BotStateStore.Load();
-        Timeframe = s.Timeframe;
+        UseDuration = s.UseDuration;
+        DurationUnit = s.DurationUnit;
+        DurationText = s.DurationText;
         DirectionMode = s.DirectionMode;
         StakeText = s.StakeText;
         TakeProfitText = s.TakeProfitText;
         StopLossText = s.StopLossText;
         MaxContractsText = s.MaxContractsText;
-        DurationMinutes = s.DurationMinutes;
         ConfidenceThreshold = s.ConfidenceThreshold;
+        RecoverMode = s.RecoverMode;
         EnableEma = s.EnableEma;
         EnableRsi = s.EnableRsi;
         EnableSupportResistance = s.EnableSupportResistance;
@@ -84,14 +106,16 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
         if (_restoringState) return;
         BotStateStore.Save(new BotState
         {
-            Timeframe = Timeframe,
+            UseDuration = UseDuration,
+            DurationUnit = DurationUnit,
+            DurationText = DurationText,
             DirectionMode = DirectionMode,
             StakeText = StakeText,
             TakeProfitText = TakeProfitText,
             StopLossText = StopLossText,
             MaxContractsText = MaxContractsText,
-            DurationMinutes = DurationMinutes,
             ConfidenceThreshold = ConfidenceThreshold,
+            RecoverMode = RecoverMode,
             EnableEma = EnableEma,
             EnableRsi = EnableRsi,
             EnableSupportResistance = EnableSupportResistance,
@@ -103,13 +127,28 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
         });
     }
 
-    partial void OnTimeframeChanged(int value) => SaveState();
+    partial void OnUseDurationChanged(bool value)
+    {
+        OnPropertyChanged(nameof(UseEndTime));
+        SaveState();
+    }
+    partial void OnDurationUnitChanged(string value)
+    {
+        DurationRange = value switch
+        {
+            "Hours" => "Intervalo: 1 - 24 horas",
+            "Days" => "Intervalo: 1 - 365 dias",
+            _ => "Intervalo: 1 - 1440 minutos"
+        };
+        SaveState();
+    }
+    partial void OnDurationTextChanged(string value) => SaveState();
+    partial void OnSelectedEndDateChanged(DateTime value) => SaveState();
     partial void OnDirectionModeChanged(string value) => SaveState();
     partial void OnStakeTextChanged(string value) => SaveState();
     partial void OnTakeProfitTextChanged(string value) => SaveState();
     partial void OnStopLossTextChanged(string value) => SaveState();
     partial void OnMaxContractsTextChanged(string value) => SaveState();
-    partial void OnDurationMinutesChanged(int value) => SaveState();
     partial void OnConfidenceThresholdChanged(double value) => SaveState();
     partial void OnEnableEmaChanged(bool value) => SaveState();
     partial void OnEnableRsiChanged(bool value) => SaveState();
@@ -119,6 +158,7 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
     partial void OnEnableCandlePatternChanged(bool value) => SaveState();
     partial void OnEnableMomentumChanged(bool value) => SaveState();
     partial void OnEnableTrailingStopChanged(bool value) => SaveState();
+    partial void OnRecoverModeChanged(string value) => SaveState();
 
     [RelayCommand]
     private void ToggleBot()
@@ -143,13 +183,16 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
         _executor = new StrategyExecutor(_contractService, _engine);
         _executor.StatsUpdated += OnStatsUpdated;
         _executor.TradeExecuted += OnTradeExecuted;
+        _executor.PositionOpened += OnBotPositionOpened;
 
         _engine.Start(config);
         _executor.Start(config, _activeSymbol);
 
-        // Feed existing candles
+        // Feed existing candles without generating signals
+        _engine.BeginBulkFeed();
         foreach (var candle in _activeMarketTab.CandleValues)
             _engine.FeedCandle(candle);
+        _engine.EndBulkFeed();
 
         // Subscribe to new candles
         _candleHandler = (_, _) => OnCandleUpdated();
@@ -203,11 +246,49 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
     {
         if (_activeMarketTab == tab) return;
 
-        // If running and tab changes, stop the bot
         if (IsRunning && tab?.Symbol != _activeSymbol)
             Stop();
 
+        if (_activeMarketTab != null)
+            _activeMarketTab.ContractPanel.PropertyChanged -= OnContractPanelSync;
+
         _activeMarketTab = tab;
+
+        if (_activeMarketTab != null)
+        {
+            _activeMarketTab.ContractPanel.PropertyChanged += OnContractPanelSync;
+            SyncFromContractPanel();
+        }
+    }
+
+    private void OnContractPanelSync(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(ContractPanelViewModel.CallPayoutPerPoint)
+            or nameof(ContractPanelViewModel.PutPayoutPerPoint)
+            or nameof(ContractPanelViewModel.ExpiryDisplay)
+            or nameof(ContractPanelViewModel.ContractsLoaded))
+        {
+            Application.Current?.Dispatcher?.InvokeAsync(SyncFromContractPanel);
+        }
+    }
+
+    private void SyncFromContractPanel()
+    {
+        if (_activeMarketTab == null) return;
+        var cp = _activeMarketTab.ContractPanel;
+
+        PayoutPerPointDisplay = cp.CallPayoutPerPoint.ToString("F6");
+        ExpiryDisplay = cp.ExpiryDisplay;
+
+        var currentSelection = SelectedBarrierDisplay;
+        AvailableBarrierDisplays.Clear();
+        foreach (var b in cp.AvailableBarrierDisplays)
+            AvailableBarrierDisplays.Add(b);
+
+        if (!string.IsNullOrEmpty(currentSelection) && AvailableBarrierDisplays.Contains(currentSelection))
+            SelectedBarrierDisplay = currentSelection;
+        else if (AvailableBarrierDisplays.Count > 0 && string.IsNullOrEmpty(currentSelection))
+            SelectedBarrierDisplay = AvailableBarrierDisplays[0];
     }
 
     private void OnCandleUpdated()
@@ -247,6 +328,14 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
         });
     }
 
+    private void OnBotPositionOpened(object? sender, BotPositionOpened e)
+    {
+        if (_activeMarketTab == null) return;
+        var openPos = _activeMarketTab.ContractPanel.OpenPositions;
+        var expiry = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + CalculateDurationSeconds();
+        _ = openPos.AddPositionAsync(e.BuyResult, _activeSymbol, _activeMarketTab.DisplayName, e.ContractType, expiry);
+    }
+
     private StrategyConfig BuildConfig()
     {
         var indicators = new List<IndicatorType>();
@@ -269,21 +358,45 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
         {
             Timeframe = Timeframe,
             AllowedDirection = direction,
-            Stake = decimal.TryParse(StakeText, out var s) ? s : 10m,
-            TakeProfitUsd = decimal.TryParse(TakeProfitText, out var tp) ? tp : 5m,
-            StopLossUsd = decimal.TryParse(StopLossText, out var sl) ? sl : 3m,
+            Stake = decimal.TryParse(StakeText, NumberStyles.Any, CultureInfo.InvariantCulture, out var s) ? s : 10m,
+            TakeProfitUsd = decimal.TryParse(TakeProfitText, NumberStyles.Any, CultureInfo.InvariantCulture, out var tp) ? tp : 5m,
+            StopLossUsd = decimal.TryParse(StopLossText, NumberStyles.Any, CultureInfo.InvariantCulture, out var sl) ? sl : 3m,
             MaxConcurrentContracts = int.TryParse(MaxContractsText, out var mc) ? mc : 3,
-            DurationMinutes = DurationMinutes,
+            DurationSeconds = CalculateDurationSeconds(),
             ConfidenceThreshold = ConfidenceThreshold,
             EnableTrailingStop = EnableTrailingStop,
-            EnabledIndicators = indicators
+            RecoverMode = RecoverMode,
+            MartingaleFactor = _recoverVm?.Factor ?? 2.0m,
+            MartingaleMaxLevel = _recoverVm?.MaxLevel ?? 3,
+            EnabledIndicators = indicators,
+            Barrier = GetSelectedBarrier()
         };
+    }
+
+    private int CalculateDurationSeconds()
+    {
+        if (!int.TryParse(DurationText, out var val)) val = 5;
+        return DurationUnit switch
+        {
+            "Hours" => val * 3600,
+            "Days" => val * 86400,
+            _ => val * 60
+        };
+    }
+
+    private string GetSelectedBarrier()
+    {
+        if (string.IsNullOrEmpty(SelectedBarrierDisplay))
+            return "+0";
+        return SelectedBarrierDisplay;
     }
 
     public void Dispose()
     {
         SaveState();
         Stop();
+        if (_activeMarketTab != null)
+            _activeMarketTab.ContractPanel.PropertyChanged -= OnContractPanelSync;
         _engine.SignalGenerated -= OnSignalGenerated;
         _executor?.Dispose();
     }

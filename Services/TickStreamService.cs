@@ -97,34 +97,43 @@ public sealed class TickStreamService : ITickStreamService, IDisposable
         var reqId = Interlocked.Increment(ref _reqId);
         var payload = JsonSerializer.Serialize(new { ticks = symbol, subscribe = 1, req_id = reqId });
 
-        var root = await SendAndWaitAsync(reqId, payload, ct);
+        _subscriptions[symbol] = "";
 
-        if (root.TryGetProperty("error", out var err))
+        try
         {
-            var msg = err.TryGetProperty("message", out var m) ? m.GetString() : "unknown";
+            var root = await SendAndWaitAsync(reqId, payload, ct, timeoutMs: 5000);
 
-            // "Already subscribed" is not a real error — the server still streams ticks
-            if (msg != null && msg.Contains("already subscribed", StringComparison.OrdinalIgnoreCase))
+            if (root.TryGetProperty("error", out var err))
             {
-                AppLogger.Warn(Src, $"Server says already subscribed to {symbol} — treating as success");
-                _subscriptions[symbol] = "";
-                return "";
+                var msg = err.TryGetProperty("message", out var m) ? m.GetString() : "unknown";
+
+                if (msg != null && msg.Contains("already subscribed", StringComparison.OrdinalIgnoreCase))
+                {
+                    AppLogger.Warn(Src, $"Server says already subscribed to {symbol} — treating as success");
+                    return "";
+                }
+
+                _subscriptions.TryRemove(symbol, out _);
+                AppLogger.Error(Src, $"Subscribe error for {symbol}: {msg}");
+                throw new InvalidOperationException(msg);
             }
 
-            AppLogger.Error(Src, $"Subscribe error for {symbol}: {msg}");
-            throw new InvalidOperationException(msg);
-        }
+            var subId = "";
+            if (root.TryGetProperty("subscription", out var sub) &&
+                sub.TryGetProperty("id", out var idEl))
+            {
+                subId = idEl.GetString() ?? "";
+            }
 
-        var subId = "";
-        if (root.TryGetProperty("subscription", out var sub) &&
-            sub.TryGetProperty("id", out var idEl))
+            _subscriptions[symbol] = subId;
+            AppLogger.Info(Src, $"Subscribed to {symbol}, sub_id={subId}");
+            return subId;
+        }
+        catch (OperationCanceledException)
         {
-            subId = idEl.GetString() ?? "";
+            AppLogger.Warn(Src, $"Subscribe response timeout for {symbol} — ticks may still arrive");
+            return "";
         }
-
-        _subscriptions[symbol] = subId;
-        AppLogger.Info(Src, $"Subscribed to {symbol}, sub_id={subId}");
-        return subId;
     }
 
     public async Task UnsubscribeAsync(string symbol, CancellationToken ct = default)
@@ -153,6 +162,24 @@ public sealed class TickStreamService : ITickStreamService, IDisposable
         var symbols = _subscriptions.Keys.ToList();
         foreach (var symbol in symbols)
             await UnsubscribeAsync(symbol, ct);
+    }
+
+    public async Task ForgetAllTicksAsync(CancellationToken ct = default)
+    {
+        var reqId = Interlocked.Increment(ref _reqId);
+        var payload = JsonSerializer.Serialize(new { forget_all = "ticks", req_id = reqId });
+
+        try
+        {
+            await SendAndWaitAsync(reqId, payload, ct);
+            _subscriptions.Clear();
+            _lastQuotes.Clear();
+            AppLogger.Info(Src, "forget_all ticks sent — local state cleared");
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Warn(Src, $"forget_all ticks failed: {ex.Message}");
+        }
     }
 
     public void ClearSubscription(string symbol)

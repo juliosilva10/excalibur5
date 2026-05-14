@@ -6,8 +6,9 @@ namespace Excalibur5.Services.Strategy;
 public sealed class SignalFilter
 {
     private const string Src = "SignalFilter";
-    private const double MinAtrThreshold = 0.0003;
     private const int TrendEmaPeriod = 50;
+    private const int AtrBaselinePeriod = 100;
+    private const double AtrDropRatio = 0.3;
 
     private int _cooldownCandles;
 
@@ -20,7 +21,6 @@ public sealed class SignalFilter
         if (candles.Count < TrendEmaPeriod + 2)
             return false;
 
-        // Cooldown after loss
         if (_cooldownCandles > 0)
         {
             _cooldownCandles--;
@@ -28,18 +28,9 @@ public sealed class SignalFilter
             return true;
         }
 
-        // ATR filter: skip low volatility
-        double atr = AtrIndicator.CalculateAtr(candles, 14);
-        double price = (double)candles[^1].Close;
-        double normalizedAtr = atr / price;
-
-        if (normalizedAtr < MinAtrThreshold)
-        {
-            AppLogger.Info(Src, $"Signal filtered: low volatility (ATR: {normalizedAtr:F6})");
+        if (candles.Count >= AtrBaselinePeriod && IsVolatilityCollapsed(candles))
             return true;
-        }
 
-        // Trend alignment: EMA 50
         if (!IsTrendAligned(candles, direction))
         {
             AppLogger.Info(Src, $"Signal filtered: against EMA50 trend");
@@ -47,6 +38,29 @@ public sealed class SignalFilter
         }
 
         return false;
+    }
+
+    private static bool IsVolatilityCollapsed(IReadOnlyList<CandleData> candles)
+    {
+        double atrShort = AtrIndicator.CalculateAtr(candles, 14);
+        double atrLong = CalculateAtrFromOffset(candles, 14, AtrBaselinePeriod - 14);
+
+        if (atrLong <= 0) return false;
+
+        double ratio = atrShort / atrLong;
+        if (ratio < AtrDropRatio)
+        {
+            AppLogger.Info(Src, $"Signal filtered: volatility collapsed (ratio: {ratio:F3}, short={atrShort:G4}, long={atrLong:G4})");
+            return true;
+        }
+        return false;
+    }
+
+    private static double CalculateAtrFromOffset(IReadOnlyList<CandleData> candles, int period, int offset)
+    {
+        if (candles.Count < offset + period) return 0;
+        var slice = candles.Skip(candles.Count - offset - period).Take(period + 1).ToList();
+        return AtrIndicator.CalculateAtr(slice, period);
     }
 
     public void OnLoss()

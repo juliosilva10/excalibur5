@@ -9,8 +9,12 @@ public sealed class StrategyConfig
     public decimal StopLossUsd { get; set; } = 3m;
     public int MaxConcurrentContracts { get; set; } = 3;
     public double ConfidenceThreshold { get; set; } = 0.70;
-    public int DurationMinutes { get; set; } = 5;
+    public int DurationSeconds { get; set; } = 60;
     public bool EnableTrailingStop { get; set; } = true;
+    public string RecoverMode { get; set; } = string.Empty;
+    public decimal MartingaleFactor { get; set; } = 2.0m;
+    public int MartingaleMaxLevel { get; set; } = 3;
+    public string Barrier { get; set; } = "+0";
     public List<IndicatorType> EnabledIndicators { get; set; } = new()
     {
         IndicatorType.EmaCrossover,

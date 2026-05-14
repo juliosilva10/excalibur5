@@ -6,7 +6,7 @@
              mc:Ignorable="d"
              d:DesignHeight="600" d:DesignWidth="280">
 
-    <Border Width="280" CornerRadius="6"
+    <Border Width="310" CornerRadius="6"
             BorderBrush="#1d4957" BorderThickness="1"
             Margin="0">
         <Border.Background>
@@ -25,7 +25,20 @@
 
                 <!-- Header -->
                 <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
-                    <TextBlock Text="⚡" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <Canvas Width="16" Height="16" VerticalAlignment="Center" Margin="0,0,6,0">
+                        <!-- Antenna -->
+                        <Line X1="8" Y1="0" X2="8" Y2="2.5" Stroke="#00f0ff" StrokeThickness="1"/>
+                        <Ellipse Canvas.Left="6.5" Canvas.Top="0" Width="3" Height="3" Fill="#00f0ff"/>
+                        <!-- Head -->
+                        <Rectangle Canvas.Left="2.5" Canvas.Top="3.5" Width="11" Height="7"
+                                   Stroke="#00f0ff" StrokeThickness="1.2" RadiusX="1.5" RadiusY="1.5"/>
+                        <!-- Eyes -->
+                        <Ellipse Canvas.Left="5" Canvas.Top="5.5" Width="2" Height="2" Fill="#00f0ff"/>
+                        <Ellipse Canvas.Left="9" Canvas.Top="5.5" Width="2" Height="2" Fill="#00f0ff"/>
+                        <!-- Body -->
+                        <Rectangle Canvas.Left="4.5" Canvas.Top="11.5" Width="7" Height="3.5"
+                                   Stroke="#00f0ff" StrokeThickness="1" RadiusX="1" RadiusY="1"/>
+                    </Canvas>
                     <TextBlock Text="Estratégia Automatizada"
                                Foreground="#00f0ff" FontSize="12"
                                FontWeight="SemiBold" VerticalAlignment="Center"/>
@@ -104,7 +117,7 @@
                     </StackPanel>
                 </Grid>
 
-                <!-- Max Contracts (same width as Take Profit = half) -->
+                <!-- Max Contracts + Recover (side by side) -->
                 <Grid Margin="0,0,0,14">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
@@ -116,6 +129,16 @@
                         <TextBox Style="{StaticResource DerivTextBox}"
                                  Text="{Binding MaxContractsText, UpdateSourceTrigger=PropertyChanged}"
                                  Height="28" MaxLength="2"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="2">
+                        <TextBlock Text="Recover" Foreground="#90b5c9" FontSize="10" Margin="0,0,0,4"/>
+                        <ComboBox Style="{StaticResource DerivComboBox}"
+                                  ItemsSource="{Binding RecoverModes}"
+                                  SelectedItem="{Binding RecoverMode, Mode=TwoWay}"
+                                  Height="28"
+                                  FontSize="11"
+                                  Foreground="#00f0ff"
+                                  ToolTip="Modo de recuperação (Martingale)"/>
                     </StackPanel>
                 </Grid>
 

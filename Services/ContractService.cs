@@ -406,7 +406,7 @@ public sealed class ContractService : IContractService, IDisposable
         return new BuyResponse { Error = "Unexpected response" };
     }
 
-    public async Task<BuyResponse> BuyDirectAsync(string symbol, string contractType, decimal stake, int duration, string durationUnit, CancellationToken ct = default)
+    public async Task<BuyResponse> BuyDirectAsync(string symbol, string contractType, decimal stake, int duration, string durationUnit, string? barrier = null, CancellationToken ct = default)
     {
         var reqId = Interlocked.Increment(ref _reqId);
         var dict = new Dictionary<string, object>
@@ -421,6 +421,9 @@ public sealed class ContractService : IContractService, IDisposable
             ["duration_unit"] = durationUnit,
             ["req_id"] = reqId
         };
+
+        if (!string.IsNullOrEmpty(barrier))
+            dict["barrier"] = barrier;
 
         var payload = JsonSerializer.Serialize(dict);
         var root = await SendAndWaitAsync(reqId, payload, ct);
