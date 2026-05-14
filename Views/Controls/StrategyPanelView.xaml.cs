@@ -13,15 +13,6 @@ public partial class StrategyPanelView : UserControl
 
     private StrategyViewModel? Vm => DataContext as StrategyViewModel;
 
-    private void Timeframe_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is RadioButton rb && rb.Tag is string tag && int.TryParse(tag, out var tf))
-        {
-            if (Vm != null)
-                Vm.Timeframe = tf;
-        }
-    }
-
     private void Direction_Click(object sender, RoutedEventArgs e)
     {
         if (sender is RadioButton rb && rb.Tag is string tag)

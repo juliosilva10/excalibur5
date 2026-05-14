@@ -88,6 +88,12 @@ public sealed class StrategyEngine : IStrategyEngine
             _filter.OnLoss();
     }
 
+    public void EmitExternalSignal(TradeSignal signal)
+    {
+        AppLogger.Info(Src, $"External signal: {signal.Direction} — {signal.Reason}");
+        SignalGenerated?.Invoke(this, signal);
+    }
+
     private void EvaluateSignals(long currentEpoch)
     {
         var signals = new List<IndicatorSignal>();

@@ -6,7 +6,7 @@
         xmlns:vm="clr-namespace:Excalibur5.ViewModels"
         xmlns:controls="clr-namespace:Excalibur5.Views.Controls"
         mc:Ignorable="d"
-        Title="Excalibur5" Height="750" Width="1100"
+        Title="Excalibur5" Height="780" Width="1100"
         MinWidth="900" MinHeight="400"
         WindowStartupLocation="CenterScreen"
         Background="#07121a"

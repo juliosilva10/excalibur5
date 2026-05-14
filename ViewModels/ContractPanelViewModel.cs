@@ -20,6 +20,7 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
     private readonly decimal _barrierOuterBase;
     private CancellationTokenSource? _proposalCts;
     private bool _active;
+    private bool _restoringState;
     private string _callProposalId = string.Empty;
     private string _putProposalId = string.Empty;
 
@@ -74,6 +75,10 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
     private readonly List<decimal> _apiBarriers = new();
     private bool _barriersAreRelative; // true when _apiBarriers contains relative offsets (duration mode)
     private decimal _spotForBarriers;
+    private bool _barrierLocked;
+
+    public void LockBarrier() => _barrierLocked = true;
+    public void UnlockBarrier() => _barrierLocked = false;
 
     public bool UseEndTime => !UseDuration;
     public string StrikePriceDisplay => StrikePrice.ToString("F2", CultureInfo.InvariantCulture);
@@ -162,6 +167,7 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(UseEndTime));
         OnPropertyChanged(nameof(StrikePriceDisplay));
         UpdateExpiryFromEndTime();
+        if (_restoringState) return;
         if (!value)
         {
             RefreshBarriersForEndTime();
@@ -204,6 +210,8 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
     partial void OnSelectedBarrierDisplayChanged(string value)
     {
         if (string.IsNullOrEmpty(value)) return;
+
+        _pendingBarrierRestore = null;
 
         var idx = -1;
         for (int i = 0; i < AvailableBarrierDisplays.Count; i++)
@@ -293,7 +301,7 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
     partial void OnDurationUnitChanged(DurationUnitType value)
     {
         UpdateDurationRange();
-        if (UseDuration && ContractsLoaded)
+        if (!_restoringState && UseDuration && ContractsLoaded)
             GenerateFallbackBarriers();
         RequestProposalDebounced();
     }
@@ -312,7 +320,7 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
             if (val > max) { DurationText = max.ToString(); return; }
             if (val < 1 && value.Length > 0 && value != "0") { DurationText = "1"; return; }
         }
-        if (UseDuration && ContractsLoaded)
+        if (!_restoringState && UseDuration && ContractsLoaded)
             GenerateFallbackBarriers();
         RequestProposalDebounced();
     }
@@ -520,11 +528,37 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
         }
 
         // Restore persisted barrier if available
-        if (_pendingBarrierRestore != null && AvailableBarrierDisplays.Contains(_pendingBarrierRestore))
+        if (_pendingBarrierRestore != null)
         {
-            SelectedBarrierDisplay = _pendingBarrierRestore;
-            _pendingBarrierRestore = null;
-            return;
+            if (AvailableBarrierDisplays.Contains(_pendingBarrierRestore))
+            {
+                SelectedBarrierDisplay = _pendingBarrierRestore;
+                return;
+            }
+
+            // Try closest match by parsing the numeric value
+            if (decimal.TryParse(_pendingBarrierRestore.TrimStart('+'), NumberStyles.Any, CultureInfo.InvariantCulture, out var targetVal))
+            {
+                string? closest = null;
+                decimal closestDiff = decimal.MaxValue;
+                foreach (var display in AvailableBarrierDisplays)
+                {
+                    if (decimal.TryParse(display.TrimStart('+'), NumberStyles.Any, CultureInfo.InvariantCulture, out var val))
+                    {
+                        var diff = Math.Abs(val - targetVal);
+                        if (diff < closestDiff)
+                        {
+                            closestDiff = diff;
+                            closest = display;
+                        }
+                    }
+                }
+                if (closest != null)
+                {
+                    SelectedBarrierDisplay = closest;
+                    return;
+                }
+            }
         }
 
         // Default select the entry closest to spot
@@ -608,7 +642,20 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
             if (same) return;
         }
 
+        // When barrier is locked (bot running), update internal list but preserve selection
+        if (_barrierLocked)
+        {
+            _apiBarriers.Clear();
+            foreach (var b in newBarriers)
+                _apiBarriers.Add(b);
+            _apiBarriers.Sort();
+            _barriersAreRelative = true;
+            _barriersFromApi = true;
+            return;
+        }
+
         var currentSelection = SelectedBarrier;
+        var hadPendingRestore = _pendingBarrierRestore != null;
 
         _apiBarriers.Clear();
         foreach (var b in newBarriers)
@@ -620,8 +667,8 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
 
         UpdateBarrierDisplays();
 
-        // Try to restore previous selection
-        if (AvailableBarrierDisplays.Count > 0)
+        // Try to restore previous selection (skip if pending barrier was just applied)
+        if (!hadPendingRestore && _pendingBarrierRestore == null && AvailableBarrierDisplays.Count > 0)
         {
             var format = $"F{_pipSize}";
             string targetDisplay;
@@ -1051,6 +1098,9 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
     public void RestoreState(string? durationUnit, string? durationText, string? stakeText, bool? useDuration = null, string? selectedBarrier = null)
     {
         AppLogger.Info(Src, $"RestoreState: unit={durationUnit}, duration={durationText}, stake={stakeText}, useDuration={useDuration}, barrier={selectedBarrier}");
+        _restoringState = true;
+        if (!string.IsNullOrEmpty(selectedBarrier))
+            _pendingBarrierRestore = selectedBarrier;
         if (useDuration.HasValue)
             UseDuration = useDuration.Value;
         if (!string.IsNullOrEmpty(durationUnit) && Enum.TryParse<DurationUnitType>(durationUnit, out var unit))
@@ -1059,8 +1109,7 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
             DurationText = durationText;
         if (!string.IsNullOrEmpty(stakeText))
             StakeText = stakeText;
-        if (!string.IsNullOrEmpty(selectedBarrier))
-            _pendingBarrierRestore = selectedBarrier;
+        _restoringState = false;
     }
 
     public void Dispose()

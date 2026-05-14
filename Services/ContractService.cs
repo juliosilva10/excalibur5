@@ -449,6 +449,12 @@ public sealed class ContractService : IContractService, IDisposable
 
     public async Task SubscribeOpenContractAsync(long contractId, CancellationToken ct = default)
     {
+        if (_openContractSubIds.ContainsKey(contractId))
+        {
+            AppLogger.Info(Src, $"Already subscribed to open contract: {contractId}");
+            return;
+        }
+
         var reqId = Interlocked.Increment(ref _reqId);
         var payload = JsonSerializer.Serialize(new
         {

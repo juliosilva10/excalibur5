@@ -48,7 +48,7 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
     {
         try
         {
-            var candles = await _tickService.GetCandleHistoryAsync(Symbol, 60, 500);
+            var candles = await _tickService.GetCandleHistoryAsync(Symbol, _candleGranularity, 500);
             await Application.Current.Dispatcher.InvokeAsync(() =>
             {
                 CandleValues.Clear();
@@ -61,6 +61,23 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
         {
             AppLogger.Warn("MarketTab", $"Candle history load failed for {Symbol}: {ex.Message}");
         }
+    }
+
+    public async Task SetCandleGranularityAsync(int seconds)
+    {
+        var valid = GetValidGranularity(seconds);
+        if (valid == _candleGranularity) return;
+        _candleGranularity = valid;
+        if (_candlesLoaded)
+            await LoadCandlesAsync();
+    }
+
+    private static int GetValidGranularity(int seconds)
+    {
+        int[] valid = [60, 120, 180, 300, 600, 900, 1800, 3600, 7200, 14400, 28800, 86400];
+        for (int i = valid.Length - 1; i >= 0; i--)
+            if (valid[i] <= seconds) return valid[i];
+        return 60;
     }
 
     public string Symbol      => _market.Symbol;
@@ -321,7 +338,8 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
 
         try
         {
-            _tickService.ClearSubscription(Symbol);
+            await _tickService.ForgetAllTicksAsync();
+            await Task.Delay(500);
             await _tickService.SubscribeAsync(Symbol);
             _lastTickTime = DateTime.UtcNow;
             AppLogger.Info("MarketTab", $"Watchdog: resubscribed {Symbol} successfully");
@@ -329,21 +347,6 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
         catch (Exception ex)
         {
             AppLogger.Warn("MarketTab", $"Watchdog: resubscribe failed for {Symbol}: {ex.Message}");
-            // Force full reactivation cycle on next watchdog tick
-            try
-            {
-                _tickService.TickReceived -= OnTickReceived;
-                await _tickService.ForgetAllTicksAsync();
-                await _tickService.SubscribeAsync(Symbol);
-                _tickService.TickReceived += OnTickReceived;
-                _lastTickTime = DateTime.UtcNow;
-                AppLogger.Info("MarketTab", $"Watchdog: full re-subscribe for {Symbol} succeeded");
-            }
-            catch (Exception ex2)
-            {
-                AppLogger.Error("MarketTab", $"Watchdog: full re-subscribe also failed for {Symbol}: {ex2.Message}");
-                _tickService.TickReceived += OnTickReceived;
-            }
         }
         finally
         {

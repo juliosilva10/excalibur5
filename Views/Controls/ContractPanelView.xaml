@@ -350,7 +350,7 @@
                 </StackPanel>
 
                 <!-- BOT PANEL (visible when Bot active, spans cols 0-4) -->
-                <ScrollViewer Grid.Column="0" Grid.ColumnSpan="5"
+                <ScrollViewer Grid.Column="0" Grid.ColumnSpan="3"
                               VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
                               DataContext="{Binding DataContext.Strategy, RelativeSource={RelativeSource AncestorType=Window}}">
                     <ScrollViewer.Style>
@@ -377,6 +377,13 @@
                                          Content="Hora de Término" Foreground="#a3b8cc" FontSize="11"
                                          Cursor="Hand"
                                          ToolTip="Escolher data/hora de expiração (GMT)"/>
+                            <ComboBox Style="{StaticResource DerivComboBox}"
+                                      ItemsSource="{Binding StrategyModes}"
+                                      SelectedItem="{Binding StrategyMode, Mode=TwoWay}"
+                                      Width="90" Height="22"
+                                      FontSize="10" Margin="14,0,0,0"
+                                      Foreground="#00f0ff"
+                                      ToolTip="Modo de estratégia"/>
                         </StackPanel>
 
                         <!-- DURATION MODE -->
@@ -431,21 +438,33 @@
                         <!-- Separator -->
                         <Border Height="1" Background="#1d4957" Margin="0,10,0,10"/>
 
-                        <!-- Direction -->
-                        <TextBlock Text="Direção" Foreground="#90b5c9" FontSize="10" Margin="0,0,0,4"/>
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
-                            <RadioButton Content="Call" Tag="Call" GroupName="BotDirection"
-                                         Click="BotDirection_Click"
-                                         Foreground="#a3b8cc" FontSize="11" Margin="0,0,10,0" Cursor="Hand"
-                                         ToolTip="Apenas operações Call (alta)"/>
-                            <RadioButton Content="Put" Tag="Put" GroupName="BotDirection"
-                                         Click="BotDirection_Click"
-                                         Foreground="#a3b8cc" FontSize="11" Margin="0,0,10,0" Cursor="Hand"
-                                         ToolTip="Apenas operações Put (baixa)"/>
-                            <RadioButton Content="Ambos" Tag="Ambos" GroupName="BotDirection"
-                                         IsChecked="True" Click="BotDirection_Click"
-                                         Foreground="#a3b8cc" FontSize="11" Cursor="Hand"
-                                         ToolTip="Operar em ambas as direções"/>
+                        <!-- Amostra (only in Trend mode) -->
+                        <StackPanel Margin="0,0,0,10"
+                                    Visibility="{Binding IsTrendMode, Converter={StaticResource BoolToVis}}">
+                            <TextBlock Text="Amostra" Foreground="#90b5c9" FontSize="10" Margin="0,0,0,4"/>
+                            <TextBox Style="{StaticResource DerivTextBox}"
+                                     Text="{Binding SampleSizeText, UpdateSourceTrigger=PropertyChanged}"
+                                     Height="28" Width="80" HorizontalAlignment="Left" MaxLength="3"
+                                     ToolTip="Quantidade de candles analisados para determinar a tendência (mín. 1)"/>
+                        </StackPanel>
+
+                        <!-- Direction (hidden in Trend mode) -->
+                        <StackPanel Visibility="{Binding IsTrendMode, Converter={StaticResource InverseBoolToVis}}">
+                            <TextBlock Text="Direção" Foreground="#90b5c9" FontSize="10" Margin="0,0,0,4"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                <RadioButton Content="Call" Tag="Call" GroupName="BotDirection"
+                                             Click="BotDirection_Click"
+                                             Foreground="#a3b8cc" FontSize="11" Margin="0,0,10,0" Cursor="Hand"
+                                             ToolTip="Apenas operações Call (alta)"/>
+                                <RadioButton Content="Put" Tag="Put" GroupName="BotDirection"
+                                             Click="BotDirection_Click"
+                                             Foreground="#a3b8cc" FontSize="11" Margin="0,0,10,0" Cursor="Hand"
+                                             ToolTip="Apenas operações Put (baixa)"/>
+                                <RadioButton Content="Ambos" Tag="Ambos" GroupName="BotDirection"
+                                             IsChecked="True" Click="BotDirection_Click"
+                                             Foreground="#a3b8cc" FontSize="11" Cursor="Hand"
+                                             ToolTip="Operar em ambas as direções"/>
+                            </StackPanel>
                         </StackPanel>
 
                         <!-- Stake + TP/SL + Max -->
@@ -501,62 +520,65 @@
                                       ToolTip="Modo de recuperação (Martingale)"/>
                         </StackPanel>
 
-                        <!-- Separator -->
-                        <Border Height="1" Background="#1d4957" Margin="0,0,0,10"/>
+                        <!-- Separator (hidden in Trend mode) -->
+                        <Border Height="1" Background="#1d4957" Margin="0,0,0,10"
+                                Visibility="{Binding IsTrendMode, Converter={StaticResource InverseBoolToVis}}"/>
 
-                        <!-- Indicators -->
-                        <TextBlock Text="Indicadores" Foreground="#90b5c9" FontSize="10" Margin="0,0,0,6"/>
-                        <Grid Margin="0,0,0,10">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <CheckBox Grid.Row="0" Grid.Column="0" Content="EMA 9/21" IsChecked="{Binding EnableEma}"
-                                      Foreground="#a3b8cc" FontSize="11" Margin="0,0,12,4" Cursor="Hand"
-                                      ToolTip="Cruzamento de médias EMA 9/21"/>
-                            <CheckBox Grid.Row="0" Grid.Column="1" Content="RSI (14)" IsChecked="{Binding EnableRsi}"
-                                      Foreground="#a3b8cc" FontSize="11" Margin="0,0,12,4" Cursor="Hand"
-                                      ToolTip="Índice de Força Relativa (14 períodos)"/>
-                            <CheckBox Grid.Row="0" Grid.Column="2" Content="S/R" IsChecked="{Binding EnableSupportResistance}"
-                                      Foreground="#a3b8cc" FontSize="11" Margin="0,0,12,4" Cursor="Hand"
-                                      ToolTip="Suporte e Resistência"/>
-                            <CheckBox Grid.Row="0" Grid.Column="3" Content="MACD" IsChecked="{Binding EnableMacd}"
-                                      Foreground="#a3b8cc" FontSize="11" Margin="0,0,12,4" Cursor="Hand"
-                                      ToolTip="Moving Average Convergence Divergence"/>
-                            <CheckBox Grid.Row="1" Grid.Column="0" Content="Bollinger" IsChecked="{Binding EnableBollinger}"
-                                      Foreground="#a3b8cc" FontSize="11" Margin="0,0,12,4" Cursor="Hand"
-                                      ToolTip="Bandas de Bollinger"/>
-                            <CheckBox Grid.Row="1" Grid.Column="1" Content="Candles" IsChecked="{Binding EnableCandlePattern}"
-                                      Foreground="#a3b8cc" FontSize="11" Margin="0,0,12,4" Cursor="Hand"
-                                      ToolTip="Padrões de candlestick"/>
-                            <CheckBox Grid.Row="1" Grid.Column="2" Content="Momentum" IsChecked="{Binding EnableMomentum}"
-                                      Foreground="#a3b8cc" FontSize="11" Margin="0,0,12,4" Cursor="Hand"
-                                      ToolTip="Indicador de momentum"/>
-                        </Grid>
+                        <!-- Indicators (hidden in Trend mode) -->
+                        <StackPanel Visibility="{Binding IsTrendMode, Converter={StaticResource InverseBoolToVis}}">
+                            <TextBlock Text="Indicadores" Foreground="#90b5c9" FontSize="10" Margin="0,0,0,6"/>
+                            <Grid Margin="0,0,0,10">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <CheckBox Grid.Row="0" Grid.Column="0" Content="EMA 9/21" IsChecked="{Binding EnableEma}"
+                                          Foreground="#a3b8cc" FontSize="11" Margin="0,0,12,4" Cursor="Hand"
+                                          ToolTip="Cruzamento de médias EMA 9/21"/>
+                                <CheckBox Grid.Row="0" Grid.Column="1" Content="RSI (14)" IsChecked="{Binding EnableRsi}"
+                                          Foreground="#a3b8cc" FontSize="11" Margin="0,0,12,4" Cursor="Hand"
+                                          ToolTip="Índice de Força Relativa (14 períodos)"/>
+                                <CheckBox Grid.Row="0" Grid.Column="2" Content="S/R" IsChecked="{Binding EnableSupportResistance}"
+                                          Foreground="#a3b8cc" FontSize="11" Margin="0,0,12,4" Cursor="Hand"
+                                          ToolTip="Suporte e Resistência"/>
+                                <CheckBox Grid.Row="0" Grid.Column="3" Content="MACD" IsChecked="{Binding EnableMacd}"
+                                          Foreground="#a3b8cc" FontSize="11" Margin="0,0,12,4" Cursor="Hand"
+                                          ToolTip="Moving Average Convergence Divergence"/>
+                                <CheckBox Grid.Row="1" Grid.Column="0" Content="Bollinger" IsChecked="{Binding EnableBollinger}"
+                                          Foreground="#a3b8cc" FontSize="11" Margin="0,0,12,4" Cursor="Hand"
+                                          ToolTip="Bandas de Bollinger"/>
+                                <CheckBox Grid.Row="1" Grid.Column="1" Content="Candles" IsChecked="{Binding EnableCandlePattern}"
+                                          Foreground="#a3b8cc" FontSize="11" Margin="0,0,12,4" Cursor="Hand"
+                                          ToolTip="Padrões de candlestick"/>
+                                <CheckBox Grid.Row="1" Grid.Column="2" Content="Momentum" IsChecked="{Binding EnableMomentum}"
+                                          Foreground="#a3b8cc" FontSize="11" Margin="0,0,12,4" Cursor="Hand"
+                                          ToolTip="Indicador de momentum"/>
+                            </Grid>
 
-                        <!-- Confidence + Trailing -->
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8"
-                                    ToolTip="Confiança mínima para abrir posição">
-                            <TextBlock Text="Confiança mín:" Foreground="#90b5c9" FontSize="10" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                            <Slider Width="120"
-                                    Style="{StaticResource ConfidenceSliderStyle}"
-                                    Value="{Binding ConfidenceThreshold}"
-                                    VerticalAlignment="Center"/>
-                            <TextBlock Text="{Binding ConfidenceThreshold, StringFormat=P0}"
-                                       Foreground="#e0eef8" FontSize="11"
-                                       FontFamily="Consolas" Margin="8,0,0,0"
-                                       VerticalAlignment="Center"/>
+                            <!-- Confidence + Trailing -->
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8"
+                                        ToolTip="Confiança mínima para abrir posição">
+                                <TextBlock Text="Confiança mín:" Foreground="#90b5c9" FontSize="10" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <Slider Width="120"
+                                        Style="{StaticResource ConfidenceSliderStyle}"
+                                        Value="{Binding ConfidenceThreshold}"
+                                        VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding ConfidenceThreshold, StringFormat=P0}"
+                                           Foreground="#e0eef8" FontSize="11"
+                                           FontFamily="Consolas" Margin="8,0,0,0"
+                                           VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <CheckBox Content="Trailing Stop (TP 70%→BE, 90%→50%)"
+                                      IsChecked="{Binding EnableTrailingStop}"
+                                      Foreground="#a3b8cc" FontSize="11" Margin="0,0,0,10" Cursor="Hand"
+                                      ToolTip="Ajusta Stop Loss dinamicamente conforme lucro"/>
                         </StackPanel>
-                        <CheckBox Content="Trailing Stop (TP 70%→BE, 90%→50%)"
-                                  IsChecked="{Binding EnableTrailingStop}"
-                                  Foreground="#a3b8cc" FontSize="11" Margin="0,0,0,10" Cursor="Hand"
-                                  ToolTip="Ajusta Stop Loss dinamicamente conforme lucro"/>
 
                         <!-- Separator -->
                         <Border Height="1" Background="#1d4957" Margin="0,0,0,10"/>
@@ -597,14 +619,17 @@
                         <TextBlock Text="{Binding CurrentSignalText}"
                                    Foreground="#00e8c8" FontSize="11"
                                    FontFamily="Consolas" Margin="0,4,0,4"
-                                   TextWrapping="Wrap" MaxWidth="300"/>
+                                   TextWrapping="Wrap" MaxWidth="300"
+                                   Visibility="Collapsed"/>
                         <TextBlock Text="{Binding LastTradeText}"
                                    Foreground="#f0c040" FontSize="10"
                                    FontFamily="Consolas" Margin="0,0,0,4"
-                                   TextWrapping="Wrap" MaxWidth="300"/>
+                                   TextWrapping="Wrap" MaxWidth="300"
+                                   Visibility="Collapsed"/>
                         <TextBlock Text="{Binding StatsText}"
                                    Foreground="#e0eef8" FontSize="10"
-                                   FontFamily="Consolas" Margin="0,0,0,10"/>
+                                   FontFamily="Consolas" Margin="0,0,0,10"
+                                   Visibility="Collapsed"/>
 
                         <!-- Buttons -->
                         <StackPanel Orientation="Horizontal">
@@ -642,6 +667,32 @@
                         </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
+
+                <!-- BOT SIGNAL TEXTS (column 4, visible when bot active) -->
+                <StackPanel Grid.Column="4" VerticalAlignment="Top" Margin="0,4,0,0"
+                            DataContext="{Binding DataContext.Strategy, RelativeSource={RelativeSource AncestorType=Window}}">
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsBotVisible}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+                    <TextBlock Text="{Binding CurrentSignalText}"
+                               Foreground="#00e8c8" FontSize="11"
+                               FontFamily="Consolas" Margin="0,0,0,4"
+                               TextWrapping="Wrap"/>
+                    <TextBlock Text="{Binding LastTradeText}"
+                               Foreground="#f0c040" FontSize="10"
+                               FontFamily="Consolas" Margin="0,0,0,4"
+                               TextWrapping="Wrap"/>
+                    <TextBlock Text="{Binding StatsText}"
+                               Foreground="#e0eef8" FontSize="10"
+                               FontFamily="Consolas" Margin="0,0,0,0"/>
+                </StackPanel>
 
                 <!-- RECOVER PANEL (visible when Recover active, spans cols 0-2) -->
                 <StackPanel Grid.Column="0" Grid.ColumnSpan="3"

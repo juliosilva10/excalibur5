@@ -33,16 +33,22 @@ public sealed class TickStreamService : ITickStreamService, IDisposable
         {
             var root = doc.RootElement;
 
-            if (root.TryGetProperty("req_id", out var reqIdEl) &&
-                _pending.TryRemove(reqIdEl.GetInt32(), out var tcs))
+            if (root.TryGetProperty("req_id", out var reqIdEl))
             {
-                tcs.TrySetResult(root.Clone());
+                var rid = reqIdEl.GetInt32();
+                if (_pending.TryRemove(rid, out var tcs))
+                {
+                    tcs.TrySetResult(root.Clone());
+                }
             }
 
-            if (root.TryGetProperty("msg_type", out var mt) && mt.GetString() == "tick" &&
-                root.TryGetProperty("tick", out var tickEl))
+            if (root.TryGetProperty("msg_type", out var mt))
             {
-                ProcessTick(tickEl);
+                var msgType = mt.GetString();
+                if (msgType == "tick" && root.TryGetProperty("tick", out var tickEl))
+                {
+                    ProcessTick(tickEl);
+                }
             }
         }
     }
@@ -101,7 +107,7 @@ public sealed class TickStreamService : ITickStreamService, IDisposable
 
         try
         {
-            var root = await SendAndWaitAsync(reqId, payload, ct, timeoutMs: 5000);
+            var root = await SendAndWaitAsync(reqId, payload, ct, timeoutMs: 10000);
 
             if (root.TryGetProperty("error", out var err))
             {
@@ -109,8 +115,10 @@ public sealed class TickStreamService : ITickStreamService, IDisposable
 
                 if (msg != null && msg.Contains("already subscribed", StringComparison.OrdinalIgnoreCase))
                 {
-                    AppLogger.Warn(Src, $"Server says already subscribed to {symbol} — treating as success");
-                    return "";
+                    AppLogger.Warn(Src, $"Server says already subscribed to {symbol} — forget_all and retry");
+                    _subscriptions.TryRemove(symbol, out _);
+                    await ForgetAllTicksAsync(ct);
+                    return await SubscribeAsync(symbol, ct);
                 }
 
                 _subscriptions.TryRemove(symbol, out _);

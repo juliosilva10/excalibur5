@@ -52,11 +52,19 @@ public sealed class StrategyExecutor : IDisposable
     {
         if (!_active) return;
 
+        if (_config.StrategyMode == "Tendência" && HasExpiredUnresolvedPositions())
+        {
+            await Task.Delay(2000);
+            if (!_active) return;
+            ResolveStaleExpiredPositions();
+        }
+
+        var activeCount = CountActivePositions();
         var currentBuying = Interlocked.Increment(ref _buyingCount);
-        if (_positions.Count + currentBuying > _config.MaxConcurrentContracts)
+        if (activeCount + currentBuying > _config.MaxConcurrentContracts)
         {
             Interlocked.Decrement(ref _buyingCount);
-            AppLogger.Info(Src, $"Signal ignored — max contracts reached ({_positions.Count}/{_config.MaxConcurrentContracts})");
+            AppLogger.Info(Src, $"Signal ignored — max contracts reached ({activeCount}/{_config.MaxConcurrentContracts})");
             return;
         }
 
@@ -251,6 +259,67 @@ public sealed class StrategyExecutor : IDisposable
     {
         lock (_positions)
             _positions.Remove(contractId);
+    }
+
+    private void ResolveStaleExpiredPositions()
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        List<TrackedPosition>? stale = null;
+        lock (_positions)
+        {
+            foreach (var kvp in _positions)
+            {
+                if (kvp.Value.ExpiryEpoch <= now && !kvp.Value.IsSelling)
+                {
+                    stale ??= new List<TrackedPosition>();
+                    stale.Add(kvp.Value);
+                }
+            }
+            if (stale != null)
+            {
+                foreach (var pos in stale)
+                    _positions.Remove(pos.ContractId);
+            }
+        }
+
+        if (stale != null)
+        {
+            foreach (var pos in stale)
+            {
+                _engine.RecordTradeResult(pos.Signal.ContributingIndicators, false);
+                RecordResult(pos, -pos.BuyPrice);
+                AppLogger.Info(Src, $"Resolved stale position {pos.ContractId} as loss (martingale level={_martingaleLevel})");
+            }
+        }
+    }
+
+    private bool HasExpiredUnresolvedPositions()
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        lock (_positions)
+        {
+            foreach (var kvp in _positions)
+            {
+                if (kvp.Value.ExpiryEpoch <= now)
+                    return true;
+            }
+        }
+        return false;
+    }
+
+    private int CountActivePositions()
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        lock (_positions)
+        {
+            int count = 0;
+            foreach (var kvp in _positions)
+            {
+                if (kvp.Value.ExpiryEpoch > now)
+                    count++;
+            }
+            return count;
+        }
     }
 
     public void Dispose()

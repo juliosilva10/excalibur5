@@ -17,12 +17,14 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
 
     private readonly IContractService _contractService;
     private readonly StrategyEngine _engine = new();
+    private readonly TrendEngine _trendEngine = new();
     private StrategyExecutor? _executor;
     private string _activeSymbol = string.Empty;
     private EventHandler? _candleHandler;
     private MarketTabViewModel? _activeMarketTab;
     private bool _restoringState;
     private RecoverViewModel? _recoverVm;
+    private long _lastTrendCandleEpoch;
 
     // Config
     [ObservableProperty] private bool _useDuration = true;
@@ -40,11 +42,14 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string _maxContractsText = "3";
     [ObservableProperty] private double _confidenceThreshold = 0.70;
     [ObservableProperty] private string _recoverMode = string.Empty;
-    [ObservableProperty] private int _timeframe = 60;
+    [ObservableProperty] private string _strategyMode = string.Empty;
+    [ObservableProperty] private string _sampleSizeText = "5";
 
     public ObservableCollection<string> AvailableBarrierDisplays { get; } = new();
     public bool UseEndTime => !UseDuration;
     public List<string> RecoverModes { get; } = ["", "Martingale"];
+    public List<string> StrategyModes { get; } = ["", "Tendência"];
+    public bool IsTrendMode => StrategyMode == "Tendência";
 
     // Indicators
     [ObservableProperty] private bool _enableEma = true;
@@ -90,6 +95,8 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
         MaxContractsText = s.MaxContractsText;
         ConfidenceThreshold = s.ConfidenceThreshold;
         RecoverMode = s.RecoverMode;
+        StrategyMode = s.StrategyMode;
+        SampleSizeText = s.SampleSizeText;
         EnableEma = s.EnableEma;
         EnableRsi = s.EnableRsi;
         EnableSupportResistance = s.EnableSupportResistance;
@@ -116,6 +123,8 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
             MaxContractsText = MaxContractsText,
             ConfidenceThreshold = ConfidenceThreshold,
             RecoverMode = RecoverMode,
+            StrategyMode = StrategyMode,
+            SampleSizeText = SampleSizeText,
             EnableEma = EnableEma,
             EnableRsi = EnableRsi,
             EnableSupportResistance = EnableSupportResistance,
@@ -141,8 +150,13 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
             _ => "Intervalo: 1 - 1440 minutos"
         };
         SaveState();
+        UpdateChartGranularity();
     }
-    partial void OnDurationTextChanged(string value) => SaveState();
+    partial void OnDurationTextChanged(string value)
+    {
+        SaveState();
+        UpdateChartGranularity();
+    }
     partial void OnSelectedEndDateChanged(DateTime value) => SaveState();
     partial void OnDirectionModeChanged(string value) => SaveState();
     partial void OnStakeTextChanged(string value) => SaveState();
@@ -159,6 +173,13 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
     partial void OnEnableMomentumChanged(bool value) => SaveState();
     partial void OnEnableTrailingStopChanged(bool value) => SaveState();
     partial void OnRecoverModeChanged(string value) => SaveState();
+    partial void OnStrategyModeChanged(string value)
+    {
+        OnPropertyChanged(nameof(IsTrendMode));
+        SaveState();
+        UpdateChartGranularity();
+    }
+    partial void OnSampleSizeTextChanged(string value) => SaveState();
 
     [RelayCommand]
     private void ToggleBot()
@@ -185,23 +206,32 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
         _executor.TradeExecuted += OnTradeExecuted;
         _executor.PositionOpened += OnBotPositionOpened;
 
-        _engine.Start(config);
-        _executor.Start(config, _activeSymbol);
+        if (!IsTrendMode)
+        {
+            _engine.Start(config);
+            _executor.Start(config, _activeSymbol);
 
-        // Feed existing candles without generating signals
-        _engine.BeginBulkFeed();
-        foreach (var candle in _activeMarketTab.CandleValues)
-            _engine.FeedCandle(candle);
-        _engine.EndBulkFeed();
+            _engine.BeginBulkFeed();
+            foreach (var candle in _activeMarketTab.CandleValues)
+                _engine.FeedCandle(candle);
+            _engine.EndBulkFeed();
+        }
+        else
+        {
+            _executor.Start(config, _activeSymbol);
+            _lastTrendCandleEpoch = _activeMarketTab.CandleValues.Count > 0
+                ? _activeMarketTab.CandleValues[^1].Epoch : 0;
+        }
 
-        // Subscribe to new candles
         _candleHandler = (_, _) => OnCandleUpdated();
         _activeMarketTab.CandleUpdated += _candleHandler;
+
+        _activeMarketTab.ContractPanel.LockBarrier();
 
         IsRunning = true;
         IsPaused = false;
         CurrentSignalText = "Analisando...";
-        AppLogger.Info(Src, $"Bot started on {_activeSymbol}");
+        AppLogger.Info(Src, $"Bot started on {_activeSymbol} (mode={StrategyMode})");
     }
 
     [RelayCommand]
@@ -236,6 +266,8 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
             _candleHandler = null;
         }
 
+        _activeMarketTab?.ContractPanel.UnlockBarrier();
+
         IsRunning = false;
         IsPaused = false;
         CurrentSignalText = "Parado";
@@ -258,6 +290,7 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
         {
             _activeMarketTab.ContractPanel.PropertyChanged += OnContractPanelSync;
             SyncFromContractPanel();
+            UpdateChartGranularity();
         }
     }
 
@@ -298,7 +331,44 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
         var candles = _activeMarketTab.CandleValues;
         if (candles.Count == 0) return;
 
-        _engine.FeedCandle(candles[^1]);
+        if (IsTrendMode)
+        {
+            var lastCandle = candles[^1];
+            if (lastCandle.Epoch <= _lastTrendCandleEpoch) return;
+            _lastTrendCandleEpoch = lastCandle.Epoch;
+
+            var sampleSize = int.TryParse(SampleSizeText, out var ss) && ss >= 1 ? ss : 5;
+            var direction = _trendEngine.Evaluate(candles, sampleSize);
+
+            Application.Current?.Dispatcher?.InvokeAsync(() =>
+            {
+                if (direction == null)
+                {
+                    CurrentSignalText = "Empate — aguardando tendência";
+                    return;
+                }
+
+                var dir = direction == SignalDirection.Call ? "CALL" : "PUT";
+                CurrentSignalText = $"Tendência: {dir} ({sampleSize} candles)";
+            });
+
+            if (direction != null)
+            {
+                var signal = new TradeSignal
+                {
+                    Direction = direction.Value,
+                    Confidence = 1.0,
+                    Reason = $"Tendência {sampleSize} candles",
+                    Timestamp = DateTimeOffset.UtcNow,
+                    ContributingIndicators = new List<IndicatorType>()
+                };
+                _engine.EmitExternalSignal(signal);
+            }
+        }
+        else
+        {
+            _engine.FeedCandle(candles[^1]);
+        }
     }
 
     private void OnSignalGenerated(object? sender, TradeSignal signal)
@@ -356,7 +426,6 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
 
         return new StrategyConfig
         {
-            Timeframe = Timeframe,
             AllowedDirection = direction,
             Stake = decimal.TryParse(StakeText, NumberStyles.Any, CultureInfo.InvariantCulture, out var s) ? s : 10m,
             TakeProfitUsd = decimal.TryParse(TakeProfitText, NumberStyles.Any, CultureInfo.InvariantCulture, out var tp) ? tp : 5m,
@@ -364,12 +433,14 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
             MaxConcurrentContracts = int.TryParse(MaxContractsText, out var mc) ? mc : 3,
             DurationSeconds = CalculateDurationSeconds(),
             ConfidenceThreshold = ConfidenceThreshold,
-            EnableTrailingStop = EnableTrailingStop,
+            EnableTrailingStop = IsTrendMode ? false : EnableTrailingStop,
             RecoverMode = RecoverMode,
             MartingaleFactor = _recoverVm?.Factor ?? 2.0m,
             MartingaleMaxLevel = _recoverVm?.MaxLevel ?? 3,
             EnabledIndicators = indicators,
-            Barrier = GetSelectedBarrier()
+            Barrier = GetSelectedBarrier(),
+            StrategyMode = StrategyMode,
+            SampleSize = int.TryParse(SampleSizeText, out var ss) && ss >= 1 ? ss : 5
         };
     }
 
@@ -384,11 +455,26 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
         };
     }
 
+    private void UpdateChartGranularity()
+    {
+        if (_restoringState || _activeMarketTab == null) return;
+        var seconds = CalculateDurationSeconds();
+        _ = _activeMarketTab.SetCandleGranularityAsync(seconds);
+    }
+
     private string GetSelectedBarrier()
     {
-        if (string.IsNullOrEmpty(SelectedBarrierDisplay))
-            return "+0";
-        return SelectedBarrierDisplay;
+        if (_activeMarketTab != null)
+        {
+            var cpBarrier = _activeMarketTab.ContractPanel.SelectedBarrierDisplay;
+            if (!string.IsNullOrEmpty(cpBarrier))
+                return cpBarrier;
+        }
+
+        if (!string.IsNullOrEmpty(SelectedBarrierDisplay))
+            return SelectedBarrierDisplay;
+
+        return "+0.000";
     }
 
     public void Dispose()

@@ -44,35 +44,42 @@
                                FontWeight="SemiBold" VerticalAlignment="Center"/>
                 </StackPanel>
 
-                <!-- Timeframe -->
-                <TextBlock Text="Timeframe" Foreground="#90b5c9" FontSize="10" Margin="0,0,0,4"/>
+                <!-- Estratégia -->
+                <TextBlock Text="Estratégia" Foreground="#90b5c9" FontSize="10" Margin="0,0,0,4"/>
                 <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
-                    <RadioButton Content="1m" Tag="60" GroupName="Timeframe"
-                                 IsChecked="True" Click="Timeframe_Click"
-                                 Foreground="#a3b8cc" FontSize="11" Margin="0,0,10,0" Cursor="Hand"/>
-                    <RadioButton Content="5m" Tag="300" GroupName="Timeframe"
-                                 Click="Timeframe_Click"
-                                 Foreground="#a3b8cc" FontSize="11" Margin="0,0,10,0" Cursor="Hand"/>
-                    <RadioButton Content="15m" Tag="900" GroupName="Timeframe"
-                                 Click="Timeframe_Click"
-                                 Foreground="#a3b8cc" FontSize="11" Margin="0,0,10,0" Cursor="Hand"/>
-                    <RadioButton Content="1h" Tag="3600" GroupName="Timeframe"
-                                 Click="Timeframe_Click"
-                                 Foreground="#a3b8cc" FontSize="11" Cursor="Hand"/>
+                    <ComboBox Style="{StaticResource DerivComboBox}"
+                              ItemsSource="{Binding StrategyModes}"
+                              SelectedItem="{Binding StrategyMode, Mode=TwoWay}"
+                              Width="120" Height="22"
+                              FontSize="10"
+                              Foreground="#00f0ff"
+                              ToolTip="Modo de estratégia"/>
                 </StackPanel>
 
-                <!-- Direction -->
-                <TextBlock Text="Direção" Foreground="#90b5c9" FontSize="10" Margin="0,0,0,4"/>
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
-                    <RadioButton Content="Call" Tag="Call" GroupName="Direction"
-                                 Click="Direction_Click"
-                                 Foreground="#a3b8cc" FontSize="11" Margin="0,0,10,0" Cursor="Hand"/>
-                    <RadioButton Content="Put" Tag="Put" GroupName="Direction"
-                                 Click="Direction_Click"
-                                 Foreground="#a3b8cc" FontSize="11" Margin="0,0,10,0" Cursor="Hand"/>
-                    <RadioButton Content="Ambos" Tag="Ambos" GroupName="Direction"
-                                 IsChecked="True" Click="Direction_Click"
-                                 Foreground="#a3b8cc" FontSize="11" Cursor="Hand"/>
+                <!-- Amostra (only in Trend mode) -->
+                <StackPanel Margin="0,0,0,10"
+                            Visibility="{Binding IsTrendMode, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Text="Amostra" Foreground="#90b5c9" FontSize="10" Margin="0,0,0,4"/>
+                    <TextBox Style="{StaticResource DerivTextBox}"
+                             Text="{Binding SampleSizeText, UpdateSourceTrigger=PropertyChanged}"
+                             Height="28" Width="80" HorizontalAlignment="Left" MaxLength="3"
+                             ToolTip="Quantidade de candles analisados para determinar a tendência (mín. 1)"/>
+                </StackPanel>
+
+                <!-- Direction (hidden in Trend mode) -->
+                <StackPanel Visibility="{Binding IsTrendMode, Converter={StaticResource InverseBoolToVis}}">
+                    <TextBlock Text="Direção" Foreground="#90b5c9" FontSize="10" Margin="0,0,0,4"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                        <RadioButton Content="Call" Tag="Call" GroupName="Direction"
+                                     Click="Direction_Click"
+                                     Foreground="#a3b8cc" FontSize="11" Margin="0,0,10,0" Cursor="Hand"/>
+                        <RadioButton Content="Put" Tag="Put" GroupName="Direction"
+                                     Click="Direction_Click"
+                                     Foreground="#a3b8cc" FontSize="11" Margin="0,0,10,0" Cursor="Hand"/>
+                        <RadioButton Content="Ambos" Tag="Ambos" GroupName="Direction"
+                                     IsChecked="True" Click="Direction_Click"
+                                     Foreground="#a3b8cc" FontSize="11" Cursor="Hand"/>
+                    </StackPanel>
                 </StackPanel>
 
                 <!-- Duration + Stake (side by side) -->
@@ -143,49 +150,52 @@
                 </Grid>
 
                 <!-- Separator -->
-                <Border Height="1" Background="#1d4957" Margin="0,0,0,10"/>
+                <Border Height="1" Background="#1d4957" Margin="0,0,0,10"
+                        Visibility="{Binding IsTrendMode, Converter={StaticResource InverseBoolToVis}}"/>
 
-                <!-- Indicators -->
-                <TextBlock Text="Indicadores" Foreground="#90b5c9" FontSize="10" Margin="0,0,0,6"/>
-                <CheckBox Content="EMA 9/21 (cruzamento)"
-                          IsChecked="{Binding EnableEma}"
-                          Foreground="#a3b8cc" FontSize="11" Margin="0,0,0,4" Cursor="Hand"/>
-                <CheckBox Content="RSI (14)"
-                          IsChecked="{Binding EnableRsi}"
-                          Foreground="#a3b8cc" FontSize="11" Margin="0,0,0,4" Cursor="Hand"/>
-                <CheckBox Content="Suporte/Resistência"
-                          IsChecked="{Binding EnableSupportResistance}"
-                          Foreground="#a3b8cc" FontSize="11" Margin="0,0,0,4" Cursor="Hand"/>
-                <CheckBox Content="MACD (12/26/9)"
-                          IsChecked="{Binding EnableMacd}"
-                          Foreground="#a3b8cc" FontSize="11" Margin="0,0,0,4" Cursor="Hand"/>
-                <CheckBox Content="Bollinger Bands (20,2)"
-                          IsChecked="{Binding EnableBollinger}"
-                          Foreground="#a3b8cc" FontSize="11" Margin="0,0,0,4" Cursor="Hand"/>
-                <CheckBox Content="Padrões de Candles"
-                          IsChecked="{Binding EnableCandlePattern}"
-                          Foreground="#a3b8cc" FontSize="11" Margin="0,0,0,4" Cursor="Hand"/>
-                <CheckBox Content="Momentum (ROC)"
-                          IsChecked="{Binding EnableMomentum}"
-                          Foreground="#a3b8cc" FontSize="11" Margin="0,0,0,10" Cursor="Hand"/>
+                <!-- Indicators (hidden in Trend mode) -->
+                <StackPanel Visibility="{Binding IsTrendMode, Converter={StaticResource InverseBoolToVis}}">
+                    <TextBlock Text="Indicadores" Foreground="#90b5c9" FontSize="10" Margin="0,0,0,6"/>
+                    <CheckBox Content="EMA 9/21 (cruzamento)"
+                              IsChecked="{Binding EnableEma}"
+                              Foreground="#a3b8cc" FontSize="11" Margin="0,0,0,4" Cursor="Hand"/>
+                    <CheckBox Content="RSI (14)"
+                              IsChecked="{Binding EnableRsi}"
+                              Foreground="#a3b8cc" FontSize="11" Margin="0,0,0,4" Cursor="Hand"/>
+                    <CheckBox Content="Suporte/Resistência"
+                              IsChecked="{Binding EnableSupportResistance}"
+                              Foreground="#a3b8cc" FontSize="11" Margin="0,0,0,4" Cursor="Hand"/>
+                    <CheckBox Content="MACD (12/26/9)"
+                              IsChecked="{Binding EnableMacd}"
+                              Foreground="#a3b8cc" FontSize="11" Margin="0,0,0,4" Cursor="Hand"/>
+                    <CheckBox Content="Bollinger Bands (20,2)"
+                              IsChecked="{Binding EnableBollinger}"
+                              Foreground="#a3b8cc" FontSize="11" Margin="0,0,0,4" Cursor="Hand"/>
+                    <CheckBox Content="Padrões de Candles"
+                              IsChecked="{Binding EnableCandlePattern}"
+                              Foreground="#a3b8cc" FontSize="11" Margin="0,0,0,4" Cursor="Hand"/>
+                    <CheckBox Content="Momentum (ROC)"
+                              IsChecked="{Binding EnableMomentum}"
+                              Foreground="#a3b8cc" FontSize="11" Margin="0,0,0,10" Cursor="Hand"/>
 
-                <!-- Confidence -->
-                <TextBlock Text="Confiança mínima" Foreground="#90b5c9" FontSize="10" Margin="0,0,0,4"/>
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
-                    <Slider Width="160"
-                            Style="{StaticResource ConfidenceSliderStyle}"
-                            Value="{Binding ConfidenceThreshold}"
-                            VerticalAlignment="Center"/>
-                    <TextBlock Text="{Binding ConfidenceThreshold, StringFormat=P0}"
-                               Foreground="#e0eef8" FontSize="11"
-                               FontFamily="Consolas" Margin="8,0,0,0"
-                               VerticalAlignment="Center"/>
+                    <!-- Confidence -->
+                    <TextBlock Text="Confiança mínima" Foreground="#90b5c9" FontSize="10" Margin="0,0,0,4"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                        <Slider Width="160"
+                                Style="{StaticResource ConfidenceSliderStyle}"
+                                Value="{Binding ConfidenceThreshold}"
+                                VerticalAlignment="Center"/>
+                        <TextBlock Text="{Binding ConfidenceThreshold, StringFormat=P0}"
+                                   Foreground="#e0eef8" FontSize="11"
+                                   FontFamily="Consolas" Margin="8,0,0,0"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+
+                    <!-- Trailing Stop -->
+                    <CheckBox Content="Trailing Stop (TP 70%→BE, 90%→50%)"
+                              IsChecked="{Binding EnableTrailingStop}"
+                              Foreground="#a3b8cc" FontSize="11" Margin="0,0,0,14" Cursor="Hand"/>
                 </StackPanel>
-
-                <!-- Trailing Stop -->
-                <CheckBox Content="Trailing Stop (TP 70%→BE, 90%→50%)"
-                          IsChecked="{Binding EnableTrailingStop}"
-                          Foreground="#a3b8cc" FontSize="11" Margin="0,0,0,14" Cursor="Hand"/>
 
                 <!-- Separator -->
                 <Border Height="1" Background="#1d4957" Margin="0,0,0,10"/>

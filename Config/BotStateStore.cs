@@ -50,4 +50,6 @@ public class BotState
     public bool EnableMomentum { get; set; } = true;
     public bool EnableTrailingStop { get; set; } = true;
     public string RecoverMode { get; set; } = string.Empty;
+    public string StrategyMode { get; set; } = string.Empty;
+    public string SampleSizeText { get; set; } = "5";
 }

@@ -2,7 +2,6 @@ namespace Excalibur5.Models.Strategy;
 
 public sealed class StrategyConfig
 {
-    public int Timeframe { get; set; } = 60; // granularity in seconds
     public SignalDirection AllowedDirection { get; set; } = SignalDirection.None; // None = Both
     public decimal Stake { get; set; } = 10m;
     public decimal TakeProfitUsd { get; set; } = 5m;
@@ -14,7 +13,9 @@ public sealed class StrategyConfig
     public string RecoverMode { get; set; } = string.Empty;
     public decimal MartingaleFactor { get; set; } = 2.0m;
     public int MartingaleMaxLevel { get; set; } = 3;
-    public string Barrier { get; set; } = "+0";
+    public string Barrier { get; set; } = "+0.000";
+    public string StrategyMode { get; set; } = string.Empty;
+    public int SampleSize { get; set; } = 5;
     public List<IndicatorType> EnabledIndicators { get; set; } = new()
     {
         IndicatorType.EmaCrossover,
