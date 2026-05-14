@@ -8,13 +8,17 @@
 
     <Border Width="280" CornerRadius="6"
             BorderBrush="#1d4957" BorderThickness="1"
-            Margin="4,0,0,0">
+            Margin="0">
         <Border.Background>
             <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
                 <GradientStop Color="#0c1e2a" Offset="0"/>
                 <GradientStop Color="#07121a" Offset="1"/>
             </LinearGradientBrush>
         </Border.Background>
+        <Border.Effect>
+            <DropShadowEffect Color="Black" BlurRadius="24" ShadowDepth="6"
+                              Direction="180" Opacity="0.7"/>
+        </Border.Effect>
 
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <StackPanel Margin="12,10">

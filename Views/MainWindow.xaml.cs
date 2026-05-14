@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using Excalibur5.Config;
 using Excalibur5.ViewModels;
 
@@ -11,6 +12,8 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         Loaded += OnLoaded;
+        LocationChanged += OnWindowMoved;
+        SizeChanged += OnWindowResized;
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -59,5 +62,23 @@ public partial class MainWindow : Window
         if (DataContext is MainViewModel vm)
             vm.Dispose();
         base.OnClosed(e);
+    }
+
+    private void OnWindowMoved(object? sender, EventArgs e) => RepositionBotPopup();
+
+    private void OnWindowResized(object sender, SizeChangedEventArgs e) => RepositionBotPopup();
+
+    private void RepositionBotPopup()
+    {
+        if (BotPopup.IsOpen)
+        {
+            BotPopup.HorizontalOffset += 1;
+            BotPopup.HorizontalOffset -= 1;
+        }
+    }
+
+    private CustomPopupPlacement[] BotPopup_Placement(Size popupSize, Size targetSize, Point offset)
+    {
+        return new[] { new CustomPopupPlacement(new Point(targetSize.Width, 0), PopupPrimaryAxis.Vertical) };
     }
 }

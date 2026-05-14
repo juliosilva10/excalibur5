@@ -406,6 +406,44 @@ public sealed class ContractService : IContractService, IDisposable
         return new BuyResponse { Error = "Unexpected response" };
     }
 
+    public async Task<BuyResponse> BuyDirectAsync(string symbol, string contractType, decimal stake, int duration, string durationUnit, CancellationToken ct = default)
+    {
+        var reqId = Interlocked.Increment(ref _reqId);
+        var dict = new Dictionary<string, object>
+        {
+            ["proposal"] = 1,
+            ["amount"] = stake.ToString(CultureInfo.InvariantCulture),
+            ["basis"] = "stake",
+            ["contract_type"] = contractType,
+            ["currency"] = "USD",
+            ["symbol"] = symbol,
+            ["duration"] = duration,
+            ["duration_unit"] = durationUnit,
+            ["req_id"] = reqId
+        };
+
+        var payload = JsonSerializer.Serialize(dict);
+        var root = await SendAndWaitAsync(reqId, payload, ct);
+
+        if (root.TryGetProperty("error", out var err))
+        {
+            var msg = err.TryGetProperty("message", out var m) ? m.GetString() ?? "unknown" : "unknown";
+            AppLogger.Error(Src, $"BuyDirect proposal error: {msg}");
+            return new BuyResponse { Error = msg };
+        }
+
+        var proposalId = root.TryGetProperty("proposal", out var propEl) &&
+                         propEl.TryGetProperty("id", out var idEl)
+            ? idEl.GetString() ?? ""
+            : "";
+
+        if (string.IsNullOrEmpty(proposalId))
+            return new BuyResponse { Error = "No proposal ID returned" };
+
+        var askPrice = propEl.TryGetProperty("ask_price", out var ap) ? ParseDecimal(ap) : stake;
+        return await BuyContractAsync(proposalId, askPrice, ct);
+    }
+
     public async Task SubscribeOpenContractAsync(long contractId, CancellationToken ct = default)
     {
         var reqId = Interlocked.Increment(ref _reqId);

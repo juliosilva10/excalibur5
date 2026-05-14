@@ -500,7 +500,8 @@
                    Visibility="{Binding StatusMessage, Converter={StaticResource BoolToVis}}"/>
 
         <!-- ===== MAIN CONTENT AREA ===== -->
-        <Border Grid.Row="1"
+        <Border x:Name="MainContentBorder"
+                Grid.Row="1"
                 BorderBrush="{StaticResource DerivCardBorderBrush}"
                 BorderThickness="1"
                 CornerRadius="8"
@@ -520,7 +521,6 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
                 <!-- Sidebar -->
@@ -738,12 +738,27 @@
                     </Grid>
                 </Grid>
 
-                <!-- Strategy Bot Panel (right side) -->
-                <controls:StrategyPanelView Grid.Column="2"
-                                             DataContext="{Binding Strategy}"
-                                             Visibility="{Binding IsBotVisible, Converter={StaticResource BoolToVis}}"/>
+                <!-- Anchor for bot popup positioning -->
+                <Border x:Name="BotPopupAnchor"
+                        Grid.Column="1"
+                        Width="0"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Top"/>
+
             </Grid>
+
         </Border>
+
+        <!-- Strategy Bot Panel (flyout externo à direita da janela) -->
+        <Popup x:Name="BotPopup"
+               IsOpen="{Binding Strategy.IsBotVisible}"
+               Placement="Custom"
+               CustomPopupPlacementCallback="BotPopup_Placement"
+               PlacementTarget="{Binding ElementName=MainContentBorder}"
+               AllowsTransparency="True"
+               StaysOpen="True">
+            <controls:StrategyPanelView DataContext="{Binding Strategy}"/>
+        </Popup>
 
     </Grid>
 </Window>

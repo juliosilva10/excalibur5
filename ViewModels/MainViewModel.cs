@@ -73,7 +73,6 @@ public partial class MainViewModel : ObservableObject, IDisposable
             if (e.PropertyName == nameof(Markets.IsMarketsVisible) && Markets.IsMarketsVisible)
             {
                 Log.IsLogVisible = false;
-                Strategy.IsBotVisible = false;
             }
             if (e.PropertyName == nameof(Markets.IsMarketsVisible) || e.PropertyName == nameof(Markets.SelectedTab))
             {
@@ -87,15 +86,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
             if (e.PropertyName == nameof(Log.IsLogVisible) && Log.IsLogVisible)
             {
                 Markets.IsMarketsVisible = false;
-                Strategy.IsBotVisible = false;
             }
             if (e.PropertyName == nameof(Log.IsLogVisible))
                 SaveUiState();
-        };
-        Strategy.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName == nameof(Strategy.IsBotVisible) && Strategy.IsBotVisible)
-                Log.IsLogVisible = false;
         };
 
         _api.Authorized     += OnAuthorized;
