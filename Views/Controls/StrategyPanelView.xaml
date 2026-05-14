@@ -132,11 +132,23 @@
                           Foreground="#a3b8cc" FontSize="11" Margin="0,0,0,4" Cursor="Hand"/>
                 <CheckBox Content="Suporte/Resistência"
                           IsChecked="{Binding EnableSupportResistance}"
+                          Foreground="#a3b8cc" FontSize="11" Margin="0,0,0,4" Cursor="Hand"/>
+                <CheckBox Content="MACD (12/26/9)"
+                          IsChecked="{Binding EnableMacd}"
+                          Foreground="#a3b8cc" FontSize="11" Margin="0,0,0,4" Cursor="Hand"/>
+                <CheckBox Content="Bollinger Bands (20,2)"
+                          IsChecked="{Binding EnableBollinger}"
+                          Foreground="#a3b8cc" FontSize="11" Margin="0,0,0,4" Cursor="Hand"/>
+                <CheckBox Content="Padrões de Candles"
+                          IsChecked="{Binding EnableCandlePattern}"
+                          Foreground="#a3b8cc" FontSize="11" Margin="0,0,0,4" Cursor="Hand"/>
+                <CheckBox Content="Momentum (ROC)"
+                          IsChecked="{Binding EnableMomentum}"
                           Foreground="#a3b8cc" FontSize="11" Margin="0,0,0,10" Cursor="Hand"/>
 
                 <!-- Confidence -->
                 <TextBlock Text="Confiança mínima" Foreground="#90b5c9" FontSize="10" Margin="0,0,0,4"/>
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
                     <Slider Width="160"
                             Style="{StaticResource ConfidenceSliderStyle}"
                             Value="{Binding ConfidenceThreshold}"
@@ -146,6 +158,11 @@
                                FontFamily="Consolas" Margin="8,0,0,0"
                                VerticalAlignment="Center"/>
                 </StackPanel>
+
+                <!-- Trailing Stop -->
+                <CheckBox Content="Trailing Stop (TP 70%→BE, 90%→50%)"
+                          IsChecked="{Binding EnableTrailingStop}"
+                          Foreground="#a3b8cc" FontSize="11" Margin="0,0,0,14" Cursor="Hand"/>
 
                 <!-- Separator -->
                 <Border Height="1" Background="#1d4957" Margin="0,0,0,10"/>

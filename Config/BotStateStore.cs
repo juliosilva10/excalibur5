@@ -43,4 +43,9 @@ public class BotState
     public bool EnableEma { get; set; } = true;
     public bool EnableRsi { get; set; } = true;
     public bool EnableSupportResistance { get; set; } = true;
+    public bool EnableMacd { get; set; } = true;
+    public bool EnableBollinger { get; set; } = true;
+    public bool EnableCandlePattern { get; set; } = true;
+    public bool EnableMomentum { get; set; } = true;
+    public bool EnableTrailingStop { get; set; } = true;
 }

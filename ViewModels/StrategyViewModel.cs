@@ -35,6 +35,11 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool _enableEma = true;
     [ObservableProperty] private bool _enableRsi = true;
     [ObservableProperty] private bool _enableSupportResistance = true;
+    [ObservableProperty] private bool _enableMacd = true;
+    [ObservableProperty] private bool _enableBollinger = true;
+    [ObservableProperty] private bool _enableCandlePattern = true;
+    [ObservableProperty] private bool _enableMomentum = true;
+    [ObservableProperty] private bool _enableTrailingStop = true;
 
     // Status
     [ObservableProperty] private bool _isRunning;
@@ -66,6 +71,11 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
         EnableEma = s.EnableEma;
         EnableRsi = s.EnableRsi;
         EnableSupportResistance = s.EnableSupportResistance;
+        EnableMacd = s.EnableMacd;
+        EnableBollinger = s.EnableBollinger;
+        EnableCandlePattern = s.EnableCandlePattern;
+        EnableMomentum = s.EnableMomentum;
+        EnableTrailingStop = s.EnableTrailingStop;
         _restoringState = false;
     }
 
@@ -84,7 +94,12 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
             ConfidenceThreshold = ConfidenceThreshold,
             EnableEma = EnableEma,
             EnableRsi = EnableRsi,
-            EnableSupportResistance = EnableSupportResistance
+            EnableSupportResistance = EnableSupportResistance,
+            EnableMacd = EnableMacd,
+            EnableBollinger = EnableBollinger,
+            EnableCandlePattern = EnableCandlePattern,
+            EnableMomentum = EnableMomentum,
+            EnableTrailingStop = EnableTrailingStop
         });
     }
 
@@ -99,6 +114,11 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
     partial void OnEnableEmaChanged(bool value) => SaveState();
     partial void OnEnableRsiChanged(bool value) => SaveState();
     partial void OnEnableSupportResistanceChanged(bool value) => SaveState();
+    partial void OnEnableMacdChanged(bool value) => SaveState();
+    partial void OnEnableBollingerChanged(bool value) => SaveState();
+    partial void OnEnableCandlePatternChanged(bool value) => SaveState();
+    partial void OnEnableMomentumChanged(bool value) => SaveState();
+    partial void OnEnableTrailingStopChanged(bool value) => SaveState();
 
     [RelayCommand]
     private void ToggleBot()
@@ -233,6 +253,10 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
         if (EnableEma) indicators.Add(IndicatorType.EmaCrossover);
         if (EnableRsi) indicators.Add(IndicatorType.Rsi);
         if (EnableSupportResistance) indicators.Add(IndicatorType.SupportResistance);
+        if (EnableMacd) indicators.Add(IndicatorType.Macd);
+        if (EnableBollinger) indicators.Add(IndicatorType.BollingerBands);
+        if (EnableCandlePattern) indicators.Add(IndicatorType.CandlePattern);
+        if (EnableMomentum) indicators.Add(IndicatorType.Momentum);
 
         var direction = DirectionMode switch
         {
@@ -251,6 +275,7 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
             MaxConcurrentContracts = int.TryParse(MaxContractsText, out var mc) ? mc : 3,
             DurationMinutes = DurationMinutes,
             ConfidenceThreshold = ConfidenceThreshold,
+            EnableTrailingStop = EnableTrailingStop,
             EnabledIndicators = indicators
         };
     }

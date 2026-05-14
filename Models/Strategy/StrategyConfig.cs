@@ -10,10 +10,15 @@ public sealed class StrategyConfig
     public int MaxConcurrentContracts { get; set; } = 3;
     public double ConfidenceThreshold { get; set; } = 0.70;
     public int DurationMinutes { get; set; } = 5;
+    public bool EnableTrailingStop { get; set; } = true;
     public List<IndicatorType> EnabledIndicators { get; set; } = new()
     {
         IndicatorType.EmaCrossover,
         IndicatorType.Rsi,
-        IndicatorType.SupportResistance
+        IndicatorType.SupportResistance,
+        IndicatorType.Macd,
+        IndicatorType.BollingerBands,
+        IndicatorType.CandlePattern,
+        IndicatorType.Momentum
     };
 }

@@ -248,6 +248,10 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
             // Always load contracts even if tick/history failed
             await ContractPanel.LoadContractsAsync(Symbol, DisplayName);
             UpdateCandlesEnabled();
+
+            // Reload candles if chart was already in candle mode
+            if (ChartType == ChartType.Candles)
+                _ = LoadCandlesAsync();
         }
         catch (Exception ex)
         {

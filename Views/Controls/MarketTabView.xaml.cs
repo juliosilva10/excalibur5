@@ -498,7 +498,7 @@ public partial class MarketTabView : UserControl
         if (ChartCanvas == null) return;
 
         var vm = Vm;
-        if (vm == null || vm.ChartValues.Count < 2)
+        if (vm == null)
         {
             ChartCanvas.Children.Clear();
             YAxisCanvas.Children.Clear();
@@ -514,6 +514,30 @@ public partial class MarketTabView : UserControl
         var chartWidth  = ChartCanvas.ActualWidth;
         var chartHeight = ChartCanvas.ActualHeight;
         if (chartWidth <= 0 || chartHeight <= 0) return;
+
+        if (vm.ChartType == ChartType.Candles)
+        {
+            if (vm.CandleValues.Count < 2) return;
+            var (cStart, cEnd) = GetVisibleCandleRange(vm);
+            _visibleCandleStart = cStart;
+            _visibleCandleEnd = cEnd;
+            DrawCandles(cStart, cEnd, chartWidth, chartHeight);
+            DrawXAxisCandles(chartWidth, cStart, cEnd);
+            return;
+        }
+
+        if (vm.ChartValues.Count < 2)
+        {
+            ChartCanvas.Children.Clear();
+            YAxisCanvas.Children.Clear();
+            XAxisCanvas.Children.Clear();
+            _chartLine = null;
+            _crosshairLine = null;
+            _tooltipBorder = null;
+            _tooltipText = null;
+            _tooltipDot = null;
+            return;
+        }
 
         var (start, end) = GetVisibleRange();
         _visibleStart = start;
@@ -535,17 +559,6 @@ public partial class MarketTabView : UserControl
         _drawPadTop = chartHeight * 0.06;
         double padBot = chartHeight * 0.06;
         _drawH = chartHeight - _drawPadTop - padBot;
-
-        if (vm.ChartType == ChartType.Candles)
-        {
-            if (vm.CandleValues.Count < 2) return;
-            var (cStart, cEnd) = GetVisibleCandleRange(vm);
-            _visibleCandleStart = cStart;
-            _visibleCandleEnd = cEnd;
-            DrawCandles(cStart, cEnd, chartWidth, chartHeight);
-            DrawXAxisCandles(chartWidth, cStart, cEnd);
-            return;
-        }
 
         var points = new PointCollection(count);
         for (int i = 0; i < count; i++)

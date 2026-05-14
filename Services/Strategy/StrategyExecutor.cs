@@ -4,10 +4,6 @@ using Excalibur5.Services;
 
 namespace Excalibur5.Services.Strategy;
 
-/// <summary>
-/// Executes trades based on signals from the StrategyEngine.
-/// Monitors open positions and auto-sells at TP/SL.
-/// </summary>
 public sealed class StrategyExecutor : IDisposable
 {
     private const string Src = "StrategyExecutor";
@@ -40,7 +36,7 @@ public sealed class StrategyExecutor : IDisposable
         _symbol = symbol;
         _active = true;
         _buyingCount = 0;
-        AppLogger.Info(Src, $"Executor started for {symbol}, TP={config.TakeProfitUsd}, SL={config.StopLossUsd}");
+        AppLogger.Info(Src, $"Executor started for {symbol}, TP={config.TakeProfitUsd}, SL={config.StopLossUsd}, trailing={config.EnableTrailingStop}");
     }
 
     public void Stop()
@@ -70,7 +66,7 @@ public sealed class StrategyExecutor : IDisposable
                 contractType,
                 _config.Stake,
                 _config.DurationMinutes,
-                "m"); // minutes
+                "m");
 
             if (result.ContractId > 0)
             {
@@ -79,7 +75,8 @@ public sealed class StrategyExecutor : IDisposable
                     ContractId = result.ContractId,
                     Direction = signal.Direction,
                     BuyPrice = result.BuyPrice,
-                    Signal = signal
+                    Signal = signal,
+                    DynamicStopLoss = -_config.StopLossUsd
                 };
                 lock (_positions)
                     _positions[result.ContractId] = tracked;
@@ -92,7 +89,7 @@ public sealed class StrategyExecutor : IDisposable
             }
             else
             {
-                AppLogger.Warn(Src, "Buy returned no contract ID");
+                AppLogger.Warn(Src, $"Buy returned no contract ID: {result.Error}");
             }
         }
         catch (Exception ex)
@@ -116,26 +113,56 @@ public sealed class StrategyExecutor : IDisposable
 
         if (!_active) return;
 
-        // Check if contract ended naturally
         if (update.IsExpired || update.IsSold || update.Status is "sold" or "won" or "lost")
         {
+            bool won = update.Profit >= 0;
+            _engine.RecordTradeResult(tracked.Signal.ContributingIndicators, won);
             RecordResult(tracked, update.Profit);
             RemovePosition(update.ContractId);
             return;
         }
 
+        // Trailing stop logic
+        if (_config.EnableTrailingStop && update.Profit > 0)
+        {
+            decimal tp = _config.TakeProfitUsd;
+
+            // At 90% TP: move SL to 50% of TP
+            if (update.Profit >= tp * 0.9m)
+            {
+                decimal newSl = tp * 0.5m;
+                if (newSl > tracked.DynamicStopLoss)
+                {
+                    tracked.DynamicStopLoss = newSl;
+                    AppLogger.Info(Src, $"Trailing SL → +{newSl:F2} for {update.ContractId}");
+                }
+            }
+            // At 70% TP: move SL to breakeven
+            else if (update.Profit >= tp * 0.7m)
+            {
+                if (tracked.DynamicStopLoss < 0)
+                {
+                    tracked.DynamicStopLoss = 0;
+                    AppLogger.Info(Src, $"Trailing SL → breakeven for {update.ContractId}");
+                }
+            }
+        }
+
         // Check Take Profit
         if (update.Profit >= _config.TakeProfitUsd)
         {
+            if (!update.IsValidToSell) return;
             AppLogger.Info(Src, $"TP hit for {update.ContractId}: profit={update.Profit:F2} >= {_config.TakeProfitUsd}");
             await SellPositionAsync(update.ContractId, tracked, update.Profit);
             return;
         }
 
-        // Check Stop Loss (profit is negative)
-        if (update.Profit <= -_config.StopLossUsd)
+        // Check Stop Loss (dynamic or fixed)
+        decimal effectiveSl = _config.EnableTrailingStop ? tracked.DynamicStopLoss : -_config.StopLossUsd;
+        if (update.Profit <= effectiveSl)
         {
-            AppLogger.Info(Src, $"SL hit for {update.ContractId}: loss={update.Profit:F2} <= -{_config.StopLossUsd}");
+            if (!update.IsValidToSell) return;
+            AppLogger.Info(Src, $"SL hit for {update.ContractId}: profit={update.Profit:F2} <= {effectiveSl:F2}");
             await SellPositionAsync(update.ContractId, tracked, update.Profit);
         }
     }
@@ -147,6 +174,8 @@ public sealed class StrategyExecutor : IDisposable
             var result = await _contractService.SellContractAsync(contractId);
             if (result.Success)
             {
+                bool won = profit >= 0;
+                _engine.RecordTradeResult(tracked.Signal.ContributingIndicators, won);
                 RecordResult(tracked, profit);
                 RemovePosition(contractId);
                 AppLogger.Info(Src, $"Sold contract {contractId}, profit={profit:F2}");
@@ -190,5 +219,6 @@ public sealed class StrategyExecutor : IDisposable
         public SignalDirection Direction { get; init; }
         public decimal BuyPrice { get; init; }
         public TradeSignal Signal { get; init; } = null!;
+        public decimal DynamicStopLoss { get; set; }
     }
 }

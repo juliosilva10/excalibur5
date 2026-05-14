@@ -8,12 +8,15 @@ namespace Excalibur5.Views;
 
 public partial class MainWindow : Window
 {
+    private bool _botWasVisibleBeforeMinimize;
+
     public MainWindow()
     {
         InitializeComponent();
         Loaded += OnLoaded;
         LocationChanged += OnWindowMoved;
         SizeChanged += OnWindowResized;
+        StateChanged += OnWindowStateChanged;
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -67,6 +70,21 @@ public partial class MainWindow : Window
     private void OnWindowMoved(object? sender, EventArgs e) => RepositionBotPopup();
 
     private void OnWindowResized(object sender, SizeChangedEventArgs e) => RepositionBotPopup();
+
+    private void OnWindowStateChanged(object? sender, EventArgs e)
+    {
+        if (WindowState == WindowState.Minimized)
+        {
+            _botWasVisibleBeforeMinimize = BotPopup.IsOpen;
+            if (BotPopup.IsOpen)
+                BotPopup.IsOpen = false;
+        }
+        else if (_botWasVisibleBeforeMinimize)
+        {
+            BotPopup.IsOpen = true;
+            _botWasVisibleBeforeMinimize = false;
+        }
+    }
 
     private void RepositionBotPopup()
     {

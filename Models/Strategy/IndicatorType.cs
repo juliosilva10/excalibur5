@@ -6,5 +6,8 @@ public enum IndicatorType
     Rsi,
     SupportResistance,
     Macd,
-    BollingerBands
+    BollingerBands,
+    Atr,
+    CandlePattern,
+    Momentum
 }

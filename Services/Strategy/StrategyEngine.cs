@@ -3,22 +3,22 @@ using Excalibur5.Models.Strategy;
 
 namespace Excalibur5.Services.Strategy;
 
-/// <summary>
-/// Evaluates candles against enabled indicators and emits trade signals
-/// when confluence meets the confidence threshold.
-/// </summary>
 public sealed class StrategyEngine : IStrategyEngine
 {
     private const string Src = "StrategyEngine";
-    private const int MinCandlesRequired = 25;
+    private const int MinCandlesRequired = 50;
 
     private readonly List<CandleData> _candles = new();
     private readonly List<IIndicator> _indicators = new();
+    private readonly WeightedSignalAggregator _aggregator = new();
+    private readonly SignalFilter _filter = new();
     private StrategyConfig _config = new();
     private long _lastSignalEpoch;
 
     public event EventHandler<TradeSignal>? SignalGenerated;
     public bool IsRunning { get; private set; }
+    public WeightedSignalAggregator Aggregator => _aggregator;
+    public SignalFilter Filter => _filter;
 
     public void Start(StrategyConfig config)
     {
@@ -26,6 +26,7 @@ public sealed class StrategyEngine : IStrategyEngine
         _candles.Clear();
         _indicators.Clear();
         _lastSignalEpoch = 0;
+        _filter.Reset();
 
         foreach (var type in config.EnabledIndicators)
         {
@@ -51,7 +52,6 @@ public sealed class StrategyEngine : IStrategyEngine
     {
         if (!IsRunning) return;
 
-        // Update or add candle
         if (_candles.Count > 0 && _candles[^1].Epoch == candle.Epoch)
         {
             _candles[^1] = candle;
@@ -64,57 +64,62 @@ public sealed class StrategyEngine : IStrategyEngine
         }
 
         if (_candles.Count < MinCandlesRequired) return;
-
-        // Cooldown: don't signal on the same candle
         if (candle.Epoch <= _lastSignalEpoch) return;
 
         EvaluateSignals(candle.Epoch);
     }
 
+    public void RecordTradeResult(IReadOnlyList<IndicatorType> contributors, bool won)
+    {
+        _aggregator.RecordResult(contributors, won);
+        if (!won)
+            _filter.OnLoss();
+    }
+
     private void EvaluateSignals(long currentEpoch)
     {
-        var callSignals = new List<IndicatorSignal>();
-        var putSignals = new List<IndicatorSignal>();
-
+        var signals = new List<IndicatorSignal>();
         foreach (var indicator in _indicators)
         {
             var signal = indicator.Evaluate(_candles);
-            if (signal.Direction == SignalDirection.Call)
-                callSignals.Add(signal);
-            else if (signal.Direction == SignalDirection.Put)
-                putSignals.Add(signal);
+            signals.Add(new IndicatorSignal
+            {
+                Direction = signal.Direction,
+                Strength = signal.Strength,
+                Reason = signal.Reason,
+                Type = indicator.Type
+            });
         }
 
-        // Check confluence: need 2+ indicators agreeing
-        if (callSignals.Count >= 2 && IsDirectionAllowed(SignalDirection.Call))
-        {
-            double confidence = callSignals.Average(s => s.Strength);
-            if (confidence >= _config.ConfidenceThreshold)
-            {
-                var reasons = string.Join(" + ", callSignals.Select(s => s.Reason));
-                EmitSignal(SignalDirection.Call, confidence, reasons, currentEpoch);
-                return;
-            }
-        }
+        var direction = _aggregator.GetDominantDirection(signals);
+        if (direction == SignalDirection.None) return;
+        if (!IsDirectionAllowed(direction)) return;
 
-        if (putSignals.Count >= 2 && IsDirectionAllowed(SignalDirection.Put))
-        {
-            double confidence = putSignals.Average(s => s.Strength);
-            if (confidence >= _config.ConfidenceThreshold)
-            {
-                var reasons = string.Join(" + ", putSignals.Select(s => s.Reason));
-                EmitSignal(SignalDirection.Put, confidence, reasons, currentEpoch);
-            }
-        }
+        double score = _aggregator.CalculateScore(signals, direction);
+        if (score < _config.ConfidenceThreshold) return;
+
+        if (_filter.ShouldFilter(_candles, direction, score, _config))
+            return;
+
+        var reasons = string.Join(" + ", signals
+            .Where(s => s.Direction == direction && s.Strength > 0)
+            .Select(s => s.Reason));
+
+        var contributingTypes = signals
+            .Where(s => s.Direction == direction && s.Strength > 0)
+            .Select(s => s.Type)
+            .ToList();
+
+        EmitSignal(direction, score, reasons, currentEpoch, contributingTypes);
     }
 
     private bool IsDirectionAllowed(SignalDirection direction)
     {
-        if (_config.AllowedDirection == SignalDirection.None) return true; // Both allowed
+        if (_config.AllowedDirection == SignalDirection.None) return true;
         return _config.AllowedDirection == direction;
     }
 
-    private void EmitSignal(SignalDirection direction, double confidence, string reason, long epoch)
+    private void EmitSignal(SignalDirection direction, double confidence, string reason, long epoch, List<IndicatorType> contributors)
     {
         _lastSignalEpoch = epoch;
         var signal = new TradeSignal
@@ -122,10 +127,11 @@ public sealed class StrategyEngine : IStrategyEngine
             Direction = direction,
             Confidence = confidence,
             Reason = reason,
-            Timestamp = DateTimeOffset.UtcNow
+            Timestamp = DateTimeOffset.UtcNow,
+            ContributingIndicators = contributors
         };
 
-        AppLogger.Info(Src, $"Signal: {direction} (conf: {confidence:P0}) — {reason}");
+        AppLogger.Info(Src, $"Signal: {direction} (score: {confidence:P0}) — {reason}");
         SignalGenerated?.Invoke(this, signal);
     }
 
@@ -134,6 +140,11 @@ public sealed class StrategyEngine : IStrategyEngine
         IndicatorType.EmaCrossover => new EmaIndicator(),
         IndicatorType.Rsi => new RsiIndicator(),
         IndicatorType.SupportResistance => new SupportResistanceIndicator(),
+        IndicatorType.Macd => new MacdIndicator(),
+        IndicatorType.BollingerBands => new BollingerIndicator(),
+        IndicatorType.Atr => new AtrIndicator(),
+        IndicatorType.CandlePattern => new CandlePatternIndicator(),
+        IndicatorType.Momentum => new MomentumIndicator(),
         _ => null
     };
 }

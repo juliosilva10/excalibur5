@@ -9,5 +9,6 @@ public interface IStrategyEngine
     void Start(StrategyConfig config);
     void Stop();
     void FeedCandle(CandleData candle);
+    void RecordTradeResult(IReadOnlyList<IndicatorType> contributors, bool won);
     bool IsRunning { get; }
 }
