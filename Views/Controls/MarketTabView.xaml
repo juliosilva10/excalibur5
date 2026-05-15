@@ -220,6 +220,32 @@
         </Grid>
 
         <!-- Contracts panel -->
-        <controls:ContractPanelView Grid.Row="2" DataContext="{Binding ContractPanel}"/>
+        <controls:ContractPanelView Grid.Row="2" DataContext="{Binding ContractPanel}">
+            <controls:ContractPanelView.Style>
+                <Style TargetType="controls:ContractPanelView">
+                    <Setter Property="Visibility" Value="Visible"/>
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding DataContext.History.IsHistoryVisible, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </controls:ContractPanelView.Style>
+        </controls:ContractPanelView>
+
+        <!-- History panel -->
+        <controls:HistoryPanelView Grid.Row="2"
+                                   DataContext="{Binding DataContext.History, RelativeSource={RelativeSource AncestorType=Window}}">
+            <controls:HistoryPanelView.Style>
+                <Style TargetType="controls:HistoryPanelView">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding DataContext.History.IsHistoryVisible, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                            <Setter Property="Visibility" Value="Visible"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </controls:HistoryPanelView.Style>
+        </controls:HistoryPanelView>
     </Grid>
 </UserControl>

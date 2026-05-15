@@ -160,6 +160,8 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
         });
     }
 
+    public event EventHandler<ManualTradeOpened>? ManualTradeOpened;
+
     public OpenPositionsViewModel OpenPositions { get; }
 
     partial void OnUseDurationChanged(bool value)
@@ -211,7 +213,11 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
     {
         if (string.IsNullOrEmpty(value)) return;
 
-        _pendingBarrierRestore = null;
+        if (_pendingBarrierRestore != null)
+        {
+            if (value == _pendingBarrierRestore && _barriersFromApi)
+                _pendingBarrierRestore = null;
+        }
 
         var idx = -1;
         for (int i = 0; i < AvailableBarrierDisplays.Count; i++)
@@ -386,6 +392,7 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
                 _lastBoughtContractId = result.ContractId;
                 var expiry = GetDateExpiryForPosition();
                 _ = OpenPositions.AddPositionAsync(result, Symbol, DisplayName, contractType, expiry);
+                ManualTradeOpened?.Invoke(this, new ManualTradeOpened(result, contractType));
             }
             else
                 LastBuyResult = $"Erro: {result.Error}";
@@ -533,6 +540,7 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
             if (AvailableBarrierDisplays.Contains(_pendingBarrierRestore))
             {
                 SelectedBarrierDisplay = _pendingBarrierRestore;
+                if (_barriersFromApi) _pendingBarrierRestore = null;
                 return;
             }
 
@@ -556,6 +564,7 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
                 if (closest != null)
                 {
                     SelectedBarrierDisplay = closest;
+                    if (_barriersFromApi) _pendingBarrierRestore = null;
                     return;
                 }
             }
@@ -1123,3 +1132,5 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
         OpenPositions.Dispose();
     }
 }
+
+public sealed record ManualTradeOpened(BuyResponse BuyResult, string ContractType);

@@ -110,6 +110,22 @@ public sealed class ContractService : IContractService, IDisposable
         };
     }
 
+    private static string ParseSpotField(JsonElement el, params string[] fieldNames)
+    {
+        foreach (var name in fieldNames)
+        {
+            if (el.TryGetProperty(name, out var val))
+            {
+                var raw = val.ValueKind == JsonValueKind.Number
+                    ? val.GetDecimal().ToString(CultureInfo.InvariantCulture)
+                    : val.GetString() ?? "";
+                if (!string.IsNullOrEmpty(raw))
+                    return raw;
+            }
+        }
+        return "";
+    }
+
     private static decimal ParseDecimal(JsonElement el)
     {
         if (el.ValueKind == JsonValueKind.Number)
@@ -256,9 +272,10 @@ public sealed class ContractService : IContractService, IDisposable
         return barriers;
     }
 
-    public async Task<ProposalResponse> SubscribeProposalAsync(string symbol, string contractType, decimal amount, int? duration = null, string? durationUnit = null, long? dateExpiry = null, string? barrier = null, string currency = "USD", CancellationToken ct = default)
+    public async Task<ProposalResponse> SubscribeProposalAsync(string symbol, string contractType, decimal amount, int? duration = null, string? durationUnit = null, long? dateExpiry = null, string? barrier = null, string currency = "USD", string? subscriptionKey = null, CancellationToken ct = default)
     {
-        await UnsubscribeProposalAsync(contractType, ct);
+        var key = subscriptionKey ?? contractType;
+        await UnsubscribeProposalAsync(key, ct);
 
         var reqId = Interlocked.Increment(ref _reqId);
 
@@ -302,14 +319,14 @@ public sealed class ContractService : IContractService, IDisposable
             sub.TryGetProperty("id", out var idEl))
         {
             var subId = idEl.GetString() ?? "";
-            _activeSubIds[contractType] = subId;
+            _activeSubIds[key] = subId;
             _subIdToContractType[subId] = contractType;
         }
 
         var propEl = root.GetProperty("proposal");
         var response = ParseProposal(root, propEl) ?? new ProposalResponse();
         response = response with { ContractType = contractType };
-        AppLogger.Info(Src, $"Proposal subscribed: {contractType} {symbol} dateExpiry={dateExpiry} dur={duration}{durationUnit} barrier={barrier} ask={response.AskPrice}");
+        AppLogger.Info(Src, $"Proposal subscribed: {key} {symbol} dateExpiry={dateExpiry} dur={duration}{durationUnit} barrier={barrier} ask={response.AskPrice}");
         return response;
     }
 
@@ -567,6 +584,88 @@ public sealed class ContractService : IContractService, IDisposable
             Status = pocEl.TryGetProperty("status", out var st) ? st.GetString() ?? "" : "",
             SubscriptionId = subId
         };
+    }
+
+    public async Task<(string EntrySpot, string ExitSpot)> GetContractSpotsAsync(long contractId, CancellationToken ct = default)
+    {
+        var reqId = Interlocked.Increment(ref _reqId);
+        var payload = JsonSerializer.Serialize(new
+        {
+            proposal_open_contract = 1,
+            contract_id = contractId,
+            req_id = reqId
+        });
+
+        try
+        {
+            var root = await SendAndWaitAsync(reqId, payload, ct);
+            if (root.TryGetProperty("proposal_open_contract", out var poc))
+            {
+                var entry = poc.TryGetProperty("entry_spot_display_value", out var esd) ? esd.GetString() ?? ""
+                          : poc.TryGetProperty("entry_spot", out var es2) ? es2.GetRawText().Trim('"') : "";
+                var exit = poc.TryGetProperty("exit_tick_display_value", out var etd) ? etd.GetString() ?? ""
+                         : poc.TryGetProperty("exit_tick", out var et2) ? et2.GetRawText().Trim('"')
+                         : poc.TryGetProperty("current_spot_display_value", out var csd) ? csd.GetString() ?? "" : "";
+                return (entry, exit);
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Warn(Src, $"GetContractSpots error for {contractId}: {ex.Message}");
+        }
+        return ("", "");
+    }
+
+    public async Task<List<ProfitTableEntry>> GetProfitTableAsync(int limit = 50, int offset = 0, CancellationToken ct = default)
+    {
+        var reqId = Interlocked.Increment(ref _reqId);
+        var payload = JsonSerializer.Serialize(new
+        {
+            profit_table = 1,
+            description = 1,
+            limit,
+            offset,
+            sort = "DESC",
+            req_id = reqId
+        });
+
+        var root = await SendAndWaitAsync(reqId, payload, ct);
+
+        if (root.TryGetProperty("error", out var err))
+        {
+            var msg = err.TryGetProperty("message", out var m) ? m.GetString() ?? "unknown" : "unknown";
+            AppLogger.Error(Src, $"profit_table error: {msg}");
+            return [];
+        }
+
+        var results = new List<ProfitTableEntry>();
+        if (root.TryGetProperty("profit_table", out var pt) &&
+            pt.TryGetProperty("transactions", out var txns) &&
+            txns.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var t in txns.EnumerateArray())
+            {
+                results.Add(new ProfitTableEntry
+                {
+                    TransactionId = t.TryGetProperty("transaction_id", out var tid) ? tid.GetInt64() : 0,
+                    ContractId = t.TryGetProperty("contract_id", out var cid) ? cid.GetInt64() : 0,
+                    ContractType = t.TryGetProperty("contract_type", out var ctype) ? ctype.GetString() ?? "" : "",
+                    Shortcode = t.TryGetProperty("shortcode", out var sc) ? sc.GetString() ?? "" : "",
+                    Longcode = t.TryGetProperty("longcode", out var lc) ? lc.GetString() ?? "" : "",
+                    BuyPrice = t.TryGetProperty("buy_price", out var bp) ? ParseDecimal(bp) : 0m,
+                    SellPrice = t.TryGetProperty("sell_price", out var sp) ? ParseDecimal(sp) : 0m,
+                    PurchaseTime = t.TryGetProperty("purchase_time", out var ptm) ? ptm.GetInt64() : 0,
+                    SellTime = t.TryGetProperty("sell_time", out var stm) ? stm.GetInt64() : 0,
+                    ProfitLoss = t.TryGetProperty("sell_price", out var sp2) && t.TryGetProperty("buy_price", out var bp2)
+                        ? ParseDecimal(sp2) - ParseDecimal(bp2) : 0m,
+                    EntrySpot = ParseSpotField(t, "entry_spot", "entry_tick", "entry_tick_display_value"),
+                    ExitSpot = ParseSpotField(t, "sell_spot", "exit_tick", "sell_spot_display_value", "exit_tick_display_value")
+                });
+            }
+        }
+
+        AppLogger.Info(Src, $"profit_table: {results.Count} entries loaded");
+        return results;
     }
 
     public void Dispose()

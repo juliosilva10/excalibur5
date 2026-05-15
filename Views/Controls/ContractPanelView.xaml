@@ -499,7 +499,8 @@
                                          Height="28" Width="70" MaxLength="10"
                                          ToolTip="Stop Loss em USD"/>
                             </StackPanel>
-                            <StackPanel Grid.Column="6">
+                            <StackPanel Grid.Column="6"
+                                      Visibility="{Binding IsTrendMode, Converter={StaticResource InverseBoolToVis}}">
                                 <TextBlock Text="Max." Foreground="#90b5c9" FontSize="10" Margin="0,0,0,4"/>
                                 <TextBox Style="{StaticResource DerivTextBox}"
                                          Text="{Binding MaxContractsText, UpdateSourceTrigger=PropertyChanged}"

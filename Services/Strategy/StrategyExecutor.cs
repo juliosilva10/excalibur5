@@ -7,6 +7,8 @@ namespace Excalibur5.Services.Strategy;
 public sealed class StrategyExecutor : IDisposable
 {
     private const string Src = "StrategyExecutor";
+    private const string BotCallKey = "BOT_CALL";
+    private const string BotPutKey = "BOT_PUT";
 
     private readonly IContractService _contractService;
     private readonly IStrategyEngine _engine;
@@ -16,6 +18,15 @@ public sealed class StrategyExecutor : IDisposable
     private bool _active;
     private int _buyingCount;
     private int _martingaleLevel;
+
+    // Pre-subscribed proposal state
+    private string _callProposalId = string.Empty;
+    private string _callSubscriptionId = string.Empty;
+    private decimal _callAskPrice;
+    private string _putProposalId = string.Empty;
+    private string _putSubscriptionId = string.Empty;
+    private decimal _putAskPrice;
+    private bool _proposalsReady;
 
     public StrategyStats Stats { get; } = new();
     public int ActivePositionCount => _positions.Count;
@@ -30,6 +41,7 @@ public sealed class StrategyExecutor : IDisposable
         _engine = engine;
         _engine.SignalGenerated += OnSignalGenerated;
         _contractService.OpenContractUpdated += OnOpenContractUpdated;
+        _contractService.ProposalUpdated += OnBotProposalUpdated;
     }
 
     public void Start(StrategyConfig config, string symbol)
@@ -39,13 +51,117 @@ public sealed class StrategyExecutor : IDisposable
         _active = true;
         _buyingCount = 0;
         _martingaleLevel = 0;
+        _proposalsReady = false;
+        _callProposalId = string.Empty;
+        _putProposalId = string.Empty;
         AppLogger.Info(Src, $"Executor started for {symbol}, TP={config.TakeProfitUsd}, SL={config.StopLossUsd}, trailing={config.EnableTrailingStop}, recover={config.RecoverMode}");
+        _ = SubscribeBotProposalsAsync();
     }
 
     public void Stop()
     {
         _active = false;
+        _proposalsReady = false;
+        _ = UnsubscribeBotProposalsAsync();
         AppLogger.Info(Src, "Executor stopped");
+    }
+
+    private async Task SubscribeBotProposalsAsync()
+    {
+        try
+        {
+            var stake = GetCurrentStake();
+            var duration = _config.DurationSeconds;
+            var barrier = _config.Barrier;
+
+            var callTask = _contractService.SubscribeProposalAsync(
+                _symbol, "VANILLALONGCALL", stake, duration, "s",
+                barrier: barrier, subscriptionKey: BotCallKey);
+
+            var putTask = _contractService.SubscribeProposalAsync(
+                _symbol, "VANILLALONGPUT", stake, duration, "s",
+                barrier: barrier, subscriptionKey: BotPutKey);
+
+            var callResp = await callTask;
+            var putResp = await putTask;
+
+            _callProposalId = callResp.ProposalId;
+            _callSubscriptionId = callResp.SubscriptionId;
+            _callAskPrice = callResp.AskPrice;
+            _putProposalId = putResp.ProposalId;
+            _putSubscriptionId = putResp.SubscriptionId;
+            _putAskPrice = putResp.AskPrice;
+            _proposalsReady = true;
+
+            AppLogger.Info(Src, $"Bot proposals ready: CALL={_callProposalId} ask={_callAskPrice}, PUT={_putProposalId} ask={_putAskPrice}");
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Warn(Src, $"Bot proposal subscribe failed: {ex.Message}");
+            _proposalsReady = false;
+        }
+    }
+
+    private async Task UnsubscribeBotProposalsAsync()
+    {
+        try
+        {
+            await _contractService.UnsubscribeProposalAsync(BotCallKey);
+            await _contractService.UnsubscribeProposalAsync(BotPutKey);
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Warn(Src, $"Bot proposal unsubscribe error: {ex.Message}");
+        }
+    }
+
+    private async Task ResubscribeAfterBuyAsync(SignalDirection usedDirection)
+    {
+        try
+        {
+            var stake = GetCurrentStake();
+            var duration = _config.DurationSeconds;
+            var barrier = _config.Barrier;
+
+            if (usedDirection == SignalDirection.Call)
+            {
+                var resp = await _contractService.SubscribeProposalAsync(
+                    _symbol, "VANILLALONGCALL", stake, duration, "s",
+                    barrier: barrier, subscriptionKey: BotCallKey);
+                _callProposalId = resp.ProposalId;
+                _callSubscriptionId = resp.SubscriptionId;
+                _callAskPrice = resp.AskPrice;
+            }
+            else
+            {
+                var resp = await _contractService.SubscribeProposalAsync(
+                    _symbol, "VANILLALONGPUT", stake, duration, "s",
+                    barrier: barrier, subscriptionKey: BotPutKey);
+                _putProposalId = resp.ProposalId;
+                _putSubscriptionId = resp.SubscriptionId;
+                _putAskPrice = resp.AskPrice;
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Warn(Src, $"Re-subscribe after buy failed: {ex.Message}");
+        }
+    }
+
+    private void OnBotProposalUpdated(object? sender, ProposalResponse proposal)
+    {
+        if (!_active || string.IsNullOrEmpty(proposal.SubscriptionId)) return;
+
+        if (proposal.SubscriptionId == _callSubscriptionId && !string.IsNullOrEmpty(proposal.ProposalId))
+        {
+            _callProposalId = proposal.ProposalId;
+            _callAskPrice = proposal.AskPrice;
+        }
+        else if (proposal.SubscriptionId == _putSubscriptionId && !string.IsNullOrEmpty(proposal.ProposalId))
+        {
+            _putProposalId = proposal.ProposalId;
+            _putAskPrice = proposal.AskPrice;
+        }
     }
 
     private async void OnSignalGenerated(object? sender, TradeSignal signal)
@@ -75,14 +191,33 @@ public sealed class StrategyExecutor : IDisposable
                 : "VANILLALONGPUT";
 
             var stake = GetCurrentStake();
+            BuyResponse result;
 
-            var result = await _contractService.BuyDirectAsync(
-                _symbol,
-                contractType,
-                stake,
-                _config.DurationSeconds,
-                "s",
-                _config.Barrier);
+            if (_proposalsReady)
+            {
+                var proposalId = signal.Direction == SignalDirection.Call
+                    ? _callProposalId
+                    : _putProposalId;
+                var askPrice = signal.Direction == SignalDirection.Call
+                    ? _callAskPrice
+                    : _putAskPrice;
+
+                AppLogger.Info(Src, $"Buying via pre-subscribed proposal {proposalId}, ask={askPrice}");
+                result = await _contractService.BuyContractAsync(proposalId, askPrice);
+
+                _ = ResubscribeAfterBuyAsync(signal.Direction);
+            }
+            else
+            {
+                AppLogger.Info(Src, "Proposals not ready — fallback to BuyDirectAsync");
+                result = await _contractService.BuyDirectAsync(
+                    _symbol,
+                    contractType,
+                    stake,
+                    _config.DurationSeconds,
+                    "s",
+                    _config.Barrier);
+            }
 
             if (result.ContractId > 0)
             {
@@ -227,6 +362,8 @@ public sealed class StrategyExecutor : IDisposable
 
     private void RecordResult(TrackedPosition tracked, decimal profit)
     {
+        var previousStake = GetCurrentStake();
+
         if (profit >= 0)
         {
             Stats.RecordWin(profit);
@@ -242,6 +379,9 @@ public sealed class StrategyExecutor : IDisposable
         }
 
         StatsUpdated?.Invoke(this, EventArgs.Empty);
+
+        if (_active && GetCurrentStake() != previousStake)
+            _ = SubscribeBotProposalsAsync();
     }
 
     private decimal GetCurrentStake()

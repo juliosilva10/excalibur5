@@ -15,6 +15,8 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
 {
     private const string Src = "Strategy";
 
+    public event EventHandler<BotPositionOpened>? BotTradeOpened;
+
     private readonly IContractService _contractService;
     private readonly StrategyEngine _engine = new();
     private readonly TrendEngine _trendEngine = new();
@@ -404,6 +406,7 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
         var openPos = _activeMarketTab.ContractPanel.OpenPositions;
         var expiry = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + CalculateDurationSeconds();
         _ = openPos.AddPositionAsync(e.BuyResult, _activeSymbol, _activeMarketTab.DisplayName, e.ContractType, expiry);
+        BotTradeOpened?.Invoke(this, e);
     }
 
     private StrategyConfig BuildConfig()

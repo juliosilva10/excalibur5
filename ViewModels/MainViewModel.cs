@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.Input;
 using Excalibur5.Config;
 using Excalibur5.Models;
 using Excalibur5.Services;
+using Excalibur5.Services.Strategy;
 
 namespace Excalibur5.ViewModels;
 
@@ -46,6 +47,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     public LogViewModel Log { get; } = new();
     public StrategyViewModel Strategy { get; }
     public RecoverViewModel Recover { get; } = new();
+    public HistoryViewModel History { get; }
 
     partial void OnAccountTypeChanged(string value)
     {
@@ -72,6 +74,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         Markets.SetRecoverViewModel(Recover);
         Strategy = new StrategyViewModel(contractService);
         Strategy.SetRecoverViewModel(Recover);
+        History = new HistoryViewModel(contractService);
 
         Markets.PropertyChanged += (_, e) =>
         {
@@ -83,7 +86,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
             }
             if (e.PropertyName == nameof(Markets.IsMarketsVisible) || e.PropertyName == nameof(Markets.SelectedTab))
             {
-                SaveUiState();
+                if (!_restoringState)
+                    SaveUiState();
                 WatchContractPanelChanges();
                 Strategy.SetActiveMarketTab(Markets.SelectedTab);
             }
@@ -95,6 +99,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 Markets.IsMarketsVisible = false;
                 Strategy.IsBotVisible = false;
                 Recover.IsRecoverVisible = false;
+                History.IsHistoryVisible = false;
             }
             if (e.PropertyName == nameof(Log.IsLogVisible))
                 SaveUiState();
@@ -103,18 +108,27 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             if (e.PropertyName == nameof(Strategy.IsBotVisible) && Strategy.IsBotVisible)
             {
-                Markets.IsMarketsVisible = false;
                 Log.IsLogVisible = false;
                 Recover.IsRecoverVisible = false;
+                History.IsHistoryVisible = false;
             }
         };
         Recover.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(Recover.IsRecoverVisible) && Recover.IsRecoverVisible)
             {
-                Markets.IsMarketsVisible = false;
                 Log.IsLogVisible = false;
                 Strategy.IsBotVisible = false;
+                History.IsHistoryVisible = false;
+            }
+        };
+        History.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(History.IsHistoryVisible) && History.IsHistoryVisible)
+            {
+                Log.IsLogVisible = false;
+                Strategy.IsBotVisible = false;
+                Recover.IsRecoverVisible = false;
             }
         };
 
@@ -122,6 +136,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _api.BalanceUpdated += OnBalanceUpdated;
         _ws.Disconnected    += OnDisconnected;
         _ws.Connected       += OnConnected;
+
+        Strategy.BotTradeOpened += (_, e) =>
+        {
+            History.AddBotTrade(e.BuyResult, e.ContractType, Strategy.StrategyMode);
+        };
 
         _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(10) };
         _timer.Tick += OnTimerTick;
@@ -354,12 +373,23 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private void WatchContractPanelChanges()
     {
         if (_watchedPanel != null)
+        {
             _watchedPanel.PropertyChanged -= OnContractPanelChanged;
+            _watchedPanel.ManualTradeOpened -= OnManualTradeOpened;
+        }
 
         _watchedPanel = Markets.SelectedTab?.ContractPanel;
 
         if (_watchedPanel != null)
+        {
             _watchedPanel.PropertyChanged += OnContractPanelChanged;
+            _watchedPanel.ManualTradeOpened += OnManualTradeOpened;
+        }
+    }
+
+    private void OnManualTradeOpened(object? sender, ManualTradeOpened e)
+    {
+        History.AddManualTrade(e.BuyResult, e.ContractType);
     }
 
     private void OnContractPanelChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -405,8 +435,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 {
                     _restoringState = true;
                     tab.ContractPanel.RestoreState(state.DurationUnit, state.DurationText, state.StakeText, state.UseDuration, state.SelectedBarrierDisplay);
-                    _restoringState = false;
                     await Markets.SelectTabAsync(tab);
+                    _restoringState = false;
                 }
             }
         }
@@ -416,7 +446,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
     {
         SaveUiState();
         if (_watchedPanel != null)
+        {
             _watchedPanel.PropertyChanged -= OnContractPanelChanged;
+            _watchedPanel.ManualTradeOpened -= OnManualTradeOpened;
+        }
         _timer.Stop();
         _uptimeTimer.Stop();
         _uptimeWatch.Stop();

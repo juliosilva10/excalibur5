@@ -10,4 +10,4 @@ pip install requests beautifulsoup4 html2text
 python scrape_deriv_docs.py
 ```
 
-O arquivo `DERIV API Documentation.md` será gerado automaticamente nesta pasta.
+O arquivo `deriv_api_docs.md` será gerado automaticamente nesta pasta.

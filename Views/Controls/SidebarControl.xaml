@@ -351,6 +351,108 @@
                            FontSize="9"
                            Foreground="#e0eef8"
                            HorizontalAlignment="Center"
+                           Margin="0,4,0,12"/>
+
+                <!-- History button -->
+                <Button Command="{Binding History.ToggleHistoryCommand}"
+                        ToolTip="Histórico de Operações"
+                        Margin="8,0,8,0"
+                        Width="40" Height="40"
+                        Cursor="Hand"
+                        FocusVisualStyle="{x:Null}">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Grid>
+                                <Border x:Name="GlowBg"
+                                        CornerRadius="10"
+                                        Opacity="0">
+                                    <Border.Background>
+                                        <RadialGradientBrush>
+                                            <GradientStop Color="#5500f0ff" Offset="0"/>
+                                            <GradientStop Color="#0000f0ff" Offset="1"/>
+                                        </RadialGradientBrush>
+                                    </Border.Background>
+                                </Border>
+                                <Border x:Name="MainBody"
+                                        CornerRadius="10"
+                                        BorderThickness="1"
+                                        BorderBrush="#2a5568">
+                                    <Border.Background>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                            <GradientStop Color="#1e465a" Offset="0.0"/>
+                                            <GradientStop Color="#153342" Offset="0.5"/>
+                                            <GradientStop Color="#112935" Offset="1.0"/>
+                                        </LinearGradientBrush>
+                                    </Border.Background>
+                                    <Border.Effect>
+                                        <DropShadowEffect Color="Black" BlurRadius="4" ShadowDepth="2"
+                                                          Direction="270" Opacity="0.5"/>
+                                    </Border.Effect>
+                                    <Grid>
+                                        <Border CornerRadius="9,9,0,0" Height="6" VerticalAlignment="Top"
+                                                Opacity="0.12" IsHitTestVisible="False">
+                                            <Border.Background>
+                                                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                                    <GradientStop Color="White" Offset="0"/>
+                                                    <GradientStop Color="Transparent" Offset="1"/>
+                                                </LinearGradientBrush>
+                                            </Border.Background>
+                                        </Border>
+                                        <!-- History icon (table/list) -->
+                                        <Canvas Width="18" Height="14" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                            <Rectangle Canvas.Left="0" Canvas.Top="0" Width="18" Height="14"
+                                                       Stroke="#00f0ff" StrokeThickness="1.2" RadiusX="1" RadiusY="1"/>
+                                            <Line X1="0" Y1="4" X2="18" Y2="4" Stroke="#00f0ff" StrokeThickness="0.8"/>
+                                            <Line X1="0" Y1="8" X2="18" Y2="8" Stroke="#00f0ff" StrokeThickness="0.8"/>
+                                            <Line X1="6" Y1="0" X2="6" Y2="14" Stroke="#00f0ff" StrokeThickness="0.8"/>
+                                        </Canvas>
+                                    </Grid>
+                                </Border>
+                            </Grid>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Trigger.EnterActions>
+                                        <BeginStoryboard>
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="GlowBg"
+                                                                 Storyboard.TargetProperty="Opacity"
+                                                                 To="1" Duration="0:0:0.25"/>
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </Trigger.EnterActions>
+                                    <Trigger.ExitActions>
+                                        <BeginStoryboard>
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="GlowBg"
+                                                                 Storyboard.TargetProperty="Opacity"
+                                                                 To="0" Duration="0:0:0.25"/>
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </Trigger.ExitActions>
+                                    <Setter TargetName="MainBody" Property="BorderBrush" Value="#00f0ff"/>
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter TargetName="MainBody" Property="Background">
+                                        <Setter.Value>
+                                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                                <GradientStop Color="#112935" Offset="0.0"/>
+                                                <GradientStop Color="#0c1e2a" Offset="1.0"/>
+                                            </LinearGradientBrush>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Trigger>
+                                <DataTrigger Binding="{Binding History.IsHistoryVisible}" Value="True">
+                                    <Setter TargetName="GlowBg" Property="Opacity" Value="0.7"/>
+                                    <Setter TargetName="MainBody" Property="BorderBrush" Value="#00f0ff"/>
+                                </DataTrigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+                <TextBlock Text="History"
+                           FontSize="9"
+                           Foreground="#e0eef8"
+                           HorizontalAlignment="Center"
                            Margin="0,4,0,0"/>
             </StackPanel>
 

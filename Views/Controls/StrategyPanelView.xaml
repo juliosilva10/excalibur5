@@ -131,7 +131,8 @@
                         <ColumnDefinition Width="8"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
-                    <StackPanel Grid.Column="0">
+                    <StackPanel Grid.Column="0"
+                              Visibility="{Binding IsTrendMode, Converter={StaticResource InverseBoolToVis}}">
                         <TextBlock Text="Máx. contratos" Foreground="#90b5c9" FontSize="10" Margin="0,0,0,4"/>
                         <TextBox Style="{StaticResource DerivTextBox}"
                                  Text="{Binding MaxContractsText, UpdateSourceTrigger=PropertyChanged}"
