@@ -16,6 +16,7 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
     private const string Src = "Strategy";
 
     public event EventHandler<BotPositionOpened>? BotTradeOpened;
+    public event EventHandler<TradeCompleted>? BotTradeCompleted;
 
     private readonly IContractService _contractService;
     private readonly StrategyEngine _engine = new();
@@ -207,6 +208,7 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
         _executor.StatsUpdated += OnStatsUpdated;
         _executor.TradeExecuted += OnTradeExecuted;
         _executor.PositionOpened += OnBotPositionOpened;
+        _executor.TradeCompleted += OnBotTradeCompleted;
 
         if (!IsTrendMode)
         {
@@ -333,14 +335,24 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
         var candles = _activeMarketTab.CandleValues;
         if (candles.Count == 0) return;
 
+        var lastCandle = candles[^1];
+        _executor?.UpdateCurrentSpot(lastCandle.Close);
+
         if (IsTrendMode)
         {
-            var lastCandle = candles[^1];
             if (lastCandle.Epoch <= _lastTrendCandleEpoch) return;
             _lastTrendCandleEpoch = lastCandle.Epoch;
 
+            if (candles.Count >= 2)
+            {
+                var previousClose = candles[^2].Close;
+                _executor?.ResolveExpiredPositionsLocally(previousClose);
+            }
+
             var sampleSize = int.TryParse(SampleSizeText, out var ss) && ss >= 1 ? ss : 5;
             var direction = _trendEngine.Evaluate(candles, sampleSize);
+
+            AppLogger.Info(Src, $"New candle detected epoch={lastCandle.Epoch}, trend={direction?.ToString() ?? "Empate"}, sample={sampleSize}");
 
             Application.Current?.Dispatcher?.InvokeAsync(() =>
             {
@@ -407,6 +419,11 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
         var expiry = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + CalculateDurationSeconds();
         _ = openPos.AddPositionAsync(e.BuyResult, _activeSymbol, _activeMarketTab.DisplayName, e.ContractType, expiry);
         BotTradeOpened?.Invoke(this, e);
+    }
+
+    private void OnBotTradeCompleted(object? sender, TradeCompleted e)
+    {
+        BotTradeCompleted?.Invoke(this, e);
     }
 
     private StrategyConfig BuildConfig()
@@ -478,6 +495,11 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
             return SelectedBarrierDisplay;
 
         return "+0.000";
+    }
+
+    public void RefreshProposals()
+    {
+        _executor?.RefreshProposals();
     }
 
     public void Dispose()

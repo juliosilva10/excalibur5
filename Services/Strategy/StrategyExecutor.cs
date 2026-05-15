@@ -13,11 +13,14 @@ public sealed class StrategyExecutor : IDisposable
     private readonly IContractService _contractService;
     private readonly IStrategyEngine _engine;
     private readonly Dictionary<long, TrackedPosition> _positions = new();
+    private readonly SemaphoreSlim _proposalLock = new(1, 1);
+    private readonly SemaphoreSlim _signalLock = new(1, 1);
+    private CancellationTokenSource _proposalCts = new();
     private StrategyConfig _config = new();
     private string _symbol = string.Empty;
     private bool _active;
-    private int _buyingCount;
     private int _martingaleLevel;
+    private decimal _currentSpot;
 
     // Pre-subscribed proposal state
     private string _callProposalId = string.Empty;
@@ -27,6 +30,7 @@ public sealed class StrategyExecutor : IDisposable
     private string _putSubscriptionId = string.Empty;
     private decimal _putAskPrice;
     private bool _proposalsReady;
+    private decimal _proposalStake;
 
     public StrategyStats Stats { get; } = new();
     public int ActivePositionCount => _positions.Count;
@@ -34,6 +38,7 @@ public sealed class StrategyExecutor : IDisposable
     public event EventHandler? StatsUpdated;
     public event EventHandler<string>? TradeExecuted;
     public event EventHandler<BotPositionOpened>? PositionOpened;
+    public event EventHandler<TradeCompleted>? TradeCompleted;
 
     public StrategyExecutor(IContractService contractService, IStrategyEngine engine)
     {
@@ -49,7 +54,6 @@ public sealed class StrategyExecutor : IDisposable
         _config = config;
         _symbol = symbol;
         _active = true;
-        _buyingCount = 0;
         _martingaleLevel = 0;
         _proposalsReady = false;
         _callProposalId = string.Empty;
@@ -66,13 +70,77 @@ public sealed class StrategyExecutor : IDisposable
         AppLogger.Info(Src, "Executor stopped");
     }
 
+    public void UpdateCurrentSpot(decimal spot)
+    {
+        _currentSpot = spot;
+    }
+
+    public void ResolveExpiredPositionsLocally(decimal lastCandleClose)
+    {
+        List<TrackedPosition>? expired = null;
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+
+        lock (_positions)
+        {
+            foreach (var kvp in _positions)
+            {
+                if (kvp.Value.ExpiryEpoch <= now && !kvp.Value.IsSelling && !kvp.Value.IsResolvedLocally)
+                {
+                    expired ??= new List<TrackedPosition>();
+                    expired.Add(kvp.Value);
+                }
+            }
+        }
+
+        if (expired == null) return;
+
+        AppLogger.Info(Src, $"Resolving {expired.Count} position(s) locally via candle close={lastCandleClose}");
+
+        foreach (var pos in expired)
+        {
+            bool won;
+            if (pos.Direction == SignalDirection.Call)
+                won = lastCandleClose > pos.EntrySpot;
+            else
+                won = lastCandleClose < pos.EntrySpot;
+
+            decimal estimatedProfit = won ? pos.BuyPrice * 0.5m : -pos.BuyPrice;
+
+            pos.IsResolvedLocally = true;
+            _engine.RecordTradeResult(pos.Signal.ContributingIndicators, won);
+            RecordResult(pos, estimatedProfit);
+            TradeCompleted?.Invoke(this, new TradeCompleted(pos.ContractId, estimatedProfit, won));
+            AppLogger.Info(Src, $"Resolved locally {pos.ContractId}: entry={pos.EntrySpot}, close={lastCandleClose}, won={won} (martingale={_martingaleLevel})");
+        }
+    }
+
+    public void RefreshProposals()
+    {
+        if (!_active) return;
+        _proposalsReady = false;
+        AppLogger.Info(Src, "RefreshProposals — resubscribing bot proposals");
+        _ = SubscribeBotProposalsAsync();
+    }
+
     private async Task SubscribeBotProposalsAsync()
     {
+        _proposalCts.Cancel();
+        _proposalCts.Dispose();
+        _proposalCts = new CancellationTokenSource();
+        var ct = _proposalCts.Token;
+
+        await _proposalLock.WaitAsync();
         try
         {
+            _proposalsReady = false;
+            if (ct.IsCancellationRequested) return;
+
             var stake = GetCurrentStake();
+            _proposalStake = stake;
             var duration = _config.DurationSeconds;
             var barrier = _config.Barrier;
+
+            await UnsubscribeBotProposalsAsync();
 
             var callTask = _contractService.SubscribeProposalAsync(
                 _symbol, "VANILLALONGCALL", stake, duration, "s",
@@ -84,6 +152,8 @@ public sealed class StrategyExecutor : IDisposable
 
             var callResp = await callTask;
             var putResp = await putTask;
+
+            if (ct.IsCancellationRequested) return;
 
             _callProposalId = callResp.ProposalId;
             _callSubscriptionId = callResp.SubscriptionId;
@@ -97,8 +167,13 @@ public sealed class StrategyExecutor : IDisposable
         }
         catch (Exception ex)
         {
-            AppLogger.Warn(Src, $"Bot proposal subscribe failed: {ex.Message}");
+            if (!ct.IsCancellationRequested)
+                AppLogger.Warn(Src, $"Bot proposal subscribe failed: {ex.Message}");
             _proposalsReady = false;
+        }
+        finally
+        {
+            _proposalLock.Release();
         }
     }
 
@@ -117,8 +192,12 @@ public sealed class StrategyExecutor : IDisposable
 
     private async Task ResubscribeAfterBuyAsync(SignalDirection usedDirection)
     {
+        var ct = _proposalCts.Token;
+        await _proposalLock.WaitAsync();
         try
         {
+            if (ct.IsCancellationRequested) return;
+
             var stake = GetCurrentStake();
             var duration = _config.DurationSeconds;
             var barrier = _config.Barrier;
@@ -128,6 +207,7 @@ public sealed class StrategyExecutor : IDisposable
                 var resp = await _contractService.SubscribeProposalAsync(
                     _symbol, "VANILLALONGCALL", stake, duration, "s",
                     barrier: barrier, subscriptionKey: BotCallKey);
+                if (ct.IsCancellationRequested) return;
                 _callProposalId = resp.ProposalId;
                 _callSubscriptionId = resp.SubscriptionId;
                 _callAskPrice = resp.AskPrice;
@@ -137,6 +217,7 @@ public sealed class StrategyExecutor : IDisposable
                 var resp = await _contractService.SubscribeProposalAsync(
                     _symbol, "VANILLALONGPUT", stake, duration, "s",
                     barrier: barrier, subscriptionKey: BotPutKey);
+                if (ct.IsCancellationRequested) return;
                 _putProposalId = resp.ProposalId;
                 _putSubscriptionId = resp.SubscriptionId;
                 _putAskPrice = resp.AskPrice;
@@ -144,7 +225,12 @@ public sealed class StrategyExecutor : IDisposable
         }
         catch (Exception ex)
         {
-            AppLogger.Warn(Src, $"Re-subscribe after buy failed: {ex.Message}");
+            if (!ct.IsCancellationRequested)
+                AppLogger.Warn(Src, $"Re-subscribe after buy failed: {ex.Message}");
+        }
+        finally
+        {
+            _proposalLock.Release();
         }
     }
 
@@ -168,24 +254,21 @@ public sealed class StrategyExecutor : IDisposable
     {
         if (!_active) return;
 
-        if (_config.StrategyMode == "Tendência" && HasExpiredUnresolvedPositions())
+        if (!await _signalLock.WaitAsync(0))
         {
-            await Task.Delay(2000);
-            if (!_active) return;
-            ResolveStaleExpiredPositions();
-        }
-
-        var activeCount = CountActivePositions();
-        var currentBuying = Interlocked.Increment(ref _buyingCount);
-        if (activeCount + currentBuying > _config.MaxConcurrentContracts)
-        {
-            Interlocked.Decrement(ref _buyingCount);
-            AppLogger.Info(Src, $"Signal ignored — max contracts reached ({activeCount}/{_config.MaxConcurrentContracts})");
+            AppLogger.Info(Src, "Signal ignored — another signal is being processed");
             return;
         }
 
         try
         {
+            var activeCount = CountActivePositions();
+            if (activeCount >= _config.MaxConcurrentContracts)
+            {
+                AppLogger.Info(Src, $"Signal ignored — max contracts reached ({activeCount}/{_config.MaxConcurrentContracts})");
+                return;
+            }
+
             string contractType = signal.Direction == SignalDirection.Call
                 ? "VANILLALONGCALL"
                 : "VANILLALONGPUT";
@@ -193,7 +276,7 @@ public sealed class StrategyExecutor : IDisposable
             var stake = GetCurrentStake();
             BuyResponse result;
 
-            if (_proposalsReady)
+            if (_proposalsReady && _proposalStake == stake)
             {
                 var proposalId = signal.Direction == SignalDirection.Call
                     ? _callProposalId
@@ -202,14 +285,14 @@ public sealed class StrategyExecutor : IDisposable
                     ? _callAskPrice
                     : _putAskPrice;
 
-                AppLogger.Info(Src, $"Buying via pre-subscribed proposal {proposalId}, ask={askPrice}");
+                AppLogger.Info(Src, $"Buying via pre-subscribed proposal {proposalId}, ask={askPrice}, stake={stake}");
                 result = await _contractService.BuyContractAsync(proposalId, askPrice);
 
                 _ = ResubscribeAfterBuyAsync(signal.Direction);
             }
             else
             {
-                AppLogger.Info(Src, "Proposals not ready — fallback to BuyDirectAsync");
+                AppLogger.Info(Src, $"Proposals stake mismatch or not ready (proposal={_proposalStake}, current={stake}) — using BuyDirectAsync");
                 result = await _contractService.BuyDirectAsync(
                     _symbol,
                     contractType,
@@ -217,6 +300,8 @@ public sealed class StrategyExecutor : IDisposable
                     _config.DurationSeconds,
                     "s",
                     _config.Barrier);
+
+                _ = SubscribeBotProposalsAsync();
             }
 
             if (result.ContractId > 0)
@@ -230,7 +315,8 @@ public sealed class StrategyExecutor : IDisposable
                     Signal = signal,
                     DynamicStopLoss = -_config.StopLossUsd,
                     EntryEpoch = now,
-                    ExpiryEpoch = now + _config.DurationSeconds
+                    ExpiryEpoch = now + _config.DurationSeconds,
+                    EntrySpot = _currentSpot
                 };
                 lock (_positions)
                     _positions[result.ContractId] = tracked;
@@ -239,7 +325,7 @@ public sealed class StrategyExecutor : IDisposable
 
                 var dirLabel = signal.Direction == SignalDirection.Call ? "CALL" : "PUT";
                 TradeExecuted?.Invoke(this, $"Comprou {dirLabel} — {signal.Reason}");
-                AppLogger.Info(Src, $"Bought {dirLabel} contract {result.ContractId}, stake={stake}");
+                AppLogger.Info(Src, $"Bought {dirLabel} contract {result.ContractId}, stake={stake}, entrySpot={_currentSpot}");
                 PositionOpened?.Invoke(this, new BotPositionOpened(result, contractType));
             }
             else
@@ -255,7 +341,7 @@ public sealed class StrategyExecutor : IDisposable
         }
         finally
         {
-            Interlocked.Decrement(ref _buyingCount);
+            _signalLock.Release();
         }
     }
 
@@ -274,12 +360,21 @@ public sealed class StrategyExecutor : IDisposable
 
         if (update.IsExpired || update.IsSold || update.Status is "sold" or "won" or "lost")
         {
+            if (tracked.IsResolvedLocally)
+            {
+                RemovePosition(update.ContractId);
+                AppLogger.Info(Src, $"Contract {update.ContractId} settled by API (already resolved locally, skipping RecordResult)");
+                return;
+            }
             bool won = update.Profit >= 0;
             _engine.RecordTradeResult(tracked.Signal.ContributingIndicators, won);
             RecordResult(tracked, update.Profit);
             RemovePosition(update.ContractId);
+            TradeCompleted?.Invoke(this, new TradeCompleted(update.ContractId, update.Profit, won));
             return;
         }
+
+        if (tracked.IsResolvedLocally) return;
 
         // Trailing stop logic
         if (_config.EnableTrailingStop && update.Profit > 0)
@@ -347,6 +442,7 @@ public sealed class StrategyExecutor : IDisposable
                 _engine.RecordTradeResult(tracked.Signal.ContributingIndicators, won);
                 RecordResult(tracked, profit);
                 RemovePosition(contractId);
+                TradeCompleted?.Invoke(this, new TradeCompleted(contractId, profit, won));
                 AppLogger.Info(Src, $"Sold contract {contractId}, profit={profit:F2}");
             }
             else
@@ -401,7 +497,35 @@ public sealed class StrategyExecutor : IDisposable
             _positions.Remove(contractId);
     }
 
-    private void ResolveStaleExpiredPositions()
+    private async Task ResolveExpiredPositionsBeforeBuyAsync()
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        List<TrackedPosition>? expired = null;
+        lock (_positions)
+        {
+            foreach (var kvp in _positions)
+            {
+                if (kvp.Value.ExpiryEpoch <= now && !kvp.Value.IsSelling)
+                {
+                    expired ??= new List<TrackedPosition>();
+                    expired.Add(kvp.Value);
+                }
+            }
+            if (expired != null)
+            {
+                foreach (var pos in expired)
+                    _positions.Remove(pos.ContractId);
+            }
+        }
+
+        if (expired == null) return;
+
+        AppLogger.Info(Src, $"Resolving {expired.Count} expired position(s) before new buy");
+        foreach (var pos in expired)
+            await ResolveStalePositionAsync(pos);
+    }
+
+    private async Task ResolveStaleExpiredPositionsAsync()
     {
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         List<TrackedPosition>? stale = null;
@@ -409,7 +533,7 @@ public sealed class StrategyExecutor : IDisposable
         {
             foreach (var kvp in _positions)
             {
-                if (kvp.Value.ExpiryEpoch <= now && !kvp.Value.IsSelling)
+                if (kvp.Value.ExpiryEpoch + 3 <= now && !kvp.Value.IsSelling)
                 {
                     stale ??= new List<TrackedPosition>();
                     stale.Add(kvp.Value);
@@ -422,40 +546,47 @@ public sealed class StrategyExecutor : IDisposable
             }
         }
 
-        if (stale != null)
-        {
-            foreach (var pos in stale)
-            {
-                _engine.RecordTradeResult(pos.Signal.ContributingIndicators, false);
-                RecordResult(pos, -pos.BuyPrice);
-                AppLogger.Info(Src, $"Resolved stale position {pos.ContractId} as loss (martingale level={_martingaleLevel})");
-            }
-        }
+        if (stale == null) return;
+
+        foreach (var pos in stale)
+            await ResolveStalePositionAsync(pos);
     }
 
-    private bool HasExpiredUnresolvedPositions()
+    private async Task ResolveStalePositionAsync(TrackedPosition pos)
     {
-        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        lock (_positions)
+        decimal profit = -pos.BuyPrice;
+        bool won = false;
+
+        try
         {
-            foreach (var kvp in _positions)
+            var status = await _contractService.GetContractStatusAsync(pos.ContractId);
+            if (status != null && (status.IsExpired || status.IsSold || status.Status is "won" or "lost" or "sold"))
             {
-                if (kvp.Value.ExpiryEpoch <= now)
-                    return true;
+                profit = status.Profit;
+                won = profit >= 0;
             }
         }
-        return false;
+        catch (Exception ex)
+        {
+            AppLogger.Warn(Src, $"Failed to query stale contract {pos.ContractId}: {ex.Message}");
+        }
+
+        _engine.RecordTradeResult(pos.Signal.ContributingIndicators, won);
+        RecordResult(pos, profit);
+        TradeCompleted?.Invoke(this, new TradeCompleted(pos.ContractId, profit, won));
+        AppLogger.Info(Src, $"Resolved stale position {pos.ContractId}: profit={profit:F2}, won={won} (martingale level={_martingaleLevel})");
     }
 
     private int CountActivePositions()
     {
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var grace = _config.StrategyMode == "Tendência" ? 5 : 0;
         lock (_positions)
         {
             int count = 0;
             foreach (var kvp in _positions)
             {
-                if (kvp.Value.ExpiryEpoch > now)
+                if (kvp.Value.ExpiryEpoch > now + grace)
                     count++;
             }
             return count;
@@ -466,6 +597,11 @@ public sealed class StrategyExecutor : IDisposable
     {
         _engine.SignalGenerated -= OnSignalGenerated;
         _contractService.OpenContractUpdated -= OnOpenContractUpdated;
+        _contractService.ProposalUpdated -= OnBotProposalUpdated;
+        _proposalCts.Cancel();
+        _proposalCts.Dispose();
+        _proposalLock.Dispose();
+        _signalLock.Dispose();
     }
 
     private sealed class TrackedPosition
@@ -478,7 +614,10 @@ public sealed class StrategyExecutor : IDisposable
         public long EntryEpoch { get; init; }
         public long ExpiryEpoch { get; init; }
         public bool IsSelling { get; set; }
+        public decimal EntrySpot { get; set; }
+        public bool IsResolvedLocally { get; set; }
     }
 }
 
 public sealed record BotPositionOpened(BuyResponse BuyResult, string ContractType);
+public sealed record TradeCompleted(long ContractId, decimal Profit, bool Won);
