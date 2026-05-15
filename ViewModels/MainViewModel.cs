@@ -142,6 +142,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
             History.AddBotTrade(e.BuyResult, e.ContractType, Strategy.StrategyMode);
         };
 
+        Strategy.BotTradeCompleted += (_, e) =>
+        {
+            History.UpdateTradeResult(e.ContractId, e.Profit);
+        };
+
         _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(10) };
         _timer.Tick += OnTimerTick;
 
@@ -320,6 +325,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
             });
 
             await Markets.ResubscribeActiveAsync();
+            if (Strategy.IsRunning)
+                Strategy.RefreshProposals();
             AppLogger.Info(Src, "Reconexão automática concluída");
         }
         catch (Exception ex)
@@ -410,12 +417,14 @@ public partial class MainViewModel : ObservableObject, IDisposable
         var panel = Log.IsLogVisible ? "log" : Markets.IsMarketsVisible ? "markets" : "";
         var market = Markets.SelectedTab?.Symbol;
         var cp = Markets.SelectedTab?.ContractPanel;
+        var chartType = Markets.SelectedTab?.ChartType.ToString();
         UiStateStore.Save(panel, market,
             cp?.DurationUnit.ToString(),
             cp?.DurationText,
             cp?.StakeText,
             cp?.UseDuration,
-            cp?.SelectedBarrierDisplay);
+            cp?.SelectedBarrierDisplay,
+            chartType);
     }
 
     private async Task RestoreUiStateAsync()
@@ -435,6 +444,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 {
                     _restoringState = true;
                     tab.ContractPanel.RestoreState(state.DurationUnit, state.DurationText, state.StakeText, state.UseDuration, state.SelectedBarrierDisplay);
+                    if (!string.IsNullOrEmpty(state.ChartType) && Enum.TryParse<ChartType>(state.ChartType, out var ct))
+                        tab.ChartType = ct;
                     await Markets.SelectTabAsync(tab);
                     _restoringState = false;
                 }

@@ -30,8 +30,18 @@ public partial class OpenPositionsViewModel : ObservableObject, IDisposable
 
     private void OnTimerTick(object? sender, EventArgs e)
     {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var expired = new List<OpenPositionItem>();
+
         foreach (var pos in Positions)
+        {
             pos.UpdateTimeProgress();
+            if (pos.DateExpiry > 0 && pos.DateExpiry + 10 <= now)
+                expired.Add(pos);
+        }
+
+        foreach (var pos in expired)
+            RemovePosition(pos.ContractId);
     }
 
     private void OnOpenContractUpdated(object? sender, OpenContractUpdate update)

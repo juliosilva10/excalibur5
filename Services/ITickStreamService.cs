@@ -6,6 +6,8 @@ public interface ITickStreamService
 {
     event EventHandler<TickData>? TickReceived;
 
+    bool IsConnected { get; }
+
     Task<string> SubscribeAsync(string symbol, CancellationToken ct = default);
     Task UnsubscribeAsync(string symbol, CancellationToken ct = default);
     Task UnsubscribeAllAsync(CancellationToken ct = default);

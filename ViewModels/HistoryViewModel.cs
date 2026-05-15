@@ -26,7 +26,7 @@ public partial class HistoryViewModel : ObservableObject
 
     private void OnOpenContractUpdated(object? sender, OpenContractUpdate update)
     {
-        if (!update.IsExpired && !update.IsSold) return;
+        if (!update.IsExpired && !update.IsSold && update.Status is not ("sold" or "won" or "lost")) return;
 
         Application.Current.Dispatcher.Invoke(() =>
         {
@@ -35,6 +35,10 @@ public partial class HistoryViewModel : ObservableObject
 
             var idx = Trades.IndexOf(item);
             if (idx < 0) return;
+
+            var exitSpot = !string.IsNullOrEmpty(update.ExitSpotRaw) ? update.ExitSpotRaw
+                         : update.CurrentSpot > 0 ? update.CurrentSpot.ToString(CultureInfo.InvariantCulture)
+                         : item.ExitSpot;
 
             Trades[idx] = new TradeHistoryItem
             {
@@ -48,7 +52,7 @@ public partial class HistoryViewModel : ObservableObject
                     ? DateTimeOffset.FromUnixTimeSeconds(update.DateExpiry).LocalDateTime
                     : DateTime.Now,
                 EntrySpot = update.EntrySpotRaw.Length > 0 ? update.EntrySpotRaw : item.EntrySpot,
-                ExitSpot = update.CurrentSpot.ToString(CultureInfo.InvariantCulture),
+                ExitSpot = exitSpot,
                 ContractValue = update.BidPrice,
                 ProfitLoss = update.Profit,
                 ContractId = item.ContractId
@@ -151,7 +155,8 @@ public partial class HistoryViewModel : ObservableObject
                 Tipo = FormatContractType(contractType),
                 ReferenceNumber = buy.ContractId.ToString(),
                 PurchaseTime = DateTimeOffset.FromUnixTimeSeconds(buy.StartTime).LocalDateTime,
-                Stake = buy.BuyPrice
+                Stake = buy.BuyPrice,
+                ContractId = buy.ContractId
             });
         });
     }
@@ -167,8 +172,37 @@ public partial class HistoryViewModel : ObservableObject
                 Tipo = FormatContractType(contractType),
                 ReferenceNumber = buy.ContractId.ToString(),
                 PurchaseTime = DateTimeOffset.FromUnixTimeSeconds(buy.StartTime).LocalDateTime,
-                Stake = buy.BuyPrice
+                Stake = buy.BuyPrice,
+                ContractId = buy.ContractId
             });
+        });
+    }
+
+    public void UpdateTradeResult(long contractId, decimal profit)
+    {
+        Application.Current.Dispatcher.Invoke(() =>
+        {
+            var item = Trades.FirstOrDefault(t => t.ContractId == contractId);
+            if (item == null) return;
+
+            var idx = Trades.IndexOf(item);
+            if (idx < 0) return;
+
+            Trades[idx] = new TradeHistoryItem
+            {
+                Operacao = item.Operacao,
+                Estrategia = item.Estrategia,
+                Tipo = item.Tipo,
+                ReferenceNumber = item.ReferenceNumber,
+                PurchaseTime = item.PurchaseTime,
+                Stake = item.Stake,
+                SellTime = DateTime.Now,
+                EntrySpot = item.EntrySpot,
+                ExitSpot = item.ExitSpot,
+                ContractValue = item.Stake + profit,
+                ProfitLoss = profit,
+                ContractId = item.ContractId
+            };
         });
     }
 

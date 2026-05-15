@@ -82,6 +82,7 @@ public partial class MarketTabView : UserControl
             vm.ChartValues.CollectionChanged += OnChartValuesChanged;
             vm.PropertyChanged += OnVmPropertyChanged;
             vm.CandleUpdated += OnCandleUpdated;
+            UpdateButtonIcon(vm.ChartType);
             ScheduleRedraw();
         }
         else
@@ -96,7 +97,11 @@ public partial class MarketTabView : UserControl
     private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(MarketTabViewModel.ChartType) or nameof(MarketTabViewModel.CandleValues))
+        {
             ScheduleRedraw();
+            if (e.PropertyName == nameof(MarketTabViewModel.ChartType) && Vm != null)
+                UpdateButtonIcon(Vm.ChartType);
+        }
     }
 
     private void OnCandleUpdated(object? sender, EventArgs e)

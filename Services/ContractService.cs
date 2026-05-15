@@ -565,6 +565,9 @@ public sealed class ContractService : IContractService, IDisposable
             sub.TryGetProperty("id", out var idEl))
             subId = idEl.GetString() ?? "";
 
+        var exitSpotRaw = pocEl.TryGetProperty("exit_tick_display_value", out var etd) ? etd.GetString() ?? ""
+                        : pocEl.TryGetProperty("exit_tick", out var et) ? et.GetRawText().Trim('"') : "";
+
         return new OpenContractUpdate
         {
             ContractId = pocEl.TryGetProperty("contract_id", out var cid) ? cid.GetInt64() : 0,
@@ -574,7 +577,9 @@ public sealed class ContractService : IContractService, IDisposable
             BidPrice = pocEl.TryGetProperty("bid_price", out var bid) ? ParseDecimal(bid) : 0m,
             CurrentSpot = pocEl.TryGetProperty("current_spot", out var cs) ? ParseDecimal(cs) : 0m,
             EntrySpot = pocEl.TryGetProperty("entry_spot", out var es) ? ParseDecimal(es) : 0m,
-            EntrySpotRaw = pocEl.TryGetProperty("entry_spot", out var esRaw) ? esRaw.GetRawText().Trim('"') : "",
+            EntrySpotRaw = pocEl.TryGetProperty("entry_spot_display_value", out var esd) ? esd.GetString() ?? ""
+                         : pocEl.TryGetProperty("entry_spot", out var esRaw) ? esRaw.GetRawText().Trim('"') : "",
+            ExitSpotRaw = exitSpotRaw,
             Profit = pocEl.TryGetProperty("profit", out var pf) ? ParseDecimal(pf) : 0m,
             DateStart = pocEl.TryGetProperty("date_start", out var ds) ? ds.GetInt64() : 0,
             DateExpiry = pocEl.TryGetProperty("date_expiry", out var de) ? de.GetInt64() : 0,
@@ -614,6 +619,29 @@ public sealed class ContractService : IContractService, IDisposable
             AppLogger.Warn(Src, $"GetContractSpots error for {contractId}: {ex.Message}");
         }
         return ("", "");
+    }
+
+    public async Task<OpenContractUpdate?> GetContractStatusAsync(long contractId, CancellationToken ct = default)
+    {
+        var reqId = Interlocked.Increment(ref _reqId);
+        var payload = JsonSerializer.Serialize(new
+        {
+            proposal_open_contract = 1,
+            contract_id = contractId,
+            req_id = reqId
+        });
+
+        try
+        {
+            var root = await SendAndWaitAsync(reqId, payload, ct);
+            if (root.TryGetProperty("proposal_open_contract", out var pocEl))
+                return ParseOpenContractUpdate(root, pocEl);
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Warn(Src, $"GetContractStatus error for {contractId}: {ex.Message}");
+        }
+        return null;
     }
 
     public async Task<List<ProfitTableEntry>> GetProfitTableAsync(int limit = 50, int offset = 0, CancellationToken ct = default)

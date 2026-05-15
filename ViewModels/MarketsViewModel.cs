@@ -76,8 +76,9 @@ public partial class MarketsViewModel : ObservableObject, IDisposable
         if (SelectedTab is not null && IsMarketsVisible)
         {
             AppLogger.Info("Markets", $"Re-subscribing active tab: {SelectedTab.Symbol}");
-            await SelectedTab.ForceDeactivateAsync();
-            await SelectedTab.ActivateAsync();
+            SelectedTab.StopWatchdogExternal();
+            _tickService.ClearSubscription(SelectedTab.Symbol);
+            await SelectedTab.ReactivateStreamAsync();
         }
     }
 

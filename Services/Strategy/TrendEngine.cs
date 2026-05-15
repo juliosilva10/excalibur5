@@ -9,14 +9,14 @@ public sealed class TrendEngine
 
     public SignalDirection? Evaluate(IReadOnlyList<CandleData> candles, int sampleSize)
     {
-        if (candles.Count < sampleSize)
+        if (candles.Count < sampleSize + 1)
             return null;
 
         int calls = 0;
         int puts = 0;
-        int startIndex = candles.Count - sampleSize;
+        int startIndex = candles.Count - 1 - sampleSize;
 
-        for (int i = startIndex; i < candles.Count; i++)
+        for (int i = startIndex; i < candles.Count - 1; i++)
         {
             var c = candles[i];
             if (c.Close > c.Open)

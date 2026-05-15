@@ -16,11 +16,28 @@ public sealed class TickStreamService : ITickStreamService, IDisposable
 
     public event EventHandler<TickData>? TickReceived;
 
+    public bool IsConnected => _ws.IsConnected;
+
     public TickStreamService(IDerivWebSocketService ws)
     {
         _ws = ws;
         _ws.MessageReceived += OnMessage;
+        _ws.Disconnected += OnDisconnected;
         AppLogger.Info(Src, "TickStreamService created");
+    }
+
+    private void OnDisconnected(object? sender, EventArgs e)
+    {
+        var pendingCount = _pending.Count;
+        foreach (var key in _pending.Keys.ToList())
+        {
+            if (_pending.TryRemove(key, out var tcs))
+                tcs.TrySetCanceled();
+        }
+
+        _subscriptions.Clear();
+        _lastQuotes.Clear();
+        AppLogger.Info(Src, $"OnDisconnected — cancelled {pendingCount} pending requests, cleared subscriptions");
     }
 
     private void OnMessage(object? sender, string json)
@@ -139,8 +156,9 @@ public sealed class TickStreamService : ITickStreamService, IDisposable
         }
         catch (OperationCanceledException)
         {
-            AppLogger.Warn(Src, $"Subscribe response timeout for {symbol} — ticks may still arrive");
-            return "";
+            _subscriptions.TryRemove(symbol, out _);
+            AppLogger.Warn(Src, $"Subscribe cancelled/timeout for {symbol}");
+            throw;
         }
     }
 
@@ -309,6 +327,7 @@ public sealed class TickStreamService : ITickStreamService, IDisposable
     public void Dispose()
     {
         _ws.MessageReceived -= OnMessage;
+        _ws.Disconnected -= OnDisconnected;
         foreach (var key in _pending.Keys)
         {
             if (_pending.TryRemove(key, out var tcs))

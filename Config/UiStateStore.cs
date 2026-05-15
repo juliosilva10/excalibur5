@@ -9,7 +9,7 @@ public static class UiStateStore
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
         "Excalibur5", "uistate.json");
 
-    public static void Save(string activePanel, string? selectedMarket, string? durationUnit = null, string? durationText = null, string? stakeText = null, bool? useDuration = null, string? selectedBarrier = null)
+    public static void Save(string activePanel, string? selectedMarket, string? durationUnit = null, string? durationText = null, string? stakeText = null, bool? useDuration = null, string? selectedBarrier = null, string? chartType = null)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
         var existing = Load();
@@ -21,7 +21,8 @@ public static class UiStateStore
             DurationText = durationText ?? existing.DurationText,
             StakeText = stakeText ?? existing.StakeText,
             UseDuration = useDuration ?? existing.UseDuration,
-            SelectedBarrierDisplay = selectedBarrier ?? existing.SelectedBarrierDisplay
+            SelectedBarrierDisplay = selectedBarrier ?? existing.SelectedBarrierDisplay,
+            ChartType = chartType ?? existing.ChartType
         };
         File.WriteAllText(FilePath, JsonSerializer.Serialize(state));
     }
@@ -50,4 +51,5 @@ public class UiState
     public string? StakeText { get; set; }
     public bool? UseDuration { get; set; }
     public string? SelectedBarrierDisplay { get; set; }
+    public string? ChartType { get; set; }
 }

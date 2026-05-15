@@ -311,6 +311,27 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
         await ContractPanel.DeactivateAsync();
     }
 
+    public async Task ReactivateStreamAsync()
+    {
+        _isActive = true;
+        _tickService.TickReceived += OnTickReceived;
+
+        try
+        {
+            _tickService.ClearSubscription(Symbol);
+            await _tickService.SubscribeAsync(Symbol);
+            IsSubscribed = true;
+            _lastTickTime = DateTime.UtcNow;
+            StartWatchdog();
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Warn("MarketTab", $"ReactivateStream failed for {Symbol}: {ex.Message}");
+        }
+
+        await ContractPanel.LoadContractsAsync(Symbol, DisplayName);
+    }
+
     private void StartWatchdog()
     {
         _lastTickTime = DateTime.UtcNow;
@@ -326,6 +347,14 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
         _watchdogTimer.Tick -= OnWatchdogTick;
     }
 
+    public void StopWatchdogExternal()
+    {
+        _tickService.TickReceived -= OnTickReceived;
+        StopWatchdog();
+        _isActive = false;
+        IsSubscribed = false;
+    }
+
     private async void OnWatchdogTick(object? sender, EventArgs e)
     {
         if (!_isActive || _isResubscribing) return;
@@ -333,13 +362,21 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
         var elapsed = (DateTime.UtcNow - _lastTickTime).TotalSeconds;
         if (elapsed < TickWatchdogSeconds) return;
 
+        if (!_tickService.IsConnected)
+        {
+            _lastTickTime = DateTime.UtcNow;
+            return;
+        }
+
         _isResubscribing = true;
         AppLogger.Warn("MarketTab", $"Watchdog: no ticks for {Symbol} in {elapsed:F0}s — resubscribing");
 
         try
         {
+            _tickService.ClearSubscription(Symbol);
             await _tickService.ForgetAllTicksAsync();
             await Task.Delay(500);
+            if (!_isActive) return;
             await _tickService.SubscribeAsync(Symbol);
             _lastTickTime = DateTime.UtcNow;
             AppLogger.Info("MarketTab", $"Watchdog: resubscribed {Symbol} successfully");

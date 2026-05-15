@@ -45,13 +45,13 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string _maxContractsText = "3";
     [ObservableProperty] private double _confidenceThreshold = 0.70;
     [ObservableProperty] private string _recoverMode = string.Empty;
-    [ObservableProperty] private string _strategyMode = string.Empty;
+    [ObservableProperty] private string _strategyMode = "Multi-Indicador";
     [ObservableProperty] private string _sampleSizeText = "5";
 
     public ObservableCollection<string> AvailableBarrierDisplays { get; } = new();
     public bool UseEndTime => !UseDuration;
     public List<string> RecoverModes { get; } = ["", "Martingale"];
-    public List<string> StrategyModes { get; } = ["", "Tendência"];
+    public List<string> StrategyModes { get; } = ["Multi-Indicador", "Tendência"];
     public bool IsTrendMode => StrategyMode == "Tendência";
 
     // Indicators

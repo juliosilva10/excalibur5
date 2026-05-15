@@ -10,6 +10,7 @@ public sealed class OpenContractUpdate
     public decimal CurrentSpot { get; init; }
     public decimal EntrySpot { get; init; }
     public string EntrySpotRaw { get; init; } = string.Empty;
+    public string ExitSpotRaw { get; init; } = string.Empty;
     public decimal Profit { get; init; }
     public long DateStart { get; init; }
     public long DateExpiry { get; init; }

@@ -1,0 +1,13 @@
+{
+  "name": "excalibur5-mcp-logs",
+  "version": "1.0.0",
+  "description": "MCP server for reading Excalibur5 application logs",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1"
+  }
+}

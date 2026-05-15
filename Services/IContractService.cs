@@ -19,4 +19,5 @@ public interface IContractService
     Task<SellResponse> SellContractAsync(long contractId, CancellationToken ct = default);
     Task<List<ProfitTableEntry>> GetProfitTableAsync(int limit = 50, int offset = 0, CancellationToken ct = default);
     Task<(string EntrySpot, string ExitSpot)> GetContractSpotsAsync(long contractId, CancellationToken ct = default);
+    Task<OpenContractUpdate?> GetContractStatusAsync(long contractId, CancellationToken ct = default);
 }

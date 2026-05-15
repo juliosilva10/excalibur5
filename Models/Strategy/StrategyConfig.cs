@@ -14,7 +14,7 @@ public sealed class StrategyConfig
     public decimal MartingaleFactor { get; set; } = 2.0m;
     public int MartingaleMaxLevel { get; set; } = 3;
     public string Barrier { get; set; } = "+0.000";
-    public string StrategyMode { get; set; } = string.Empty;
+    public string StrategyMode { get; set; } = "Multi-Indicador";
     public int SampleSize { get; set; } = 5;
     public List<IndicatorType> EnabledIndicators { get; set; } = new()
     {
