@@ -31,12 +31,23 @@ public sealed class DeficitRecoverStrategy : IRecoverStrategy
 
     public decimal GetDynamicTakeProfit(RecoverContext context)
     {
-        return context.BaseTakeProfit;
+        if (_deficit <= 0)
+            return context.BaseTakeProfit;
+
+        var avgRatio = GetAveragePayoutRatio();
+        return Math.Round(context.CurrentStake * avgRatio, 2);
     }
 
     public decimal GetDynamicStopLoss(RecoverContext context)
     {
-        return context.BaseStopLoss;
+        if (_deficit <= 0)
+            return context.BaseStopLoss;
+
+        if (context.BaseStake <= 0)
+            return context.BaseStopLoss;
+
+        var ratio = context.CurrentStake / context.BaseStake;
+        return Math.Round(context.BaseStopLoss * ratio, 2);
     }
 
     public void RecordResult(decimal profit, decimal stakeUsed)
