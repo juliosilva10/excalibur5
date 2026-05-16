@@ -479,7 +479,7 @@ public sealed class StrategyExecutor : IDisposable
         if (_recoverStrategy == null)
             return _config.Stake;
 
-        var context = new RecoverContext(_config.Stake);
+        var context = new RecoverContext(_config.Stake, _config.TakeProfitUsd, _config.StopLossUsd, _config.Stake);
         return _recoverStrategy.GetNextStake(context);
     }
 
