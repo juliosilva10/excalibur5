@@ -29,6 +29,16 @@ public sealed class DeficitRecoverStrategy : IRecoverStrategy
         return Math.Round(Math.Min(stake, _maxStake), 2);
     }
 
+    public decimal GetDynamicTakeProfit(RecoverContext context)
+    {
+        return context.BaseTakeProfit;
+    }
+
+    public decimal GetDynamicStopLoss(RecoverContext context)
+    {
+        return context.BaseStopLoss;
+    }
+
     public void RecordResult(decimal profit, decimal stakeUsed)
     {
         if (profit >= 0)

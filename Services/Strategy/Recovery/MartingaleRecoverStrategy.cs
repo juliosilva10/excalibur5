@@ -23,6 +23,16 @@ public sealed class MartingaleRecoverStrategy : IRecoverStrategy
         return Math.Round(stake, 2);
     }
 
+    public decimal GetDynamicTakeProfit(RecoverContext context)
+    {
+        return context.BaseTakeProfit;
+    }
+
+    public decimal GetDynamicStopLoss(RecoverContext context)
+    {
+        return context.BaseStopLoss;
+    }
+
     public void RecordResult(decimal profit, decimal stakeUsed)
     {
         if (profit >= 0)
