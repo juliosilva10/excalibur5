@@ -1,6 +1,7 @@
 using Excalibur5.Models;
 using Excalibur5.Models.Strategy;
 using Excalibur5.Services;
+using Excalibur5.Services.Strategy.Recovery;
 
 namespace Excalibur5.Services.Strategy;
 
@@ -19,7 +20,7 @@ public sealed class StrategyExecutor : IDisposable
     private StrategyConfig _config = new();
     private string _symbol = string.Empty;
     private bool _active;
-    private int _martingaleLevel;
+    private IRecoverStrategy? _recoverStrategy;
     private decimal _currentSpot;
 
     // Pre-subscribed proposal state
@@ -54,7 +55,7 @@ public sealed class StrategyExecutor : IDisposable
         _config = config;
         _symbol = symbol;
         _active = true;
-        _martingaleLevel = 0;
+        _recoverStrategy = RecoverStrategyFactory.Create(config);
         _proposalsReady = false;
         _callProposalId = string.Empty;
         _putProposalId = string.Empty;
@@ -110,7 +111,7 @@ public sealed class StrategyExecutor : IDisposable
             _engine.RecordTradeResult(pos.Signal.ContributingIndicators, won);
             RecordResult(pos, estimatedProfit);
             TradeCompleted?.Invoke(this, new TradeCompleted(pos.ContractId, estimatedProfit, won));
-            AppLogger.Info(Src, $"Resolved locally {pos.ContractId}: entry={pos.EntrySpot}, close={lastCandleClose}, won={won} (martingale={_martingaleLevel})");
+            AppLogger.Info(Src, $"Resolved locally {pos.ContractId}: entry={pos.EntrySpot}, close={lastCandleClose}, won={won} (stake={GetCurrentStake()})");
         }
     }
 
@@ -461,18 +462,11 @@ public sealed class StrategyExecutor : IDisposable
         var previousStake = GetCurrentStake();
 
         if (profit >= 0)
-        {
             Stats.RecordWin(profit);
-            _martingaleLevel = 0;
-        }
         else
-        {
             Stats.RecordLoss(profit);
-            if (_config.RecoverMode == "Martingale" && _martingaleLevel < _config.MartingaleMaxLevel)
-                _martingaleLevel++;
-            else
-                _martingaleLevel = 0;
-        }
+
+        _recoverStrategy?.RecordResult(profit, tracked.BuyPrice);
 
         StatsUpdated?.Invoke(this, EventArgs.Empty);
 
@@ -482,13 +476,11 @@ public sealed class StrategyExecutor : IDisposable
 
     private decimal GetCurrentStake()
     {
-        if (_config.RecoverMode != "Martingale" || _martingaleLevel <= 0)
+        if (_recoverStrategy == null)
             return _config.Stake;
 
-        var stake = _config.Stake;
-        for (int i = 0; i < _martingaleLevel; i++)
-            stake *= _config.MartingaleFactor;
-        return Math.Round(stake, 2);
+        var context = new RecoverContext(_config.Stake);
+        return _recoverStrategy.GetNextStake(context);
     }
 
     private void RemovePosition(long contractId)
@@ -574,7 +566,7 @@ public sealed class StrategyExecutor : IDisposable
         _engine.RecordTradeResult(pos.Signal.ContributingIndicators, won);
         RecordResult(pos, profit);
         TradeCompleted?.Invoke(this, new TradeCompleted(pos.ContractId, profit, won));
-        AppLogger.Info(Src, $"Resolved stale position {pos.ContractId}: profit={profit:F2}, won={won} (martingale level={_martingaleLevel})");
+        AppLogger.Info(Src, $"Resolved stale position {pos.ContractId}: profit={profit:F2}, won={won} (stake={GetCurrentStake()})");
     }
 
     private int CountActivePositions()
