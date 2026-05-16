@@ -334,8 +334,9 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
 
     private void StartWatchdog()
     {
+        StopWatchdog();
         _lastTickTime = DateTime.UtcNow;
-        _watchdogTimer ??= new DispatcherTimer { Interval = TimeSpan.FromSeconds(10) };
+        _watchdogTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(10) };
         _watchdogTimer.Tick += OnWatchdogTick;
         _watchdogTimer.Start();
     }
@@ -345,6 +346,7 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
         if (_watchdogTimer == null) return;
         _watchdogTimer.Stop();
         _watchdogTimer.Tick -= OnWatchdogTick;
+        _watchdogTimer = null;
     }
 
     public void StopWatchdogExternal()
@@ -373,8 +375,8 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
 
         try
         {
+            await _tickService.UnsubscribeAsync(Symbol);
             _tickService.ClearSubscription(Symbol);
-            await _tickService.ForgetAllTicksAsync();
             await Task.Delay(500);
             if (!_isActive) return;
             await _tickService.SubscribeAsync(Symbol);

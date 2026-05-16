@@ -24,14 +24,18 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
     private string _callProposalId = string.Empty;
     private string _putProposalId = string.Empty;
 
-    // Martingale state
+    // Recovery state
     private RecoverViewModel? _recoverVm;
     private int _martingaleLevel;
     private decimal _baseStake;
     private long _lastBoughtContractId;
+    private decimal _deficit;
+    private readonly decimal[] _payoutRatios = new decimal[5];
+    private int _payoutIndex;
+    private int _payoutCount;
 
     [ObservableProperty] private string _recoverMode = string.Empty;
-    public List<string> RecoverModes { get; } = ["", "Martingale"];
+    public List<string> RecoverModes { get; } = ["", "Martingale", "Deficit Recovery"];
 
     [ObservableProperty] private string _symbol = string.Empty;
     [ObservableProperty] private string _displayName = string.Empty;
@@ -121,43 +125,96 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
 
     partial void OnRecoverModeChanged(string value)
     {
-        if (value == "Martingale")
+        if (value == "Martingale" || value == "Deficit Recovery")
         {
             _baseStake = GetStakeValue();
             if (_baseStake <= 0)
                 _baseStake = decimal.TryParse(StakeText, NumberStyles.Any, CultureInfo.InvariantCulture, out var v) ? v : 10m;
             _martingaleLevel = 0;
+            _deficit = 0;
+            _payoutIndex = 0;
+            _payoutCount = 0;
         }
         else
         {
             if (_martingaleLevel > 0 && _baseStake > 0)
                 StakeText = _baseStake.ToString("F2", CultureInfo.InvariantCulture);
+            if (_deficit > 0 && _baseStake > 0)
+                StakeText = _baseStake.ToString("F2", CultureInfo.InvariantCulture);
             _martingaleLevel = 0;
+            _deficit = 0;
         }
     }
 
     private void OnMartingaleContractUpdated(object? sender, OpenContractUpdate update)
     {
-        if (RecoverMode != "Martingale" || _recoverVm == null) return;
+        if (_recoverVm == null) return;
+        if (RecoverMode != "Martingale" && RecoverMode != "Deficit Recovery") return;
         if (update.ContractId != _lastBoughtContractId) return;
         if (!update.IsExpired && !update.IsSold && update.Status is not ("sold" or "won" or "lost")) return;
 
         Application.Current?.Dispatcher?.InvokeAsync(() =>
         {
             bool isLoss = update.Profit < 0;
-            if (isLoss && _martingaleLevel < _recoverVm.MaxLevel)
+
+            if (RecoverMode == "Martingale")
             {
-                _martingaleLevel++;
-                var newStake = _recoverVm.CalculateStake(_martingaleLevel);
-                StakeText = newStake.ToString("F2", CultureInfo.InvariantCulture);
+                if (isLoss && _martingaleLevel < _recoverVm.MaxLevel)
+                {
+                    _martingaleLevel++;
+                    var newStake = _recoverVm.CalculateStake(_martingaleLevel);
+                    StakeText = newStake.ToString("F2", CultureInfo.InvariantCulture);
+                }
+                else
+                {
+                    _martingaleLevel = 0;
+                    StakeText = _baseStake.ToString("F2", CultureInfo.InvariantCulture);
+                }
             }
-            else
+            else if (RecoverMode == "Deficit Recovery")
             {
-                _martingaleLevel = 0;
-                StakeText = _baseStake.ToString("F2", CultureInfo.InvariantCulture);
+                if (isLoss)
+                {
+                    _deficit += Math.Abs(update.Profit);
+                }
+                else
+                {
+                    _deficit = Math.Max(0, _deficit - update.Profit);
+                    if (_baseStake > 0)
+                    {
+                        var ratio = update.Profit / _baseStake;
+                        _payoutRatios[_payoutIndex] = ratio;
+                        _payoutIndex = (_payoutIndex + 1) % 5;
+                        if (_payoutCount < 5) _payoutCount++;
+                    }
+                }
+
+                if (_deficit <= 0)
+                {
+                    StakeText = _baseStake.ToString("F2", CultureInfo.InvariantCulture);
+                }
+                else
+                {
+                    var avgRatio = GetAveragePayoutRatio();
+                    var recoveryTrades = _recoverVm.DeficitRecoveryTrades;
+                    var needed = _deficit / (avgRatio * recoveryTrades);
+                    var stake = Math.Max(needed, _baseStake);
+                    stake = Math.Min(stake, _recoverVm.DeficitMaxStake);
+                    StakeText = Math.Round(stake, 2).ToString("F2", CultureInfo.InvariantCulture);
+                }
             }
+
             _lastBoughtContractId = 0;
         });
+    }
+
+    private decimal GetAveragePayoutRatio()
+    {
+        if (_payoutCount == 0) return 0.5m;
+        decimal sum = 0;
+        for (int i = 0; i < _payoutCount; i++)
+            sum += _payoutRatios[i];
+        return sum / _payoutCount;
     }
 
     public event EventHandler<ManualTradeOpened>? ManualTradeOpened;

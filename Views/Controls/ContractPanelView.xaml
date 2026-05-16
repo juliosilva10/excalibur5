@@ -74,7 +74,7 @@
                                 <GradientStop Color="#1a4a5e" Offset="0.85"/>
                             </LinearGradientBrush>
                         </Border.Background>
-                        <TextBlock Text="Recover — Martingale"
+                        <TextBlock Text="{Binding DataContext.Recover.SelectedMode, RelativeSource={RelativeSource AncestorType=Window}, StringFormat='Recover — {0}'}"
                                    Foreground="#00f0ff"
                                    FontSize="11"
                                    FontWeight="SemiBold"/>
@@ -709,46 +709,82 @@
                         </Style>
                     </StackPanel.Style>
 
+                    <!-- Mode selector -->
+                    <TextBlock Text="Modo de Recuperação" Foreground="#90b5c9" FontSize="10" Margin="0,0,0,4"/>
+                    <ComboBox Style="{StaticResource DerivComboBox}"
+                              ItemsSource="{Binding RecoverModes}"
+                              SelectedItem="{Binding SelectedMode, Mode=TwoWay}"
+                              Height="28" Width="160"
+                              HorizontalAlignment="Left"
+                              FontSize="11"
+                              Foreground="#00f0ff"
+                              Margin="0,0,0,12"/>
+
                     <!-- Enable toggle -->
-                    <CheckBox Content="Ativar Martingale"
+                    <CheckBox Content="Ativar Recuperação"
                               IsChecked="{Binding IsEnabled}"
                               Foreground="#a3b8cc" FontSize="11" Margin="0,0,0,12" Cursor="Hand"/>
 
-                    <!-- Stake -->
-                    <TextBlock Text="Stake (USD)" Foreground="#90b5c9" FontSize="10" Margin="0,0,0,4"/>
-                    <TextBox Style="{StaticResource DerivTextBox}"
-                             Text="{Binding StakeText, UpdateSourceTrigger=PropertyChanged}"
-                             Height="30" Width="120"
-                             HorizontalAlignment="Left"
-                             MaxLength="10"
-                             PreviewTextInput="RecoverDecimalInput_PreviewTextInput"
-                             DataObject.Pasting="RecoverDecimalInput_Pasting"/>
+                    <!-- Martingale fields -->
+                    <StackPanel Visibility="{Binding IsMartingaleMode, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Text="Stake (USD)" Foreground="#90b5c9" FontSize="10" Margin="0,0,0,4"/>
+                        <TextBox Style="{StaticResource DerivTextBox}"
+                                 Text="{Binding StakeText, UpdateSourceTrigger=PropertyChanged}"
+                                 Height="30" Width="120"
+                                 HorizontalAlignment="Left"
+                                 MaxLength="10"
+                                 PreviewTextInput="RecoverDecimalInput_PreviewTextInput"
+                                 DataObject.Pasting="RecoverDecimalInput_Pasting"/>
 
-                    <!-- Fator -->
-                    <TextBlock Text="Fator (multiplicador)" Foreground="#90b5c9" FontSize="10" Margin="0,10,0,4"/>
-                    <TextBox Style="{StaticResource DerivTextBox}"
-                             Text="{Binding FactorText, UpdateSourceTrigger=PropertyChanged}"
-                             Height="30" Width="120"
-                             HorizontalAlignment="Left"
-                             MaxLength="10"
-                             PreviewTextInput="RecoverDecimalInput_PreviewTextInput"
-                             DataObject.Pasting="RecoverDecimalInput_Pasting"/>
+                        <TextBlock Text="Fator (multiplicador)" Foreground="#90b5c9" FontSize="10" Margin="0,10,0,4"/>
+                        <TextBox Style="{StaticResource DerivTextBox}"
+                                 Text="{Binding FactorText, UpdateSourceTrigger=PropertyChanged}"
+                                 Height="30" Width="120"
+                                 HorizontalAlignment="Left"
+                                 MaxLength="10"
+                                 PreviewTextInput="RecoverDecimalInput_PreviewTextInput"
+                                 DataObject.Pasting="RecoverDecimalInput_Pasting"/>
 
-                    <!-- Nível -->
-                    <TextBlock Text="Nível (máximo)" Foreground="#90b5c9" FontSize="10" Margin="0,10,0,4"/>
-                    <TextBox Style="{StaticResource DerivTextBox}"
-                             Text="{Binding MaxLevelText, UpdateSourceTrigger=PropertyChanged}"
-                             Height="30" Width="120"
-                             HorizontalAlignment="Left"
-                             MaxLength="3"
-                             PreviewTextInput="RecoverIntegerInput_PreviewTextInput"
-                             DataObject.Pasting="RecoverIntegerInput_Pasting"/>
+                        <TextBlock Text="Nível (máximo)" Foreground="#90b5c9" FontSize="10" Margin="0,10,0,4"/>
+                        <TextBox Style="{StaticResource DerivTextBox}"
+                                 Text="{Binding MaxLevelText, UpdateSourceTrigger=PropertyChanged}"
+                                 Height="30" Width="120"
+                                 HorizontalAlignment="Left"
+                                 MaxLength="3"
+                                 PreviewTextInput="RecoverIntegerInput_PreviewTextInput"
+                                 DataObject.Pasting="RecoverIntegerInput_Pasting"/>
 
-                    <!-- Info -->
-                    <TextBlock Text="Ao perder, stake × fator até nível máximo. Ao vencer ou atingir nível, reseta."
-                               Foreground="#6090a8" FontSize="9"
-                               TextWrapping="Wrap"
-                               Margin="0,12,0,0"/>
+                        <TextBlock Text="Ao perder, stake × fator até nível máximo. Ao vencer ou atingir nível, reseta."
+                                   Foreground="#6090a8" FontSize="9"
+                                   TextWrapping="Wrap"
+                                   Margin="0,12,0,0"/>
+                    </StackPanel>
+
+                    <!-- Deficit Recovery fields -->
+                    <StackPanel Visibility="{Binding IsDeficitMode, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Text="Stake Máxima (USD)" Foreground="#90b5c9" FontSize="10" Margin="0,0,0,4"/>
+                        <TextBox Style="{StaticResource DerivTextBox}"
+                                 Text="{Binding DeficitMaxStakeText, UpdateSourceTrigger=PropertyChanged}"
+                                 Height="30" Width="120"
+                                 HorizontalAlignment="Left"
+                                 MaxLength="8"
+                                 PreviewTextInput="RecoverDecimalInput_PreviewTextInput"
+                                 DataObject.Pasting="RecoverDecimalInput_Pasting"/>
+
+                        <TextBlock Text="Trades p/ Recuperar" Foreground="#90b5c9" FontSize="10" Margin="0,10,0,4"/>
+                        <TextBox Style="{StaticResource DerivTextBox}"
+                                 Text="{Binding DeficitRecoveryTradesText, UpdateSourceTrigger=PropertyChanged}"
+                                 Height="30" Width="120"
+                                 HorizontalAlignment="Left"
+                                 MaxLength="2"
+                                 PreviewTextInput="RecoverIntegerInput_PreviewTextInput"
+                                 DataObject.Pasting="RecoverIntegerInput_Pasting"/>
+
+                        <TextBlock Text="Calcula stake com base no déficit acumulado e payout médio dos últimos 5 trades. 1 = recuperar tudo no próximo trade."
+                                   Foreground="#6090a8" FontSize="9"
+                                   TextWrapping="Wrap"
+                                   Margin="0,12,0,0"/>
+                    </StackPanel>
                 </StackPanel>
 
                 <!-- POSITIONS TABLE -->

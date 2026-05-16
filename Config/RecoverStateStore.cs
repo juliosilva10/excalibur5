@@ -32,8 +32,11 @@ public static class RecoverStateStore
 
 public class RecoverState
 {
+    public string SelectedMode { get; set; } = "Martingale";
     public string StakeText { get; set; } = "0.35";
     public string FactorText { get; set; } = "2.00";
     public string MaxLevelText { get; set; } = "3";
+    public string DeficitMaxStakeText { get; set; } = "50";
+    public string DeficitRecoveryTradesText { get; set; } = "1";
     public bool IsEnabled { get; set; }
 }
