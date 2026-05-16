@@ -7,17 +7,20 @@
              mc:Ignorable="d"
              d:DesignHeight="300" d:DesignWidth="900">
 
-    <Border CornerRadius="6"
-            BorderBrush="#1d4957" BorderThickness="1"
-            Margin="0,4,0,0">
-        <Border.Background>
-            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                <GradientStop Color="#0c1e2a" Offset="0"/>
-                <GradientStop Color="#07121a" Offset="1"/>
-            </LinearGradientBrush>
-        </Border.Background>
+    <Grid Margin="0,4,0,0">
+        <!-- Background visual (does not clip children) -->
+        <Border CornerRadius="6"
+                BorderBrush="#1d4957" BorderThickness="1"
+                IsHitTestVisible="False">
+            <Border.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                    <GradientStop Color="#0c1e2a" Offset="0"/>
+                    <GradientStop Color="#07121a" Offset="1"/>
+                </LinearGradientBrush>
+            </Border.Background>
+        </Border>
 
-        <Grid Margin="12,8,12,10">
+        <Grid Margin="18,8,12,10">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
@@ -227,24 +230,22 @@
 
                     <!-- Stake input -->
                     <TextBlock Text="Entrada (Stake):" Foreground="#90b5c9" FontSize="10" Margin="0,10,0,4"/>
-                    <StackPanel Orientation="Horizontal">
-                        <TextBox Style="{StaticResource DerivTextBox}"
-                                 Text="{Binding StakeText, UpdateSourceTrigger=PropertyChanged}"
-                                 Height="30" Width="120"
-                                 MaxLength="10"
-                                 PreviewTextInput="StakeTextBox_PreviewTextInput"
-                                 ToolTip="Valor da entrada em USD (máx. 2 casas decimais)"/>
-                        <StackPanel Margin="8,0,0,0">
-                            <TextBlock Text="Recover" Foreground="#90b5c9" FontSize="9" Margin="0,0,0,2"/>
-                            <ComboBox Style="{StaticResource DerivComboBox}"
-                                      ItemsSource="{Binding RecoverModes}"
-                                      SelectedItem="{Binding RecoverMode, Mode=TwoWay}"
-                                      Width="90" Height="24"
-                                      FontSize="10"
-                                      Foreground="#00f0ff"
-                                      ToolTip="Modo de recuperação (Martingale)"/>
-                        </StackPanel>
-                    </StackPanel>
+                    <TextBox Style="{StaticResource DerivTextBox}"
+                             Text="{Binding StakeText, UpdateSourceTrigger=PropertyChanged}"
+                             Height="30" Width="120"
+                             MaxLength="10"
+                             HorizontalAlignment="Left"
+                             PreviewTextInput="StakeTextBox_PreviewTextInput"
+                             ToolTip="Valor da entrada em USD (máx. 2 casas decimais)"/>
+                    <TextBlock Text="Recover:" Foreground="#90b5c9" FontSize="10" Margin="0,6,0,3"/>
+                    <ComboBox Style="{StaticResource DerivComboBox}"
+                              ItemsSource="{Binding RecoverModes}"
+                              SelectedItem="{Binding RecoverMode, Mode=TwoWay}"
+                              Width="130" Height="24"
+                              HorizontalAlignment="Left"
+                              FontSize="10"
+                              Foreground="#00f0ff"
+                              ToolTip="Modo de recuperação (Martingale)"/>
                     <TextBlock Text="{Binding StakeRange}"
                                Foreground="#6090a8" FontSize="9"
                                Margin="0,3,0,0"/>
@@ -380,7 +381,7 @@
                             <ComboBox Style="{StaticResource DerivComboBox}"
                                       ItemsSource="{Binding StrategyModes}"
                                       SelectedItem="{Binding StrategyMode, Mode=TwoWay}"
-                                      Width="90" Height="22"
+                                      Width="140" Height="22"
                                       FontSize="10" Margin="14,0,0,0"
                                       Foreground="#00f0ff"
                                       ToolTip="Modo de estratégia"/>
@@ -515,7 +516,7 @@
                             <ComboBox Style="{StaticResource DerivComboBox}"
                                       ItemsSource="{Binding RecoverModes}"
                                       SelectedItem="{Binding RecoverMode, Mode=TwoWay}"
-                                      Width="100" Height="24"
+                                      Width="130" Height="24"
                                       FontSize="10"
                                       Foreground="#00f0ff"
                                       ToolTip="Modo de recuperação (Martingale)"/>
@@ -792,5 +793,5 @@
                                             DataContext="{Binding OpenPositions}"/>
             </Grid>
         </Grid>
-    </Border>
+    </Grid>
 </UserControl>
