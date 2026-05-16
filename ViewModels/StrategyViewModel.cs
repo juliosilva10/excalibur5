@@ -47,12 +47,15 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string _recoverMode = string.Empty;
     [ObservableProperty] private string _strategyMode = "Multi-Indicador";
     [ObservableProperty] private string _sampleSizeText = "5";
+    [ObservableProperty] private string _deficitMaxStakeText = "50";
+    [ObservableProperty] private string _deficitRecoveryTradesText = "1";
 
     public ObservableCollection<string> AvailableBarrierDisplays { get; } = new();
     public bool UseEndTime => !UseDuration;
-    public List<string> RecoverModes { get; } = ["", "Martingale"];
+    public List<string> RecoverModes { get; } = ["", "Martingale", "Deficit Recovery"];
     public List<string> StrategyModes { get; } = ["Multi-Indicador", "Tendência"];
     public bool IsTrendMode => StrategyMode == "Tendência";
+    public bool IsDeficitMode => RecoverMode == "Deficit Recovery";
 
     // Indicators
     [ObservableProperty] private bool _enableEma = true;
@@ -100,6 +103,8 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
         RecoverMode = s.RecoverMode;
         StrategyMode = s.StrategyMode;
         SampleSizeText = s.SampleSizeText;
+        DeficitMaxStakeText = s.DeficitMaxStakeText;
+        DeficitRecoveryTradesText = s.DeficitRecoveryTradesText;
         EnableEma = s.EnableEma;
         EnableRsi = s.EnableRsi;
         EnableSupportResistance = s.EnableSupportResistance;
@@ -128,6 +133,8 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
             RecoverMode = RecoverMode,
             StrategyMode = StrategyMode,
             SampleSizeText = SampleSizeText,
+            DeficitMaxStakeText = DeficitMaxStakeText,
+            DeficitRecoveryTradesText = DeficitRecoveryTradesText,
             EnableEma = EnableEma,
             EnableRsi = EnableRsi,
             EnableSupportResistance = EnableSupportResistance,
@@ -175,7 +182,11 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
     partial void OnEnableCandlePatternChanged(bool value) => SaveState();
     partial void OnEnableMomentumChanged(bool value) => SaveState();
     partial void OnEnableTrailingStopChanged(bool value) => SaveState();
-    partial void OnRecoverModeChanged(string value) => SaveState();
+    partial void OnRecoverModeChanged(string value)
+    {
+        OnPropertyChanged(nameof(IsDeficitMode));
+        SaveState();
+    }
     partial void OnStrategyModeChanged(string value)
     {
         OnPropertyChanged(nameof(IsTrendMode));
@@ -183,6 +194,8 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
         UpdateChartGranularity();
     }
     partial void OnSampleSizeTextChanged(string value) => SaveState();
+    partial void OnDeficitMaxStakeTextChanged(string value) => SaveState();
+    partial void OnDeficitRecoveryTradesTextChanged(string value) => SaveState();
 
     [RelayCommand]
     private void ToggleBot()
@@ -460,7 +473,9 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
             EnabledIndicators = indicators,
             Barrier = GetSelectedBarrier(),
             StrategyMode = StrategyMode,
-            SampleSize = int.TryParse(SampleSizeText, out var ss) && ss >= 1 ? ss : 5
+            SampleSize = int.TryParse(SampleSizeText, out var ss) && ss >= 1 ? ss : 5,
+            DeficitMaxStake = decimal.TryParse(DeficitMaxStakeText, NumberStyles.Any, CultureInfo.InvariantCulture, out var dms) ? dms : 50m,
+            DeficitRecoveryTrades = int.TryParse(DeficitRecoveryTradesText, out var drt) ? Math.Max(1, drt) : 1
         };
     }
 

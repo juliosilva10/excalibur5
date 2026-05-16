@@ -52,4 +52,6 @@ public class BotState
     public string RecoverMode { get; set; } = string.Empty;
     public string StrategyMode { get; set; } = "Multi-Indicador";
     public string SampleSizeText { get; set; } = "5";
+    public string DeficitMaxStakeText { get; set; } = "50";
+    public string DeficitRecoveryTradesText { get; set; } = "1";
 }
