@@ -314,7 +314,7 @@ public sealed class StrategyExecutor : IDisposable
                     Direction = signal.Direction,
                     BuyPrice = result.BuyPrice,
                     Signal = signal,
-                    DynamicStopLoss = -_config.StopLossUsd,
+                    DynamicStopLoss = -GetEffectiveStopLoss(),
                     EntryEpoch = now,
                     ExpiryEpoch = now + _config.DurationSeconds,
                     EntrySpot = _currentSpot
@@ -380,7 +380,7 @@ public sealed class StrategyExecutor : IDisposable
         // Trailing stop logic
         if (_config.EnableTrailingStop && update.Profit > 0)
         {
-            decimal tp = _config.TakeProfitUsd;
+            decimal tp = GetEffectiveTakeProfit();
 
             if (update.Profit >= tp * 0.9m)
             {
@@ -402,11 +402,12 @@ public sealed class StrategyExecutor : IDisposable
         }
 
         // Check Take Profit
-        if (update.Profit >= _config.TakeProfitUsd)
+        var effectiveTp = GetEffectiveTakeProfit();
+        if (update.Profit >= effectiveTp)
         {
             if (!update.IsValidToSell) return;
             tracked.IsSelling = true;
-            AppLogger.Info(Src, $"TP hit for {update.ContractId}: profit={update.Profit:F2} >= {_config.TakeProfitUsd}");
+            AppLogger.Info(Src, $"TP hit for {update.ContractId}: profit={update.Profit:F2} >= {effectiveTp:F2}");
             await SellPositionAsync(update.ContractId, tracked, update.Profit);
             return;
         }
@@ -416,7 +417,7 @@ public sealed class StrategyExecutor : IDisposable
         var totalDuration = tracked.ExpiryEpoch - tracked.EntryEpoch;
         var timeRemaining = Math.Max(tracked.ExpiryEpoch - now, 1);
         var timeRatio = totalDuration > 0 ? (decimal)timeRemaining / totalDuration : 0m;
-        var timeSl = -(_config.StopLossUsd * timeRatio);
+        var timeSl = -(GetEffectiveStopLoss() * timeRatio);
 
         // Use the tighter of trailing SL and time-based SL
         decimal effectiveSl = _config.EnableTrailingStop
@@ -481,6 +482,26 @@ public sealed class StrategyExecutor : IDisposable
 
         var context = new RecoverContext(_config.Stake, _config.TakeProfitUsd, _config.StopLossUsd, _config.Stake);
         return _recoverStrategy.GetNextStake(context);
+    }
+
+    private decimal GetEffectiveTakeProfit()
+    {
+        if (_recoverStrategy == null)
+            return _config.TakeProfitUsd;
+
+        var stake = GetCurrentStake();
+        var context = new RecoverContext(_config.Stake, _config.TakeProfitUsd, _config.StopLossUsd, stake);
+        return _recoverStrategy.GetDynamicTakeProfit(context);
+    }
+
+    private decimal GetEffectiveStopLoss()
+    {
+        if (_recoverStrategy == null)
+            return _config.StopLossUsd;
+
+        var stake = GetCurrentStake();
+        var context = new RecoverContext(_config.Stake, _config.TakeProfitUsd, _config.StopLossUsd, stake);
+        return _recoverStrategy.GetDynamicStopLoss(context);
     }
 
     private void RemovePosition(long contractId)
