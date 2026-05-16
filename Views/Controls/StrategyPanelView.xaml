@@ -150,6 +150,28 @@
                     </StackPanel>
                 </Grid>
 
+                <!-- Deficit Recovery Config -->
+                <Grid Margin="0,8,0,0"
+                      Visibility="{Binding IsDeficitMode, Converter={StaticResource BoolToVis}}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="8"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="Stake Máxima (USD)" Foreground="#90b5c9" FontSize="10" Margin="0,0,0,4"/>
+                        <TextBox Style="{StaticResource DerivTextBox}"
+                                 Text="{Binding DeficitMaxStakeText, UpdateSourceTrigger=PropertyChanged}"
+                                 Height="28" MaxLength="8"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="2">
+                        <TextBlock Text="Trades p/ Recuperar" Foreground="#90b5c9" FontSize="10" Margin="0,0,0,4"/>
+                        <TextBox Style="{StaticResource DerivTextBox}"
+                                 Text="{Binding DeficitRecoveryTradesText, UpdateSourceTrigger=PropertyChanged}"
+                                 Height="28" MaxLength="2"/>
+                    </StackPanel>
+                </Grid>
+
                 <!-- Separator -->
                 <Border Height="1" Background="#1d4957" Margin="0,0,0,10"
                         Visibility="{Binding IsTrendMode, Converter={StaticResource InverseBoolToVis}}"/>
