@@ -21,18 +21,23 @@ public partial class OpenPositionItem : ObservableObject
     [ObservableProperty] private bool _isNearExpiry;
     [ObservableProperty] private bool _isProfitable;
 
-    public long DateStart { get; }
-    public long DateExpiry { get; }
+    public long DateStart { get; set; }
+    public long DateExpiry { get; set; }
+    public long EntryTickTime { get; set; }
+    public int DurationSeconds { get; }
+    public long CreatedAtLocal { get; }
 
-    public OpenPositionItem(long contractId, string symbol, string displayName, string contractType, decimal buyPrice, long dateStart, long dateExpiry)
+    public OpenPositionItem(long contractId, string symbol, string displayName, string contractType, decimal buyPrice, long dateStart, long dateExpiry, int durationSeconds)
     {
         ContractId = contractId;
         Symbol = symbol;
         DisplayName = displayName;
-        ContractTypeLabel = contractType.Contains("CALL") ? "Call" : "Put";
+        ContractTypeLabel = GetContractLabel(contractType);
         BuyPrice = buyPrice;
         DateStart = dateStart;
         DateExpiry = dateExpiry;
+        DurationSeconds = durationSeconds;
+        CreatedAtLocal = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         IsValidToSell = true;
         UpdateTimeProgress();
     }
@@ -40,18 +45,13 @@ public partial class OpenPositionItem : ObservableObject
     public void UpdateTimeProgress()
     {
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        var total = DateExpiry - DateStart;
-        if (total <= 0)
-        {
-            TimeProgress = 1.0;
-            RemainingTimeDisplay = "0s";
-            IsNearExpiry = true;
-            return;
-        }
-        var elapsed = now - DateStart;
-        TimeProgress = Math.Clamp((double)elapsed / total, 0.0, 1.0);
+        var total = (long)(DurationSeconds > 0 ? DurationSeconds : 120);
+        var elapsed = now - CreatedAtLocal;
+        var remaining = total - elapsed;
 
-        var remaining = DateExpiry - now;
+        if (remaining < 0) remaining = 0;
+
+        TimeProgress = Math.Clamp((double)elapsed / total, 0.0, 1.0);
         RemainingTimeDisplay = FormatRemaining(remaining);
         IsNearExpiry = remaining <= 5;
     }
@@ -65,4 +65,13 @@ public partial class OpenPositionItem : ObservableObject
         if (seconds < 3600) return $"{seconds / 60}m{seconds % 60}s";
         return $"{seconds / 3600}h{(seconds % 3600) / 60}m";
     }
+
+    private static string GetContractLabel(string contractType) => contractType switch
+    {
+        "CALL" or "CALLE" => "Rise",
+        "PUT" or "PUTE" => "Fall",
+        "VANILLALONGCALL" => "Call",
+        "VANILLALONGPUT" => "Put",
+        _ => contractType.Contains("CALL") ? "Call" : "Put"
+    };
 }

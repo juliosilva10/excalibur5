@@ -13,5 +13,7 @@ public interface IStrategyEngine
     void FeedCandle(CandleData candle);
     void RecordTradeResult(IReadOnlyList<IndicatorType> contributors, bool won);
     void EmitExternalSignal(TradeSignal signal);
+    void ReEvaluate();
+    void ResetCooldown();
     bool IsRunning { get; }
 }

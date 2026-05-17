@@ -138,18 +138,22 @@ public sealed class StrategyExecutor : IDisposable
 
             var stake = GetCurrentStake();
             _proposalStake = stake;
-            var duration = _config.DurationSeconds;
+            var duration = _config.DurationApiValue;
+            var durationUnit = _config.DurationApiUnit;
             var barrier = _config.Barrier;
+            var callType = _config.CallContractType;
+            var putType = _config.PutContractType;
+            var barrierParam = callType is "CALL" or "CALLE" ? null : barrier;
 
             await UnsubscribeBotProposalsAsync();
 
             var callTask = _contractService.SubscribeProposalAsync(
-                _symbol, "VANILLALONGCALL", stake, duration, "s",
-                barrier: barrier, subscriptionKey: BotCallKey);
+                _symbol, callType, stake, duration, durationUnit,
+                barrier: barrierParam, subscriptionKey: BotCallKey);
 
             var putTask = _contractService.SubscribeProposalAsync(
-                _symbol, "VANILLALONGPUT", stake, duration, "s",
-                barrier: barrier, subscriptionKey: BotPutKey);
+                _symbol, putType, stake, duration, durationUnit,
+                barrier: barrierParam, subscriptionKey: BotPutKey);
 
             var callResp = await callTask;
             var putResp = await putTask;
@@ -200,14 +204,18 @@ public sealed class StrategyExecutor : IDisposable
             if (ct.IsCancellationRequested) return;
 
             var stake = GetCurrentStake();
-            var duration = _config.DurationSeconds;
+            var duration = _config.DurationApiValue;
+            var durationUnit = _config.DurationApiUnit;
             var barrier = _config.Barrier;
+            var callType = _config.CallContractType;
+            var putType = _config.PutContractType;
+            var barrierParam = callType is "CALL" or "CALLE" ? null : barrier;
 
             if (usedDirection == SignalDirection.Call)
             {
                 var resp = await _contractService.SubscribeProposalAsync(
-                    _symbol, "VANILLALONGCALL", stake, duration, "s",
-                    barrier: barrier, subscriptionKey: BotCallKey);
+                    _symbol, callType, stake, duration, durationUnit,
+                    barrier: barrierParam, subscriptionKey: BotCallKey);
                 if (ct.IsCancellationRequested) return;
                 _callProposalId = resp.ProposalId;
                 _callSubscriptionId = resp.SubscriptionId;
@@ -216,8 +224,8 @@ public sealed class StrategyExecutor : IDisposable
             else
             {
                 var resp = await _contractService.SubscribeProposalAsync(
-                    _symbol, "VANILLALONGPUT", stake, duration, "s",
-                    barrier: barrier, subscriptionKey: BotPutKey);
+                    _symbol, putType, stake, duration, durationUnit,
+                    barrier: barrierParam, subscriptionKey: BotPutKey);
                 if (ct.IsCancellationRequested) return;
                 _putProposalId = resp.ProposalId;
                 _putSubscriptionId = resp.SubscriptionId;
@@ -271,8 +279,8 @@ public sealed class StrategyExecutor : IDisposable
             }
 
             string contractType = signal.Direction == SignalDirection.Call
-                ? "VANILLALONGCALL"
-                : "VANILLALONGPUT";
+                ? _config.CallContractType
+                : _config.PutContractType;
 
             var stake = GetCurrentStake();
             BuyResponse result;
@@ -293,14 +301,15 @@ public sealed class StrategyExecutor : IDisposable
             }
             else
             {
+                var barrierForBuy = _config.CallContractType is "CALL" or "CALLE" ? null : _config.Barrier;
                 AppLogger.Info(Src, $"Proposals stake mismatch or not ready (proposal={_proposalStake}, current={stake}) — using BuyDirectAsync");
                 result = await _contractService.BuyDirectAsync(
                     _symbol,
                     contractType,
                     stake,
-                    _config.DurationSeconds,
-                    "s",
-                    _config.Barrier);
+                    _config.DurationApiValue,
+                    _config.DurationApiUnit,
+                    barrierForBuy);
 
                 _ = SubscribeBotProposalsAsync();
             }
@@ -472,7 +481,17 @@ public sealed class StrategyExecutor : IDisposable
         StatsUpdated?.Invoke(this, EventArgs.Empty);
 
         if (_active && GetCurrentStake() != previousStake)
-            _ = SubscribeBotProposalsAsync();
+            _ = ResubscribeAndReEvaluateAsync();
+    }
+
+    private async Task ResubscribeAndReEvaluateAsync()
+    {
+        await SubscribeBotProposalsAsync();
+        if (_active && _proposalsReady)
+        {
+            _engine.ResetCooldown();
+            _engine.ReEvaluate();
+        }
     }
 
     private decimal GetCurrentStake()

@@ -155,6 +155,8 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
     {
         DurationRange = value switch
         {
+            "Ticks" => "Intervalo: 1 - 10 ticks",
+            "Seconds" => "Intervalo: 15 - 86400 segundos",
             "Hours" => "Intervalo: 1 - 24 horas",
             "Days" => "Intervalo: 1 - 365 dias",
             _ => "Intervalo: 1 - 1440 minutos"
@@ -164,6 +166,20 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
     }
     partial void OnDurationTextChanged(string value)
     {
+        if (int.TryParse(value, out var val))
+        {
+            var max = DurationUnit switch
+            {
+                "Ticks" => 10,
+                "Seconds" => 86400,
+                "Hours" => 24,
+                "Days" => 365,
+                _ => 1440
+            };
+            var min = DurationUnit == "Seconds" ? 15 : 1;
+            if (val > max) { DurationText = max.ToString(); return; }
+            if (val < min && value.Length > 0 && value != "0") { DurationText = min.ToString(); return; }
+        }
         SaveState();
         UpdateChartGranularity();
     }
@@ -429,8 +445,9 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
     {
         if (_activeMarketTab == null) return;
         var openPos = _activeMarketTab.ContractPanel.OpenPositions;
-        var expiry = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + CalculateDurationSeconds();
-        _ = openPos.AddPositionAsync(e.BuyResult, _activeSymbol, _activeMarketTab.DisplayName, e.ContractType, expiry);
+        var durationSec = CalculateDurationSeconds();
+        var expiry = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + durationSec;
+        _ = openPos.AddPositionAsync(e.BuyResult, _activeSymbol, _activeMarketTab.DisplayName, e.ContractType, expiry, durationSec);
         BotTradeOpened?.Invoke(this, e);
     }
 
@@ -457,6 +474,8 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
             _ => SignalDirection.None // Both
         };
 
+        var (apiValue, apiUnit) = GetDurationApi();
+
         return new StrategyConfig
         {
             AllowedDirection = direction,
@@ -465,6 +484,8 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
             StopLossUsd = decimal.TryParse(StopLossText, NumberStyles.Any, CultureInfo.InvariantCulture, out var sl) ? sl : 3m,
             MaxConcurrentContracts = int.TryParse(MaxContractsText, out var mc) ? mc : 3,
             DurationSeconds = CalculateDurationSeconds(),
+            DurationApiValue = apiValue,
+            DurationApiUnit = apiUnit,
             ConfidenceThreshold = ConfidenceThreshold,
             EnableTrailingStop = IsTrendMode ? false : EnableTrailingStop,
             RecoverMode = RecoverMode,
@@ -472,6 +493,8 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
             MartingaleMaxLevel = _recoverVm?.MaxLevel ?? 3,
             EnabledIndicators = indicators,
             Barrier = GetSelectedBarrier(),
+            CallContractType = _activeMarketTab?.ContractPanel.EffectiveCallContractType ?? "VANILLALONGCALL",
+            PutContractType = _activeMarketTab?.ContractPanel.EffectivePutContractType ?? "VANILLALONGPUT",
             StrategyMode = StrategyMode,
             SampleSize = int.TryParse(SampleSizeText, out var ss) && ss >= 1 ? ss : 5,
             DeficitMaxStake = decimal.TryParse(DeficitMaxStakeText, NumberStyles.Any, CultureInfo.InvariantCulture, out var dms) ? dms : 50m,
@@ -484,9 +507,24 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
         if (!int.TryParse(DurationText, out var val)) val = 5;
         return DurationUnit switch
         {
+            "Ticks" => Math.Max(1, val * 2),
+            "Seconds" => val,
             "Hours" => val * 3600,
             "Days" => val * 86400,
             _ => val * 60
+        };
+    }
+
+    private (int value, string unit) GetDurationApi()
+    {
+        if (!int.TryParse(DurationText, out var val)) val = 5;
+        return DurationUnit switch
+        {
+            "Ticks" => (val, "t"),
+            "Seconds" => (val, "s"),
+            "Hours" => (val, "h"),
+            "Days" => (val, "d"),
+            _ => (val, "m")
         };
     }
 

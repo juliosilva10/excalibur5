@@ -9,6 +9,8 @@ public sealed class StrategyConfig
     public int MaxConcurrentContracts { get; set; } = 3;
     public double ConfidenceThreshold { get; set; } = 0.70;
     public int DurationSeconds { get; set; } = 60;
+    public int DurationApiValue { get; set; } = 60;
+    public string DurationApiUnit { get; set; } = "s";
     public bool EnableTrailingStop { get; set; } = true;
     public string RecoverMode { get; set; } = string.Empty;
     public decimal MartingaleFactor { get; set; } = 2.0m;
@@ -16,6 +18,8 @@ public sealed class StrategyConfig
     public decimal DeficitMaxStake { get; set; } = 50m;
     public int DeficitRecoveryTrades { get; set; } = 1;
     public string Barrier { get; set; } = "+0.000";
+    public string CallContractType { get; set; } = "VANILLALONGCALL";
+    public string PutContractType { get; set; } = "VANILLALONGPUT";
     public string StrategyMode { get; set; } = "Multi-Indicador";
     public int SampleSize { get; set; } = 5;
     public List<IndicatorType> EnabledIndicators { get; set; } = new()

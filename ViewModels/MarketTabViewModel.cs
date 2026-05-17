@@ -13,7 +13,8 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
 {
     private const int MaxTicks = 1000;
     private const int MaxRecentDisplay = 50;
-    private const int TickWatchdogSeconds = 30;
+    private const int TickWatchdogSeconds = 15;
+    private int _watchdogFailCount;
 
     private readonly ITickStreamService _tickService;
     private readonly MarketInfo _market;
@@ -110,7 +111,25 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
     private void OnContractPanelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(ContractPanelViewModel.DurationUnit) or nameof(ContractPanelViewModel.DurationText))
+        {
             UpdateCandlesEnabled();
+            UpdateGranularityFromPanel();
+        }
+    }
+
+    private void UpdateGranularityFromPanel()
+    {
+        if (!int.TryParse(ContractPanel.DurationText, out var val) || val < 1) return;
+        var seconds = ContractPanel.DurationUnit switch
+        {
+            DurationUnitType.Ticks => Math.Max(60, val * 2),
+            DurationUnitType.Seconds => val,
+            DurationUnitType.Minutes => val * 60,
+            DurationUnitType.Hours => val * 3600,
+            DurationUnitType.Days => val * 86400,
+            _ => val * 60
+        };
+        _ = SetCandleGranularityAsync(seconds);
     }
 
     private void UpdateCandlesEnabled()
@@ -316,17 +335,35 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
         _isActive = true;
         _tickService.TickReceived += OnTickReceived;
 
-        try
+        const int maxRetries = 3;
+        int[] delaysMs = [1000, 2000, 4000];
+
+        for (int attempt = 0; attempt <= maxRetries; attempt++)
         {
-            _tickService.ClearSubscription(Symbol);
-            await _tickService.SubscribeAsync(Symbol);
-            IsSubscribed = true;
-            _lastTickTime = DateTime.UtcNow;
-            StartWatchdog();
-        }
-        catch (Exception ex)
-        {
-            AppLogger.Warn("MarketTab", $"ReactivateStream failed for {Symbol}: {ex.Message}");
+            if (!_isActive || !_tickService.IsConnected) break;
+
+            try
+            {
+                _tickService.ClearSubscription(Symbol);
+                await _tickService.SubscribeAsync(Symbol);
+                IsSubscribed = true;
+                _lastTickTime = DateTime.UtcNow;
+                StartWatchdog();
+                break;
+            }
+            catch (Exception ex)
+            {
+                if (attempt < maxRetries)
+                {
+                    AppLogger.Warn("MarketTab", $"ReactivateStream attempt {attempt + 1} failed for {Symbol}: {ex.Message} — retrying in {delaysMs[attempt]}ms");
+                    await Task.Delay(delaysMs[attempt]);
+                }
+                else
+                {
+                    AppLogger.Warn("MarketTab", $"ReactivateStream failed for {Symbol} after {maxRetries + 1} attempts: {ex.Message}");
+                    StartWatchdog();
+                }
+            }
         }
 
         await ContractPanel.LoadContractsAsync(Symbol, DisplayName);
@@ -366,26 +403,31 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
 
         if (!_tickService.IsConnected)
         {
+            AppLogger.Warn("MarketTab", $"Watchdog: no ticks for {Symbol} in {elapsed:F0}s but WS not connected — waiting for reconnect");
             _lastTickTime = DateTime.UtcNow;
+            _watchdogFailCount = 0;
             return;
         }
 
         _isResubscribing = true;
-        AppLogger.Warn("MarketTab", $"Watchdog: no ticks for {Symbol} in {elapsed:F0}s — resubscribing");
+        _watchdogFailCount++;
+        AppLogger.Warn("MarketTab", $"Watchdog: no ticks for {Symbol} in {elapsed:F0}s — attempt {_watchdogFailCount}");
 
         try
         {
-            await _tickService.UnsubscribeAsync(Symbol);
+            // First attempt: just clear local state and resubscribe
             _tickService.ClearSubscription(Symbol);
-            await Task.Delay(500);
-            if (!_isActive) return;
             await _tickService.SubscribeAsync(Symbol);
+            IsSubscribed = true;
             _lastTickTime = DateTime.UtcNow;
+            _watchdogFailCount = 0;
             AppLogger.Info("MarketTab", $"Watchdog: resubscribed {Symbol} successfully");
         }
         catch (Exception ex)
         {
             AppLogger.Warn("MarketTab", $"Watchdog: resubscribe failed for {Symbol}: {ex.Message}");
+            _tickService.ClearSubscription(Symbol);
+            _lastTickTime = DateTime.UtcNow;
         }
         finally
         {

@@ -31,11 +31,13 @@ public partial class MarketsViewModel : ObservableObject, IDisposable
             tab.SetRecoverViewModel(recoverVm);
     }
 
+    public event Action? MarketsRequested;
+
     [RelayCommand]
     private void ToggleMarkets()
     {
-        if (IsMarketsVisible) return;
         IsMarketsVisible = true;
+        MarketsRequested?.Invoke();
     }
 
     public void Show()

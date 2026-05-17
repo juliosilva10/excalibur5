@@ -76,6 +76,13 @@ public partial class MainViewModel : ObservableObject, IDisposable
         Strategy.SetRecoverViewModel(Recover);
         History = new HistoryViewModel(contractService);
 
+        Markets.MarketsRequested += () =>
+        {
+            Log.IsLogVisible = false;
+            Strategy.IsBotVisible = false;
+            Recover.IsRecoverVisible = false;
+            History.IsHistoryVisible = false;
+        };
         Markets.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(Markets.IsMarketsVisible) && Markets.IsMarketsVisible)
@@ -406,7 +413,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
             or nameof(ContractPanelViewModel.DurationUnit)
             or nameof(ContractPanelViewModel.StakeText)
             or nameof(ContractPanelViewModel.UseDuration)
-            or nameof(ContractPanelViewModel.SelectedBarrierDisplay))
+            or nameof(ContractPanelViewModel.SelectedBarrierDisplay)
+            or nameof(ContractPanelViewModel.SelectedStrategy)
+            or nameof(ContractPanelViewModel.AllowEquals)
+            or nameof(ContractPanelViewModel.RecoverMode))
         {
             SaveUiState();
         }
@@ -424,7 +434,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
             cp?.StakeText,
             cp?.UseDuration,
             cp?.SelectedBarrierDisplay,
-            chartType);
+            chartType,
+            cp?.SelectedStrategy.DisplayName,
+            cp?.AllowEquals,
+            cp?.RecoverMode);
     }
 
     private async Task RestoreUiStateAsync()
@@ -443,7 +456,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 if (tab is not null)
                 {
                     _restoringState = true;
-                    tab.ContractPanel.RestoreState(state.DurationUnit, state.DurationText, state.StakeText, state.UseDuration, state.SelectedBarrierDisplay);
+                    tab.ContractPanel.RestoreState(state.DurationUnit, state.DurationText, state.StakeText, state.UseDuration, state.SelectedBarrierDisplay, state.SelectedStrategy, state.AllowEquals, state.RecoverMode);
                     if (!string.IsNullOrEmpty(state.ChartType) && Enum.TryParse<ChartType>(state.ChartType, out var ct))
                         tab.ChartType = ct;
                     await Markets.SelectTabAsync(tab);

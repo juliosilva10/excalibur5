@@ -36,7 +36,8 @@ public partial class OpenPositionsViewModel : ObservableObject, IDisposable
         foreach (var pos in Positions)
         {
             pos.UpdateTimeProgress();
-            if (pos.DateExpiry > 0 && pos.DateExpiry + 10 <= now)
+            var elapsed = now - pos.CreatedAtLocal;
+            if (pos.DurationSeconds > 0 && elapsed >= pos.DurationSeconds + 10)
                 expired.Add(pos);
         }
 
@@ -55,6 +56,15 @@ public partial class OpenPositionsViewModel : ObservableObject, IDisposable
             item.Profit = update.Profit;
             item.IsValidToSell = update.IsValidToSell;
 
+            if (update.DateStart > 0 && update.DateExpiry > 0 && update.DateExpiry > update.DateStart)
+            {
+                item.DateStart = update.DateStart;
+                item.DateExpiry = update.DateExpiry;
+            }
+
+            if (update.EntryTickTime > 0)
+                item.EntryTickTime = update.EntryTickTime;
+
             if (update.EntrySpot > 0)
             {
                 item.EntrySpot = update.EntrySpot;
@@ -69,9 +79,14 @@ public partial class OpenPositionsViewModel : ObservableObject, IDisposable
         });
     }
 
-    public async Task AddPositionAsync(BuyResponse buyResult, string symbol, string displayName, string contractType, long dateExpiry)
+    public async Task AddPositionAsync(BuyResponse buyResult, string symbol, string displayName, string contractType, long dateExpiry, int durationSeconds)
     {
         if (buyResult.ContractId == 0) return;
+
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var startTime = buyResult.StartTime > 0 && buyResult.StartTime <= now
+            ? buyResult.StartTime
+            : now;
 
         var item = new OpenPositionItem(
             buyResult.ContractId,
@@ -79,8 +94,9 @@ public partial class OpenPositionsViewModel : ObservableObject, IDisposable
             displayName,
             contractType,
             buyResult.BuyPrice,
-            buyResult.StartTime,
-            dateExpiry);
+            startTime,
+            dateExpiry,
+            durationSeconds);
 
         await Application.Current.Dispatcher.InvokeAsync(() =>
         {

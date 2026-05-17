@@ -94,6 +94,19 @@ public sealed class StrategyEngine : IStrategyEngine
         SignalGenerated?.Invoke(this, signal);
     }
 
+    public void ReEvaluate()
+    {
+        if (!IsRunning || _candles.Count < MinCandlesRequired) return;
+        var epoch = _candles[^1].Epoch;
+        AppLogger.Info(Src, $"ReEvaluate forced on epoch={epoch}");
+        EvaluateSignals(epoch);
+    }
+
+    public void ResetCooldown()
+    {
+        _filter.Reset();
+    }
+
     private void EvaluateSignals(long currentEpoch)
     {
         var signals = new List<IndicatorSignal>();

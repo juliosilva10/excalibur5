@@ -32,7 +32,7 @@
 
             <!-- Header -->
             <TextBlock Grid.Row="0" Text="Posições Abertas"
-                       Foreground="#00f0ff" FontSize="11"
+                       Foreground="#00f0ff" FontSize="13"
                        FontWeight="SemiBold" Margin="0,0,0,6"/>
 
             <!-- Column headers -->
@@ -40,21 +40,21 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="70"/>
                     <ColumnDefinition Width="42"/>
-                    <ColumnDefinition Width="50"/>
-                    <ColumnDefinition Width="60"/>
+                    <ColumnDefinition Width="55"/>
                     <ColumnDefinition Width="60"/>
                     <ColumnDefinition Width="60"/>
                     <ColumnDefinition Width="65"/>
+                    <ColumnDefinition Width="70"/>
                     <ColumnDefinition Width="50"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" Text="Mercado" Foreground="#6090a8" FontSize="9"/>
-                <TextBlock Grid.Column="1" Text="Tipo" Foreground="#6090a8" FontSize="9"/>
-                <TextBlock Grid.Column="2" Text="Tempo" Foreground="#6090a8" FontSize="9"/>
-                <TextBlock Grid.Column="3" Text="Entrada" Foreground="#6090a8" FontSize="9"/>
-                <TextBlock Grid.Column="4" Text="Valor" Foreground="#6090a8" FontSize="9"/>
-                <TextBlock Grid.Column="5" Text="Abertura" Foreground="#6090a8" FontSize="9"/>
-                <TextBlock Grid.Column="6" Text="Lucro/Perda" Foreground="#6090a8" FontSize="9"/>
-                <TextBlock Grid.Column="7" Text="" Foreground="#6090a8" FontSize="9"/>
+                <TextBlock Grid.Column="0" Text="Mercado" Foreground="#6090a8" FontSize="11"/>
+                <TextBlock Grid.Column="1" Text="Tipo" Foreground="#6090a8" FontSize="11"/>
+                <TextBlock Grid.Column="2" Text="Tempo" Foreground="#6090a8" FontSize="11"/>
+                <TextBlock Grid.Column="3" Text="Entrada" Foreground="#6090a8" FontSize="11"/>
+                <TextBlock Grid.Column="4" Text="Valor" Foreground="#6090a8" FontSize="11"/>
+                <TextBlock Grid.Column="5" Text="Abertura" Foreground="#6090a8" FontSize="11"/>
+                <TextBlock Grid.Column="6" Text="Lucro/Perda" Foreground="#6090a8" FontSize="11"/>
+                <TextBlock Grid.Column="7" Text="" Foreground="#6090a8" FontSize="11"/>
             </Grid>
 
             <!-- Positions list -->
@@ -73,18 +73,18 @@
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="70"/>
                                 <ColumnDefinition Width="42"/>
-                                <ColumnDefinition Width="50"/>
-                                <ColumnDefinition Width="60"/>
+                                <ColumnDefinition Width="55"/>
                                 <ColumnDefinition Width="60"/>
                                 <ColumnDefinition Width="60"/>
                                 <ColumnDefinition Width="65"/>
+                                <ColumnDefinition Width="70"/>
                                 <ColumnDefinition Width="50"/>
                             </Grid.ColumnDefinitions>
 
                             <!-- Mercado -->
                             <TextBlock Grid.Column="0"
                                        Text="{Binding DisplayName}"
-                                       Foreground="#e0eef8" FontSize="10"
+                                       Foreground="#e0eef8" FontSize="12"
                                        FontFamily="Consolas"
                                        VerticalAlignment="Center"
                                        TextTrimming="CharacterEllipsis"/>
@@ -92,21 +92,21 @@
                             <!-- Tipo -->
                             <TextBlock Grid.Column="1"
                                        Text="{Binding ContractTypeLabel}"
-                                       FontSize="10" FontFamily="Consolas"
+                                       FontSize="12" FontFamily="Consolas"
                                        Foreground="{Binding ContractTypeLabel, Converter={StaticResource ProfitToBrush}, ConverterParameter=type}"
                                        VerticalAlignment="Center"/>
 
                             <!-- Barra de tempo -->
                             <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="0,0,6,0">
                                 <TextBlock Text="{Binding RemainingTimeDisplay}"
-                                           Foreground="#6090a8" FontSize="8"
+                                           Foreground="#6090a8" FontSize="10"
                                            FontFamily="Consolas"
                                            Margin="0,0,0,2"/>
                                 <Grid Height="3">
                                     <Border Background="#1a2e3d" CornerRadius="1.5"/>
                                     <Border CornerRadius="1.5"
                                             HorizontalAlignment="Left"
-                                            Width="{Binding TimeProgress, Converter={StaticResource ProgressWidth}, ConverterParameter=44}">
+                                            Width="{Binding TimeProgress, Converter={StaticResource ProgressWidth}, ConverterParameter=49}">
                                         <Border.Style>
                                             <Style TargetType="Border">
                                                 <Setter Property="Background" Value="{Binding TimeProgress, Converter={StaticResource TimeToBrush}}"/>
@@ -124,21 +124,21 @@
                             <!-- Entrada -->
                             <TextBlock Grid.Column="3"
                                        Text="{Binding BuyPrice, StringFormat=F2}"
-                                       Foreground="#e0eef8" FontSize="10"
+                                       Foreground="#e0eef8" FontSize="12"
                                        FontFamily="Consolas"
                                        VerticalAlignment="Center"/>
 
                             <!-- Valor atual -->
                             <TextBlock Grid.Column="4"
                                        Text="{Binding CurrentValue, StringFormat=F2}"
-                                       Foreground="#e0eef8" FontSize="10"
+                                       Foreground="#e0eef8" FontSize="12"
                                        FontFamily="Consolas"
                                        VerticalAlignment="Center"/>
 
                             <!-- Preço abertura -->
                             <TextBlock Grid.Column="5"
                                        Text="{Binding EntrySpotDisplay}"
-                                       Foreground="#a3b8cc" FontSize="10"
+                                       Foreground="#a3b8cc" FontSize="12"
                                        FontFamily="Consolas"
                                        VerticalAlignment="Center"/>
 
@@ -146,7 +146,7 @@
                             <TextBlock Grid.Column="6"
                                        Text="{Binding Profit, StringFormat=F2}"
                                        Foreground="{Binding Profit, Converter={StaticResource ProfitToBrush}}"
-                                       FontSize="10" FontFamily="Consolas"
+                                       FontSize="12" FontFamily="Consolas"
                                        FontWeight="Bold"
                                        VerticalAlignment="Center"/>
 

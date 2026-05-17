@@ -11,8 +11,14 @@ namespace Excalibur5.ViewModels;
 public partial class ContractPanelViewModel : ObservableObject, IDisposable
 {
     private const string Src = "ContractPanel";
-    private const string ContractTypeCall = "VANILLALONGCALL";
-    private const string ContractTypePut = "VANILLALONGPUT";
+
+    private string ContractTypeCall => AllowEquals && SelectedStrategy.Category == ContractCategory.RiseFall
+        ? "CALLE" : SelectedStrategy.CallContractType;
+    private string ContractTypePut => AllowEquals && SelectedStrategy.Category == ContractCategory.RiseFall
+        ? "PUTE" : SelectedStrategy.PutContractType;
+
+    public string EffectiveCallContractType => ContractTypeCall;
+    public string EffectivePutContractType => ContractTypePut;
 
     private readonly IContractService _contractService;
     private readonly int _pipSize;
@@ -37,6 +43,20 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string _recoverMode = string.Empty;
     public List<string> RecoverModes { get; } = ["", "Martingale", "Deficit Recovery"];
 
+    // Contract type strategy
+    public List<IContractTypeStrategy> AvailableStrategies { get; } =
+        [new VanillaContractStrategy(), new RiseFallContractStrategy()];
+
+    [ObservableProperty] private IContractTypeStrategy _selectedStrategy = new VanillaContractStrategy();
+    [ObservableProperty] private bool _allowEquals = true;
+
+    public string CallButtonLabel => SelectedStrategy.CallButtonLabel;
+    public string PutButtonLabel => SelectedStrategy.PutButtonLabel;
+    public bool ShowBarrier => SelectedStrategy.RequiresBarrier;
+    public bool ShowPayoutPerPoint => SelectedStrategy.Category == ContractCategory.Vanillas;
+    public bool ShowExpiry => !UseDuration || SelectedStrategy.Category == ContractCategory.Vanillas;
+    public bool ShowEquals => SelectedStrategy.Category == ContractCategory.RiseFall;
+
     [ObservableProperty] private string _symbol = string.Empty;
     [ObservableProperty] private string _displayName = string.Empty;
     [ObservableProperty] private DurationUnitType _durationUnit = DurationUnitType.Minutes;
@@ -50,7 +70,7 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
     [ObservableProperty] private decimal _payoutPerPoint;
     [ObservableProperty] private decimal _askPrice;
     [ObservableProperty] private decimal _payout;
-    [ObservableProperty] private string _selectedContractType = ContractTypeCall;
+    [ObservableProperty] private string _selectedContractType = "VANILLALONGCALL";
     [ObservableProperty] private bool _isLoading;
     [ObservableProperty] private bool _contractsLoaded;
     [ObservableProperty] private string _stakeRange = string.Empty;
@@ -94,6 +114,8 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
             if (_spotForBarriers <= 0)
                 return string.Empty;
             var format = $"F{_pipSize}";
+            if (!UseDuration)
+                return (SelectedBarrier > 0 ? SelectedBarrier : _spotForBarriers).ToString(format, CultureInfo.InvariantCulture);
             if (SelectedBarrier != 0)
                 return (_spotForBarriers + SelectedBarrier).ToString(format, CultureInfo.InvariantCulture);
             return _spotForBarriers.ToString(format, CultureInfo.InvariantCulture);
@@ -224,17 +246,19 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
     partial void OnUseDurationChanged(bool value)
     {
         OnPropertyChanged(nameof(UseEndTime));
+        OnPropertyChanged(nameof(ShowExpiry));
         OnPropertyChanged(nameof(StrikePriceDisplay));
         UpdateExpiryFromEndTime();
         if (_restoringState) return;
         if (!value)
         {
-            RefreshBarriersForEndTime();
+            if (SelectedStrategy.RequiresBarrier)
+                RefreshBarriersForEndTime();
         }
         else
         {
-            // Switching to Duration mode — regenerate relative offset barriers
-            GenerateFallbackBarriers();
+            if (SelectedStrategy.RequiresBarrier)
+                GenerateFallbackBarriers();
         }
         RequestProposalDebounced();
     }
@@ -288,9 +312,9 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
 
         if (idx >= 0)
         {
-            if (!UseDuration && IsEndTimeMoreThan24h())
+            if (!UseDuration)
             {
-                // End Time > 24h: store absolute value directly
+                // End Time mode: store absolute value directly
                 if (idx < AvailableBarriers.Count)
                     SelectedBarrier = AvailableBarriers[idx];
             }
@@ -364,7 +388,7 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
     partial void OnDurationUnitChanged(DurationUnitType value)
     {
         UpdateDurationRange();
-        if (!_restoringState && UseDuration && ContractsLoaded)
+        if (!_restoringState && UseDuration && ContractsLoaded && SelectedStrategy.RequiresBarrier)
             GenerateFallbackBarriers();
         RequestProposalDebounced();
     }
@@ -375,15 +399,18 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
         {
             var max = DurationUnit switch
             {
+                DurationUnitType.Ticks => 10,
+                DurationUnitType.Seconds => 86400,
                 DurationUnitType.Minutes => 1440,
                 DurationUnitType.Hours => 24,
                 DurationUnitType.Days => 365,
                 _ => 1440
             };
+            var min = DurationUnit == DurationUnitType.Seconds ? 15 : 1;
             if (val > max) { DurationText = max.ToString(); return; }
-            if (val < 1 && value.Length > 0 && value != "0") { DurationText = "1"; return; }
+            if (val < min && value.Length > 0 && value != "0") { DurationText = min.ToString(); return; }
         }
-        if (!_restoringState && UseDuration && ContractsLoaded)
+        if (!_restoringState && UseDuration && ContractsLoaded && SelectedStrategy.RequiresBarrier)
             GenerateFallbackBarriers();
         RequestProposalDebounced();
     }
@@ -401,6 +428,30 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
     {
         OnPropertyChanged(nameof(IsCallSelected));
         OnPropertyChanged(nameof(IsPutSelected));
+    }
+
+    partial void OnAllowEqualsChanged(bool value)
+    {
+        RequestProposalDebounced();
+    }
+
+    partial void OnSelectedStrategyChanged(IContractTypeStrategy value)
+    {
+        OnPropertyChanged(nameof(CallButtonLabel));
+        OnPropertyChanged(nameof(PutButtonLabel));
+        OnPropertyChanged(nameof(ShowBarrier));
+        OnPropertyChanged(nameof(ShowPayoutPerPoint));
+        OnPropertyChanged(nameof(ShowExpiry));
+        OnPropertyChanged(nameof(ShowEquals));
+
+        SelectedContractType = ContractTypeCall;
+
+        var units = value.AvailableDurationUnits;
+        if (!units.Contains(DurationUnit))
+            DurationUnit = units[0];
+
+        UpdateDurationRange();
+        RequestProposalDebounced();
     }
 
     [RelayCommand]
@@ -448,7 +499,8 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
                 LastBuyResult = $"Comprado! ID: {result.ContractId}";
                 _lastBoughtContractId = result.ContractId;
                 var expiry = GetDateExpiryForPosition();
-                _ = OpenPositions.AddPositionAsync(result, Symbol, DisplayName, contractType, expiry);
+                var durationSec = GetDurationInSeconds();
+                _ = OpenPositions.AddPositionAsync(result, Symbol, DisplayName, contractType, expiry, durationSec);
                 ManualTradeOpened?.Invoke(this, new ManualTradeOpened(result, contractType));
             }
             else
@@ -477,7 +529,7 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
             int? duration = null;
             string? unitStr = null;
             long? dateExpiry = null;
-            string? barrier = GetBarrierForApi();
+            string? barrier = SelectedStrategy.RequiresBarrier ? GetBarrierForApi() : null;
 
             if (UseDuration)
             {
@@ -524,6 +576,8 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
     {
         DurationUnit = unit switch
         {
+            "Ticks" => DurationUnitType.Ticks,
+            "Seconds" => DurationUnitType.Seconds,
             "Hours" => DurationUnitType.Hours,
             "Days" => DurationUnitType.Days,
             _ => DurationUnitType.Minutes
@@ -534,6 +588,8 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
     {
         DurationRange = DurationUnit switch
         {
+            DurationUnitType.Ticks => "Intervalo: 1 - 10 ticks",
+            DurationUnitType.Seconds => "Intervalo: 15 - 86400 segundos",
             DurationUnitType.Minutes => "Intervalo: 1 - 1440 minutos",
             DurationUnitType.Hours => "Intervalo: 1 - 24 horas",
             DurationUnitType.Days => "Intervalo: 1 - 365 dias",
@@ -559,7 +615,7 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
             return;
         }
 
-        var showAbsolute = !UseDuration && IsEndTimeMoreThan24h();
+        var showAbsolute = !UseDuration;
 
         foreach (var b in _apiBarriers)
         {
@@ -738,7 +794,7 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
         {
             var format = $"F{_pipSize}";
             string targetDisplay;
-            if (!UseDuration && IsEndTimeMoreThan24h())
+            if (!UseDuration)
             {
                 var absVal = _spotForBarriers + currentSelection;
                 targetDisplay = absVal.ToString(format, CultureInfo.InvariantCulture);
@@ -790,54 +846,20 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
         }
         else
         {
-            // End Time mode: generate barriers as offsets from spot
-            if (IsEndTimeMoreThan24h())
+            // End Time mode: generate barriers as absolute round numbers
+            decimal step = 10m;
+            var baseBarrier = Math.Floor(_spotForBarriers / step) * step;
+
+            // Generate 10 barriers around spot (matches Deriv site pattern)
+            for (int i = -3; i <= 6; i++)
             {
-                // > 24h: API requires absolute barriers — generate 8 barriers like the site
-                // Site pattern: spot rounded down to nearest 10, then 4 below and 4 above (or similar)
-                decimal step = 10m;
-                var baseBarrier = Math.Floor(_spotForBarriers / step) * step;
-
-                // Generate 8 barriers: from baseBarrier - 10 to baseBarrier + 60
-                for (int i = -1; i <= 6; i++)
-                {
-                    var absBarrier = baseBarrier + (i * step);
-                    if (absBarrier > 0)
-                        _apiBarriers.Add(absBarrier - _spotForBarriers);
-                }
-
-                _apiBarriers.Sort();
-                _barriersAreRelative = true;
+                var absBarrier = baseBarrier + (i * step);
+                if (absBarrier > 0)
+                    _apiBarriers.Add(absBarrier - _spotForBarriers);
             }
-            else
-            {
-                // ≤ 24h: uses relative barriers like Duration mode
-                decimal step = (decimal)Math.Pow(10, 1 - _pipSize);
 
-                var dateExpiry = GetDateExpiryUnix();
-                int minutesToExpiry = 1440;
-                if (dateExpiry.HasValue)
-                {
-                    var seconds = dateExpiry.Value - DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-                    minutesToExpiry = Math.Max(1, (int)(seconds / 60));
-                }
-
-                decimal scaleFactor = (decimal)Math.Pow(minutesToExpiry, 0.513);
-                decimal innerStep = Math.Round(_barrierInnerBase * scaleFactor / step, MidpointRounding.AwayFromZero) * step;
-                decimal outerStep = Math.Round(_barrierOuterBase * scaleFactor / step, MidpointRounding.AwayFromZero) * step;
-
-                if (innerStep < step) innerStep = step;
-                if (outerStep <= innerStep) outerStep = innerStep + step;
-
-                _apiBarriers.Add(-outerStep);
-                _apiBarriers.Add(-innerStep);
-                _apiBarriers.Add(0m);
-                _apiBarriers.Add(innerStep);
-                _apiBarriers.Add(outerStep);
-
-                _apiBarriers.Sort();
-                _barriersAreRelative = true;
-            }
+            _apiBarriers.Sort();
+            _barriersAreRelative = true;
         }
 
         UpdateBarrierDisplays();
@@ -951,12 +973,15 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
         if (!int.TryParse(DurationText, out var val) || val < 1) return -1;
         var max = DurationUnit switch
         {
+            DurationUnitType.Ticks => 10,
+            DurationUnitType.Seconds => 86400,
             DurationUnitType.Minutes => 1440,
             DurationUnitType.Hours => 24,
             DurationUnitType.Days => 365,
             _ => 1440
         };
-        return val > max ? -1 : val;
+        var min = DurationUnit == DurationUnitType.Seconds ? 15 : 1;
+        return val > max || val < min ? -1 : val;
     }
 
     private int GetDurationInMinutes()
@@ -964,10 +989,26 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
         if (!int.TryParse(DurationText, out var val) || val < 1) return 1;
         return DurationUnit switch
         {
+            DurationUnitType.Ticks => Math.Max(1, val * 2 / 60),
+            DurationUnitType.Seconds => Math.Max(1, val / 60),
             DurationUnitType.Minutes => val,
             DurationUnitType.Hours => val * 60,
             DurationUnitType.Days => val * 1440,
             _ => val
+        };
+    }
+
+    private int GetDurationInSeconds()
+    {
+        if (!int.TryParse(DurationText, out var val) || val < 1) return 60;
+        return DurationUnit switch
+        {
+            DurationUnitType.Ticks => Math.Max(2, val * 2),
+            DurationUnitType.Seconds => val,
+            DurationUnitType.Minutes => val * 60,
+            DurationUnitType.Hours => val * 3600,
+            DurationUnitType.Days => val * 86400,
+            _ => val * 60
         };
     }
 
@@ -982,6 +1023,8 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
 
     private string GetDurationUnitString() => DurationUnit switch
     {
+        DurationUnitType.Ticks => "t",
+        DurationUnitType.Seconds => "s",
         DurationUnitType.Minutes => "m",
         DurationUnitType.Hours => "h",
         DurationUnitType.Days => "d",
@@ -990,25 +1033,17 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
 
     private string? GetBarrierForApi()
     {
-        if (!UseDuration && IsEndTimeMoreThan24h())
+        if (!UseDuration)
         {
-            // End Time > 24h: SelectedBarrier holds the absolute value directly
+            // End Time mode: SelectedBarrier holds the absolute value directly
             if (SelectedBarrier <= 0) return null;
             return SelectedBarrier.ToString($"F{_pipSize}", CultureInfo.InvariantCulture);
         }
 
-        // Duration mode and End Time ≤ 24h use relative offsets
+        // Duration mode uses relative offsets
         var offset = SelectedBarrier;
         var sign = offset >= 0 ? "+" : "";
         return $"{sign}{offset.ToString($"F{_pipSize}", CultureInfo.InvariantCulture)}";
-    }
-
-    private bool IsEndTimeMoreThan24h()
-    {
-        var dateExpiry = GetDateExpiryUnix();
-        if (dateExpiry == null) return false;
-        var secondsUntilExpiry = dateExpiry.Value - DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        return secondsUntilExpiry > 86400;
     }
 
     private bool ValidateInputs()
@@ -1068,7 +1103,7 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
         int? duration = null;
         string? unitStr = null;
         long? dateExpiry = null;
-        string? barrier = GetBarrierForApi();
+        string? barrier = SelectedStrategy.RequiresBarrier ? GetBarrierForApi() : null;
 
         if (UseDuration)
         {
@@ -1161,10 +1196,20 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
 
     private string? _pendingBarrierRestore;
 
-    public void RestoreState(string? durationUnit, string? durationText, string? stakeText, bool? useDuration = null, string? selectedBarrier = null)
+    public void RestoreState(string? durationUnit, string? durationText, string? stakeText, bool? useDuration = null, string? selectedBarrier = null, string? selectedStrategy = null, bool? allowEquals = null, string? recoverMode = null)
     {
-        AppLogger.Info(Src, $"RestoreState: unit={durationUnit}, duration={durationText}, stake={stakeText}, useDuration={useDuration}, barrier={selectedBarrier}");
+        AppLogger.Info(Src, $"RestoreState: unit={durationUnit}, duration={durationText}, stake={stakeText}, useDuration={useDuration}, barrier={selectedBarrier}, strategy={selectedStrategy}, allowEquals={allowEquals}, recoverMode={recoverMode}");
         _restoringState = true;
+        if (!string.IsNullOrEmpty(selectedStrategy))
+        {
+            var match = AvailableStrategies.FirstOrDefault(s => s.DisplayName == selectedStrategy);
+            if (match != null)
+                SelectedStrategy = match;
+        }
+        if (allowEquals.HasValue)
+            AllowEquals = allowEquals.Value;
+        if (!string.IsNullOrEmpty(recoverMode))
+            RecoverMode = recoverMode;
         if (!string.IsNullOrEmpty(selectedBarrier))
             _pendingBarrierRestore = selectedBarrier;
         if (useDuration.HasValue)

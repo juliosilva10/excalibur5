@@ -31,6 +31,7 @@
         <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVis"/>
         <converters:TickDirectionToColorConverter x:Key="DirToColor"/>
         <converters:ConfidenceToColorConverter x:Key="ConfidenceToColor"/>
+        <converters:ContainsToVisibilityConverter x:Key="ContainsToVis"/>
         <BooleanToVisibilityConverter   x:Key="BoolToVis"/>
 
         <!-- Confidence Slider Style: colored track (red→orange→yellow→blue→green) -->
@@ -851,13 +852,13 @@
                                     CornerRadius="8"
                                     Background="Transparent"
                                     BorderBrush="#00f0ff"
-                                    BorderThickness="2"
+                                    BorderThickness="1.5"
                                     Opacity="0">
                                 <Border.Effect>
-                                    <DropShadowEffect Color="#00f0ff" BlurRadius="18" ShadowDepth="0" Opacity="1"/>
+                                    <DropShadowEffect Color="#00f0ff" BlurRadius="10" ShadowDepth="0" Opacity="0.9"/>
                                 </Border.Effect>
                                 <Border.Margin>
-                                    <Thickness>-2,-2,-2,-2</Thickness>
+                                    <Thickness>-1,-1,-1,-1</Thickness>
                                 </Border.Margin>
                             </Border>
                             <Border x:Name="MainBorder"
@@ -1256,6 +1257,34 @@
         </Style>
 
         <!-- DerivComboBox: dark-themed ComboBox with rounded corners -->
+        <Style x:Key="DerivComboBoxItem" TargetType="ComboBoxItem">
+            <Setter Property="Foreground" Value="#f3fbff"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="FontFamily" Value="Consolas"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBoxItem">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                Padding="{TemplateBinding Padding}"
+                                CornerRadius="4">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#1a4a5e"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#1d4957"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style x:Key="DerivComboBox" TargetType="ComboBox">
             <Setter Property="Background" Value="#153342"/>
             <Setter Property="Foreground" Value="#f3fbff"/>
@@ -1343,37 +1372,7 @@
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
-            <Setter Property="ItemContainerStyle">
-                <Setter.Value>
-                    <Style TargetType="ComboBoxItem">
-                        <Setter Property="Foreground" Value="#f3fbff"/>
-                        <Setter Property="Background" Value="Transparent"/>
-                        <Setter Property="Padding" Value="8,4"/>
-                        <Setter Property="FontFamily" Value="Consolas"/>
-                        <Setter Property="FontSize" Value="12"/>
-                        <Setter Property="Template">
-                            <Setter.Value>
-                                <ControlTemplate TargetType="ComboBoxItem">
-                                    <Border x:Name="Bd"
-                                            Background="{TemplateBinding Background}"
-                                            Padding="{TemplateBinding Padding}"
-                                            CornerRadius="4">
-                                        <ContentPresenter/>
-                                    </Border>
-                                    <ControlTemplate.Triggers>
-                                        <Trigger Property="IsHighlighted" Value="True">
-                                            <Setter TargetName="Bd" Property="Background" Value="#1a4a5e"/>
-                                        </Trigger>
-                                        <Trigger Property="IsSelected" Value="True">
-                                            <Setter TargetName="Bd" Property="Background" Value="#1d4957"/>
-                                        </Trigger>
-                                    </ControlTemplate.Triggers>
-                                </ControlTemplate>
-                            </Setter.Value>
-                        </Setter>
-                    </Style>
-                </Setter.Value>
-            </Setter>
+            <Setter Property="ItemContainerStyle" Value="{StaticResource DerivComboBoxItem}"/>
         </Style>
 
     </Application.Resources>

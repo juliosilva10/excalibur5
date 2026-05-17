@@ -181,7 +181,8 @@ public sealed class ContractService : IContractService, IDisposable
         foreach (var item in available.EnumerateArray())
         {
             var contractType = item.TryGetProperty("contract_type", out var ct) ? ct.GetString() ?? "" : "";
-            if (contractType != "VANILLALONGCALL" && contractType != "VANILLALONGPUT")
+            if (contractType != "VANILLALONGCALL" && contractType != "VANILLALONGPUT"
+                && contractType != "CALL" && contractType != "PUT")
                 continue;
 
             list.Add(new ContractInfo
@@ -583,6 +584,7 @@ public sealed class ContractService : IContractService, IDisposable
             Profit = pocEl.TryGetProperty("profit", out var pf) ? ParseDecimal(pf) : 0m,
             DateStart = pocEl.TryGetProperty("date_start", out var ds) ? ds.GetInt64() : 0,
             DateExpiry = pocEl.TryGetProperty("date_expiry", out var de) ? de.GetInt64() : 0,
+            EntryTickTime = pocEl.TryGetProperty("entry_tick_time", out var ett) ? ett.GetInt64() : 0,
             IsExpired = pocEl.TryGetProperty("is_expired", out var ie) && (ie.ValueKind == JsonValueKind.True || (ie.ValueKind == JsonValueKind.Number && ie.GetInt32() == 1)),
             IsSold = pocEl.TryGetProperty("is_sold", out var isl) && (isl.ValueKind == JsonValueKind.True || (isl.ValueKind == JsonValueKind.Number && isl.GetInt32() == 1)),
             IsValidToSell = pocEl.TryGetProperty("is_valid_to_sell", out var ivs) && (ivs.ValueKind == JsonValueKind.True || (ivs.ValueKind == JsonValueKind.Number && ivs.GetInt32() == 1)),

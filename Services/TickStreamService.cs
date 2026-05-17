@@ -320,6 +320,7 @@ public sealed class TickStreamService : ITickStreamService, IDisposable
                 t.TrySetCanceled();
         });
 
+        AppLogger.Info(Src, $"Sending req_id={reqId}: {json[..Math.Min(json.Length, 120)]}");
         await _ws.SendAsync(json, ct);
         return await tcs.Task;
     }

@@ -14,6 +14,7 @@ public sealed class OpenContractUpdate
     public decimal Profit { get; init; }
     public long DateStart { get; init; }
     public long DateExpiry { get; init; }
+    public long EntryTickTime { get; init; }
     public bool IsExpired { get; init; }
     public bool IsSold { get; init; }
     public bool IsValidToSell { get; init; }
