@@ -16,6 +16,8 @@ public partial class HistoryViewModel : ObservableObject
     [ObservableProperty] private bool _isHistoryVisible;
     [ObservableProperty] private bool _isLoading;
 
+    public event EventHandler<TradeHistoryItem>? TradeSettled;
+
     public ObservableCollection<TradeHistoryItem> Trades { get; } = new();
 
     public HistoryViewModel(IContractService contractService)
@@ -44,6 +46,7 @@ public partial class HistoryViewModel : ObservableObject
             {
                 Operacao = item.Operacao,
                 Estrategia = item.Estrategia,
+                Market = item.Market,
                 Tipo = item.Tipo,
                 ReferenceNumber = item.ReferenceNumber,
                 PurchaseTime = item.PurchaseTime,
@@ -57,6 +60,8 @@ public partial class HistoryViewModel : ObservableObject
                 ProfitLoss = update.Profit,
                 ContractId = item.ContractId
             };
+
+            TradeSettled?.Invoke(this, Trades[idx]);
         });
     }
 
@@ -144,7 +149,7 @@ public partial class HistoryViewModel : ObservableObject
         }
     }
 
-    public void AddBotTrade(BuyResponse buy, string contractType, string strategyName)
+    public void AddBotTrade(BuyResponse buy, string contractType, string strategyName, string market)
     {
         Application.Current.Dispatcher.Invoke(() =>
         {
@@ -152,6 +157,7 @@ public partial class HistoryViewModel : ObservableObject
             {
                 Operacao = "Bot",
                 Estrategia = strategyName,
+                Market = market,
                 Tipo = FormatContractType(contractType),
                 ReferenceNumber = buy.ContractId.ToString(),
                 PurchaseTime = DateTimeOffset.FromUnixTimeSeconds(buy.StartTime).LocalDateTime,
@@ -161,7 +167,7 @@ public partial class HistoryViewModel : ObservableObject
         });
     }
 
-    public void AddManualTrade(BuyResponse buy, string contractType)
+    public void AddManualTrade(BuyResponse buy, string contractType, string market)
     {
         Application.Current.Dispatcher.Invoke(() =>
         {
@@ -169,6 +175,7 @@ public partial class HistoryViewModel : ObservableObject
             {
                 Operacao = "Manual",
                 Estrategia = "",
+                Market = market,
                 Tipo = FormatContractType(contractType),
                 ReferenceNumber = buy.ContractId.ToString(),
                 PurchaseTime = DateTimeOffset.FromUnixTimeSeconds(buy.StartTime).LocalDateTime,
@@ -192,6 +199,7 @@ public partial class HistoryViewModel : ObservableObject
             {
                 Operacao = item.Operacao,
                 Estrategia = item.Estrategia,
+                Market = item.Market,
                 Tipo = item.Tipo,
                 ReferenceNumber = item.ReferenceNumber,
                 PurchaseTime = item.PurchaseTime,

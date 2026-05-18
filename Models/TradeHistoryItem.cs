@@ -4,6 +4,7 @@ public sealed class TradeHistoryItem
 {
     public string Operacao { get; init; } = string.Empty;
     public string Estrategia { get; init; } = string.Empty;
+    public string Market { get; init; } = string.Empty;
     public string Tipo { get; init; } = string.Empty;
     public string ReferenceNumber { get; init; } = string.Empty;
     public DateTime PurchaseTime { get; init; }

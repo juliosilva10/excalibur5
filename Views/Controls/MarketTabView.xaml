@@ -244,6 +244,9 @@
                         <DataTrigger Binding="{Binding DataContext.History.IsHistoryVisible, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
                             <Setter Property="Visibility" Value="Collapsed"/>
                         </DataTrigger>
+                        <DataTrigger Binding="{Binding DataContext.Performance.IsPerformanceVisible, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                        </DataTrigger>
                     </Style.Triggers>
                 </Style>
             </controls:ContractPanelView.Style>
@@ -263,5 +266,20 @@
                 </Style>
             </controls:HistoryPanelView.Style>
         </controls:HistoryPanelView>
+
+        <!-- Performance panel -->
+        <controls:PerformancePanelView Grid.Row="2"
+                                       DataContext="{Binding DataContext.Performance, RelativeSource={RelativeSource AncestorType=Window}}">
+            <controls:PerformancePanelView.Style>
+                <Style TargetType="controls:PerformancePanelView">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding DataContext.Performance.IsPerformanceVisible, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                            <Setter Property="Visibility" Value="Visible"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </controls:PerformancePanelView.Style>
+        </controls:PerformancePanelView>
     </Grid>
 </UserControl>

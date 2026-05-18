@@ -48,6 +48,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     public StrategyViewModel Strategy { get; }
     public RecoverViewModel Recover { get; } = new();
     public HistoryViewModel History { get; }
+    public PerformanceViewModel Performance { get; } = new();
 
     partial void OnAccountTypeChanged(string value)
     {
@@ -75,6 +76,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         Strategy = new StrategyViewModel(contractService);
         Strategy.SetRecoverViewModel(Recover);
         History = new HistoryViewModel(contractService);
+        History.TradeSettled += (_, trade) => Performance.OnTradeCompleted(trade);
 
         Markets.MarketsRequested += () =>
         {
@@ -82,6 +84,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             Strategy.IsBotVisible = false;
             Recover.IsRecoverVisible = false;
             History.IsHistoryVisible = false;
+            Performance.IsPerformanceVisible = false;
         };
         Markets.PropertyChanged += (_, e) =>
         {
@@ -107,6 +110,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 Strategy.IsBotVisible = false;
                 Recover.IsRecoverVisible = false;
                 History.IsHistoryVisible = false;
+                Performance.IsPerformanceVisible = false;
             }
             if (e.PropertyName == nameof(Log.IsLogVisible))
                 SaveUiState();
@@ -118,6 +122,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 Log.IsLogVisible = false;
                 Recover.IsRecoverVisible = false;
                 History.IsHistoryVisible = false;
+                Performance.IsPerformanceVisible = false;
             }
         };
         Recover.PropertyChanged += (_, e) =>
@@ -127,6 +132,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 Log.IsLogVisible = false;
                 Strategy.IsBotVisible = false;
                 History.IsHistoryVisible = false;
+                Performance.IsPerformanceVisible = false;
             }
         };
         History.PropertyChanged += (_, e) =>
@@ -136,6 +142,17 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 Log.IsLogVisible = false;
                 Strategy.IsBotVisible = false;
                 Recover.IsRecoverVisible = false;
+                Performance.IsPerformanceVisible = false;
+            }
+        };
+        Performance.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(Performance.IsPerformanceVisible) && Performance.IsPerformanceVisible)
+            {
+                Log.IsLogVisible = false;
+                Strategy.IsBotVisible = false;
+                Recover.IsRecoverVisible = false;
+                History.IsHistoryVisible = false;
             }
         };
 
@@ -146,7 +163,15 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
         Strategy.BotTradeOpened += (_, e) =>
         {
-            History.AddBotTrade(e.BuyResult, e.ContractType, Strategy.StrategyMode);
+            var tab = Markets.SelectedTab;
+            var market = tab?.DisplayName ?? "";
+            History.AddBotTrade(e.BuyResult, e.ContractType, Strategy.StrategyMode, market);
+            if (tab != null)
+            {
+                Performance.OnTradeOpened(e.BuyResult.ContractId, market,
+                    tab.ChartValues, tab.ChartEpochs, tab.ChartDirections,
+                    tab.ChartType, tab.TickCandleValues, tab.CandleValues);
+            }
         };
 
         Strategy.BotTradeCompleted += (_, e) =>
@@ -292,6 +317,12 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             Balance  = e.Balance;
             Currency = e.Currency;
+
+            var tab = Markets.SelectedTab;
+            if (tab != null)
+                Performance.CaptureTickSnapshot(tab.ChartValues, tab.ChartEpochs, tab.ChartDirections,
+                    tab.ChartType, tab.TickCandleValues, tab.CandleValues);
+            Performance.OnBalanceUpdated(e.Balance);
         }).Task.ContinueWith(t =>
             AppLogger.Error(Src, "OnBalanceUpdated dispatcher error", t.Exception?.InnerException),
             TaskContinuationOptions.OnlyOnFaulted);
@@ -404,7 +435,15 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     private void OnManualTradeOpened(object? sender, ManualTradeOpened e)
     {
-        History.AddManualTrade(e.BuyResult, e.ContractType);
+        var tab = Markets.SelectedTab;
+        var market = tab?.DisplayName ?? "";
+        History.AddManualTrade(e.BuyResult, e.ContractType, market);
+        if (tab != null)
+        {
+            Performance.OnTradeOpened(e.BuyResult.ContractId, market,
+                tab.ChartValues, tab.ChartEpochs, tab.ChartDirections,
+                tab.ChartType, tab.TickCandleValues, tab.CandleValues);
+        }
     }
 
     private void OnContractPanelChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)

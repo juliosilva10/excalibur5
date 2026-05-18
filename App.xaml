@@ -33,6 +33,10 @@
         <converters:ConfidenceToColorConverter x:Key="ConfidenceToColor"/>
         <converters:ContainsToVisibilityConverter x:Key="ContainsToVis"/>
         <converters:StringMatchToBoolConverter x:Key="StringMatch"/>
+        <converters:NullToVisibilityConverter x:Key="NullToVis"/>
+        <converters:NotNullToVisibilityConverter x:Key="NotNullToVis"/>
+        <converters:IsPositiveConverter x:Key="IsPositive"/>
+        <converters:IsNegativeConverter x:Key="IsNegative"/>
         <BooleanToVisibilityConverter   x:Key="BoolToVis"/>
 
         <!-- Confidence Slider Style: colored track (red→orange→yellow→blue→green) -->

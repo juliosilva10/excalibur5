@@ -1,0 +1,317 @@
+<UserControl x:Class="Excalibur5.Views.Controls.PerformancePanelView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DesignHeight="400" d:DesignWidth="900">
+
+    <Border CornerRadius="6"
+            BorderBrush="#1d4957" BorderThickness="1"
+            Margin="0,4,0,0">
+        <Border.Background>
+            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                <GradientStop Color="#0c1e2a" Offset="0"/>
+                <GradientStop Color="#07121a" Offset="1"/>
+            </LinearGradientBrush>
+        </Border.Background>
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header -->
+            <Grid Grid.Row="0" Margin="12,8,12,4">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="Performance" Foreground="#00f0ff" FontSize="14"
+                               FontWeight="SemiBold" VerticalAlignment="Center"/>
+                    <TextBlock Text=" — Sessão Atual" Foreground="#6090a8" FontSize="13"
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+            </Grid>
+
+            <!-- Content -->
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled"
+                          Margin="8,4,8,8">
+                <StackPanel>
+
+                    <!-- Total Operations -->
+                    <Border Padding="10,8" CornerRadius="4" Margin="0,0,0,6"
+                            Background="#112935" BorderBrush="#1d4957" BorderThickness="1">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Total de Operações:" Foreground="#6090a8" FontSize="13"
+                                       VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding TotalOperations}" Foreground="#00e8c8"
+                                       FontSize="22" FontWeight="Bold" Margin="8,0,0,0"
+                                       FontFamily="Consolas" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Largest Stake -->
+                    <Border Padding="10,8" CornerRadius="4" Margin="0,0,0,6"
+                            Background="#112935" BorderBrush="#1d4957" BorderThickness="1">
+                        <StackPanel>
+                            <TextBlock Text="Maior Stake" Foreground="#00f0ff" FontSize="15"
+                                       FontWeight="SemiBold" Margin="0,0,0,6"/>
+
+                            <TextBlock Text="Nenhuma operação registrada"
+                                       Foreground="#6090a8" FontSize="13"
+                                       Visibility="{Binding LargestStake, Converter={StaticResource NullToVis}}"/>
+
+                            <Grid Visibility="{Binding LargestStake, Converter={StaticResource NotNullToVis}}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="220"/>
+                                </Grid.ColumnDefinitions>
+
+                                <Grid Grid.Column="0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="8"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Stake:" Foreground="#6090a8" FontSize="13"/>
+                                    <TextBlock Grid.Row="0" Grid.Column="2" Text="{Binding LargestStake.Trade.Stake, StringFormat=F2}"
+                                               Foreground="#f0c000" FontSize="14" FontFamily="Consolas" FontWeight="Bold"/>
+
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Operação:" Foreground="#6090a8" FontSize="13"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding LargestStake.Trade.Operacao}"
+                                               Foreground="#e0eef8" FontSize="13" FontFamily="Consolas"/>
+
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Estratégia:" Foreground="#6090a8" FontSize="13"/>
+                                    <TextBlock Grid.Row="2" Grid.Column="2" Text="{Binding LargestStake.Trade.Estrategia}"
+                                               Foreground="#e0eef8" FontSize="13" FontFamily="Consolas"/>
+
+                                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Mercado:" Foreground="#6090a8" FontSize="13"/>
+                                    <TextBlock Grid.Row="3" Grid.Column="2" Text="{Binding LargestStake.Market}"
+                                               Foreground="#e0eef8" FontSize="13" FontFamily="Consolas"/>
+
+                                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Compra:" Foreground="#6090a8" FontSize="13"/>
+                                    <TextBlock Grid.Row="4" Grid.Column="2" Text="{Binding LargestStake.Trade.PurchaseTime, StringFormat=dd/MM/yyyy HH:mm:ss}"
+                                               Foreground="#e0eef8" FontSize="13" FontFamily="Consolas"/>
+
+                                    <TextBlock Grid.Row="5" Grid.Column="0" Text="Venda:" Foreground="#6090a8" FontSize="13"/>
+                                    <TextBlock Grid.Row="5" Grid.Column="2" Text="{Binding LargestStake.Trade.SellTime, StringFormat=dd/MM/yyyy HH:mm:ss}"
+                                               Foreground="#e0eef8" FontSize="13" FontFamily="Consolas"/>
+
+                                    <TextBlock Grid.Row="6" Grid.Column="0" Text="Entry Spot:" Foreground="#6090a8" FontSize="13"/>
+                                    <TextBlock Grid.Row="6" Grid.Column="2" Text="{Binding LargestStake.Trade.EntrySpot}"
+                                               Foreground="#e0eef8" FontSize="13" FontFamily="Consolas"/>
+
+                                    <TextBlock Grid.Row="7" Grid.Column="0" Text="Exit Spot:" Foreground="#6090a8" FontSize="13"/>
+                                    <TextBlock Grid.Row="7" Grid.Column="2" Text="{Binding LargestStake.Trade.ExitSpot}"
+                                               Foreground="#e0eef8" FontSize="13" FontFamily="Consolas"/>
+                                </Grid>
+
+                                <!-- Mini candle chart -->
+                                <Border Grid.Column="1" CornerRadius="4" Background="#0a1821"
+                                        BorderBrush="#1d4957" BorderThickness="1" Margin="8,0,0,0">
+                                    <Canvas x:Name="LargestStakeChart" Height="90" ClipToBounds="True"/>
+                                </Border>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Max Drawdown -->
+                    <Border Padding="10,8" CornerRadius="4" Margin="0,0,0,6"
+                            Background="#112935" BorderBrush="#1d4957" BorderThickness="1">
+                        <StackPanel>
+                            <TextBlock Text="Drawdown Máximo" Foreground="#00f0ff" FontSize="15"
+                                       FontWeight="SemiBold" Margin="0,0,0,6"/>
+
+                            <TextBlock Text="Sem drawdown registrado"
+                                       Foreground="#6090a8" FontSize="13"
+                                       Visibility="{Binding MaxDrawdown, Converter={StaticResource NullToVis}}"/>
+
+                            <Grid Visibility="{Binding MaxDrawdown, Converter={StaticResource NotNullToVis}}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="220"/>
+                                </Grid.ColumnDefinitions>
+
+                                <Grid Grid.Column="0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="8"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Rebaixamento:" Foreground="#6090a8" FontSize="13"/>
+                                    <TextBlock Grid.Row="0" Grid.Column="2" Foreground="#FF6B6B" FontSize="15"
+                                               FontFamily="Consolas" FontWeight="Bold"
+                                               Text="{Binding MaxDrawdown.DrawdownValue, StringFormat=-{0:F2} USD}"/>
+
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Data/Hora:" Foreground="#6090a8" FontSize="13"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding MaxDrawdown.OccurredAt, StringFormat=dd/MM/yyyy HH:mm:ss}"
+                                               Foreground="#e0eef8" FontSize="13" FontFamily="Consolas"/>
+
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Pico:" Foreground="#6090a8" FontSize="13"/>
+                                    <TextBlock Grid.Row="2" Grid.Column="2" Text="{Binding MaxDrawdown.PeakBalance, StringFormat=F2}"
+                                               Foreground="#00e8c8" FontSize="13" FontFamily="Consolas"/>
+
+                                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Vale:" Foreground="#6090a8" FontSize="13"/>
+                                    <TextBlock Grid.Row="3" Grid.Column="2" Text="{Binding MaxDrawdown.TroughBalance, StringFormat=F2}"
+                                               Foreground="#FF6B6B" FontSize="13" FontFamily="Consolas"/>
+                                </Grid>
+
+                                <!-- Mini candle chart -->
+                                <Border Grid.Column="1" CornerRadius="4" Background="#0a1821"
+                                        BorderBrush="#1d4957" BorderThickness="1" Margin="8,0,0,0">
+                                    <Canvas x:Name="DrawdownChart" Height="90" ClipToBounds="True"/>
+                                </Border>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Longest Loss Streak -->
+                    <Border Padding="10,8" CornerRadius="4" Margin="0,0,0,6"
+                            Background="#112935" BorderBrush="#1d4957" BorderThickness="1">
+                        <StackPanel>
+                            <TextBlock Text="Maior Sequência de Loss" Foreground="#00f0ff" FontSize="15"
+                                       FontWeight="SemiBold" Margin="0,0,0,6"/>
+
+                            <TextBlock Text="Nenhuma sequência de loss registrada"
+                                       Foreground="#6090a8" FontSize="13"
+                                       Visibility="{Binding LongestLossStreak, Converter={StaticResource NullToVis}}"/>
+
+                            <StackPanel Visibility="{Binding LongestLossStreak, Converter={StaticResource NotNullToVis}}">
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                    <TextBlock Text="Derrotas consecutivas:" Foreground="#6090a8" FontSize="13"
+                                               VerticalAlignment="Center"/>
+                                    <TextBlock Text="{Binding LongestLossStreak.Length}" Foreground="#FF6B6B"
+                                               FontSize="20" FontWeight="Bold" Margin="8,0,0,0"
+                                               FontFamily="Consolas" VerticalAlignment="Center"/>
+                                </StackPanel>
+
+                                <ItemsControl ItemsSource="{Binding LongestLossStreak.Stakes}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal" Margin="0,1">
+                                                <TextBlock Text="•" Foreground="#FF6B6B" FontSize="13" Margin="0,0,6,0"/>
+                                                <TextBlock Text="{Binding StringFormat=Stake: {0:F2}}"
+                                                           Foreground="#e0eef8" FontSize="13" FontFamily="Consolas"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <Border Margin="0,6,0,0" Padding="8,4" CornerRadius="3"
+                                        Background="#1a0a0a" BorderBrush="#4a2020" BorderThickness="1">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="Total perdido:" Foreground="#6090a8" FontSize="13"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding LongestLossStreak.TotalLost, StringFormat=-{0:F2} USD}"
+                                                   Foreground="#FF6B6B" FontSize="15" FontWeight="Bold"
+                                                   Margin="8,0,0,0" FontFamily="Consolas" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Strategy Performance -->
+                    <Border Padding="10,8" CornerRadius="4" Margin="0,0,0,6"
+                            Background="#112935" BorderBrush="#1d4957" BorderThickness="1">
+                        <StackPanel>
+                            <TextBlock Text="Performance por Estratégia" Foreground="#00f0ff" FontSize="15"
+                                       FontWeight="SemiBold" Margin="0,0,0,6"/>
+
+                            <TextBlock Text="Nenhuma estratégia registrada"
+                                       Foreground="#6090a8" FontSize="13">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding StrategyStats.Count}" Value="0">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+
+                            <ItemsControl ItemsSource="{Binding StrategyStats}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Padding="8,4" Margin="0,2" CornerRadius="3"
+                                                Background="#0c1e2a" BorderBrush="#1d4957" BorderThickness="1">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="2*"/>
+                                                    <ColumnDefinition Width="1*"/>
+                                                    <ColumnDefinition Width="1*"/>
+                                                    <ColumnDefinition Width="1*"/>
+                                                    <ColumnDefinition Width="1.2*"/>
+                                                    <ColumnDefinition Width="1*"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <TextBlock Grid.Column="0" Text="{Binding StrategyName}"
+                                                           Foreground="#e0eef8" FontSize="13" FontFamily="Consolas"
+                                                           VerticalAlignment="Center"/>
+                                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                                    <TextBlock Text="Ops: " Foreground="#6090a8" FontSize="11"/>
+                                                    <TextBlock Text="{Binding TotalTrades}" Foreground="#e0eef8" FontSize="13" FontFamily="Consolas"/>
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="2" Orientation="Horizontal">
+                                                    <TextBlock Text="W: " Foreground="#6090a8" FontSize="11"/>
+                                                    <TextBlock Text="{Binding Wins}" Foreground="#34c759" FontSize="13" FontFamily="Consolas"/>
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="3" Orientation="Horizontal">
+                                                    <TextBlock Text="L: " Foreground="#6090a8" FontSize="11"/>
+                                                    <TextBlock Text="{Binding Losses}" Foreground="#FF6B6B" FontSize="13" FontFamily="Consolas"/>
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="4" Orientation="Horizontal">
+                                                    <TextBlock Text="P/L: " Foreground="#6090a8" FontSize="11"/>
+                                                    <TextBlock Text="{Binding TotalProfit, StringFormat=F2}" FontSize="13" FontFamily="Consolas">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Foreground" Value="#e0eef8"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding TotalProfit, Converter={StaticResource IsPositive}}" Value="True">
+                                                                        <Setter Property="Foreground" Value="#34c759"/>
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding TotalProfit, Converter={StaticResource IsNegative}}" Value="True">
+                                                                        <Setter Property="Foreground" Value="#FF6B6B"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="5" Orientation="Horizontal">
+                                                    <TextBlock Text="WR: " Foreground="#6090a8" FontSize="11"/>
+                                                    <TextBlock Text="{Binding WinRate, StringFormat={}{0:F1}%}" Foreground="#f0c000" FontSize="13" FontFamily="Consolas"/>
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+    </Border>
+</UserControl>

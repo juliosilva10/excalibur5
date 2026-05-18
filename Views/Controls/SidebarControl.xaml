@@ -453,6 +453,111 @@
                            FontSize="9"
                            Foreground="#e0eef8"
                            HorizontalAlignment="Center"
+                           Margin="0,4,0,12"/>
+
+                <!-- Performance button -->
+                <Button Command="{Binding Performance.TogglePerformanceCommand}"
+                        ToolTip="Performance"
+                        Margin="8,0,8,0"
+                        Width="40" Height="40"
+                        Cursor="Hand"
+                        FocusVisualStyle="{x:Null}">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Grid>
+                                <Border x:Name="GlowBg"
+                                        CornerRadius="10"
+                                        Opacity="0">
+                                    <Border.Background>
+                                        <RadialGradientBrush>
+                                            <GradientStop Color="#5500f0ff" Offset="0"/>
+                                            <GradientStop Color="#0000f0ff" Offset="1"/>
+                                        </RadialGradientBrush>
+                                    </Border.Background>
+                                </Border>
+                                <Border x:Name="MainBody"
+                                        CornerRadius="10"
+                                        BorderThickness="1"
+                                        BorderBrush="#2a5568">
+                                    <Border.Background>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                            <GradientStop Color="#1e465a" Offset="0.0"/>
+                                            <GradientStop Color="#153342" Offset="0.5"/>
+                                            <GradientStop Color="#112935" Offset="1.0"/>
+                                        </LinearGradientBrush>
+                                    </Border.Background>
+                                    <Border.Effect>
+                                        <DropShadowEffect Color="Black" BlurRadius="4" ShadowDepth="2"
+                                                          Direction="270" Opacity="0.5"/>
+                                    </Border.Effect>
+                                    <Grid>
+                                        <Border CornerRadius="9,9,0,0" Height="6" VerticalAlignment="Top"
+                                                Opacity="0.12" IsHitTestVisible="False">
+                                            <Border.Background>
+                                                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                                    <GradientStop Color="White" Offset="0"/>
+                                                    <GradientStop Color="Transparent" Offset="1"/>
+                                                </LinearGradientBrush>
+                                            </Border.Background>
+                                        </Border>
+                                        <!-- Performance icon (bar chart) -->
+                                        <Canvas Width="18" Height="14" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                            <Rectangle Canvas.Left="1" Canvas.Top="8" Width="3" Height="6"
+                                                       Fill="#00f0ff" RadiusX="0.5" RadiusY="0.5"/>
+                                            <Rectangle Canvas.Left="5.5" Canvas.Top="4" Width="3" Height="10"
+                                                       Fill="#00f0ff" RadiusX="0.5" RadiusY="0.5"/>
+                                            <Rectangle Canvas.Left="10" Canvas.Top="1" Width="3" Height="13"
+                                                       Fill="#00f0ff" RadiusX="0.5" RadiusY="0.5"/>
+                                            <Rectangle Canvas.Left="14.5" Canvas.Top="6" Width="3" Height="8"
+                                                       Fill="#00f0ff" RadiusX="0.5" RadiusY="0.5"/>
+                                        </Canvas>
+                                    </Grid>
+                                </Border>
+                            </Grid>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Trigger.EnterActions>
+                                        <BeginStoryboard>
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="GlowBg"
+                                                                 Storyboard.TargetProperty="Opacity"
+                                                                 To="1" Duration="0:0:0.25"/>
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </Trigger.EnterActions>
+                                    <Trigger.ExitActions>
+                                        <BeginStoryboard>
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="GlowBg"
+                                                                 Storyboard.TargetProperty="Opacity"
+                                                                 To="0" Duration="0:0:0.25"/>
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </Trigger.ExitActions>
+                                    <Setter TargetName="MainBody" Property="BorderBrush" Value="#00f0ff"/>
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter TargetName="MainBody" Property="Background">
+                                        <Setter.Value>
+                                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                                <GradientStop Color="#112935" Offset="0.0"/>
+                                                <GradientStop Color="#0c1e2a" Offset="1.0"/>
+                                            </LinearGradientBrush>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Trigger>
+                                <DataTrigger Binding="{Binding Performance.IsPerformanceVisible}" Value="True">
+                                    <Setter TargetName="GlowBg" Property="Opacity" Value="0.7"/>
+                                    <Setter TargetName="MainBody" Property="BorderBrush" Value="#00f0ff"/>
+                                </DataTrigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+                <TextBlock Text="Perform."
+                           FontSize="9"
+                           Foreground="#e0eef8"
+                           HorizontalAlignment="Center"
                            Margin="0,4,0,0"/>
             </StackPanel>
 
