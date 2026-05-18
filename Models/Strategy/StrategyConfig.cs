@@ -34,8 +34,8 @@ public sealed class StrategyConfig
     };
 
     // Tick Scalper settings
-    public int TickScalperCooldown { get; set; } = 5;
-    public double TickScalperThreshold { get; set; } = 0.70;
-    public int TickScalperMinAgreement { get; set; } = 2;
+    public int TickScalperCooldown { get; set; } = 12;
+    public double TickScalperThreshold { get; set; } = 0.80;
+    public int TickScalperMinAgreement { get; set; } = 3;
     public bool TickScalperFlatFilter { get; set; } = true;
 }

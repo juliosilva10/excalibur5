@@ -8,15 +8,19 @@ public sealed class TickScalperEngine
     private const string Src = "TickScalper";
     private const int MinTicksRequired = 30;
     private const int MaxTicks = 200;
+    private const int DirectionLookback = 3;
+    private const int ChopLookback = 20;
+    private const double ChopThreshold = 0.60;
 
     private readonly List<decimal> _ticks = new(MaxTicks);
     private readonly List<ITickIndicator> _indicators = new();
     private int _cooldownTicks;
-    private int _cooldownSetting = 5;
-    private double _threshold = 0.70;
-    private int _minAgreement = 2;
+    private int _cooldownSetting = 12;
+    private double _threshold = 0.80;
+    private int _minAgreement = 3;
     private bool _flatFilter = true;
     private bool _isRunning;
+    private int _consecutiveLosses;
 
     public event EventHandler<TradeSignal>? SignalGenerated;
     public bool IsRunning => _isRunning;
@@ -28,6 +32,7 @@ public sealed class TickScalperEngine
         _minAgreement = minAgreement;
         _flatFilter = flatFilter;
         _cooldownTicks = 0;
+        _consecutiveLosses = 0;
         _ticks.Clear();
         _indicators.Clear();
 
@@ -69,12 +74,30 @@ public sealed class TickScalperEngine
         if (_flatFilter && IsFlat())
             return;
 
+        if (IsChoppy())
+            return;
+
         EvaluateSignals();
     }
 
     public void SetCooldown()
     {
         _cooldownTicks = _cooldownSetting;
+    }
+
+    public void ReportTradeResult(bool won)
+    {
+        if (won)
+        {
+            _consecutiveLosses = 0;
+        }
+        else
+        {
+            _consecutiveLosses++;
+            int progressiveCooldown = _cooldownSetting * (1 << Math.Min(_consecutiveLosses, 4));
+            _cooldownTicks = progressiveCooldown;
+            AppLogger.Info(Src, $"Progressive cooldown: {progressiveCooldown} ticks (losses: {_consecutiveLosses})");
+        }
     }
 
     public void FeedHistory(IReadOnlyList<decimal> history)
@@ -100,6 +123,46 @@ public sealed class TickScalperEngine
         if (low == 0) return false;
         decimal range = (high - low) / low;
         return range < 0.00005m;
+    }
+
+    private bool IsChoppy()
+    {
+        int lookback = Math.Min(ChopLookback, _ticks.Count - 1);
+        if (lookback < 6) return false;
+
+        int reversals = 0;
+        int prevDir = 0;
+
+        for (int i = _ticks.Count - lookback; i < _ticks.Count; i++)
+        {
+            int dir = _ticks[i] > _ticks[i - 1] ? 1 : _ticks[i] < _ticks[i - 1] ? -1 : 0;
+            if (dir == 0) continue;
+            if (prevDir != 0 && dir != prevDir)
+                reversals++;
+            prevDir = dir;
+        }
+
+        double chopRatio = (double)reversals / (lookback - 1);
+        return chopRatio >= ChopThreshold;
+    }
+
+    private bool IsDirectionConfirmed(SignalDirection direction)
+    {
+        if (_ticks.Count < DirectionLookback + 1) return true;
+
+        int ups = 0, downs = 0;
+        for (int i = _ticks.Count - DirectionLookback; i < _ticks.Count; i++)
+        {
+            if (_ticks[i] > _ticks[i - 1]) ups++;
+            else if (_ticks[i] < _ticks[i - 1]) downs++;
+        }
+
+        if (direction == SignalDirection.Call)
+            return downs < DirectionLookback;
+        if (direction == SignalDirection.Put)
+            return ups < DirectionLookback;
+
+        return true;
     }
 
     private void EvaluateSignals()
@@ -150,6 +213,12 @@ public sealed class TickScalperEngine
         }
 
         if (score < _threshold) return;
+
+        if (!IsDirectionConfirmed(direction))
+        {
+            AppLogger.Info(Src, $"Signal {direction} rejected — recent ticks contradict direction");
+            return;
+        }
 
         var reasons = string.Join(" + ", signals
             .Where(s => s.Direction == direction && s.Strength > 0)
