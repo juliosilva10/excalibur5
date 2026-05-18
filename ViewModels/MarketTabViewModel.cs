@@ -43,6 +43,8 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
     {
         if (value == ChartType.Candles && !_candlesLoaded && _isActive)
             _ = LoadCandlesAsync();
+        else if (value == ChartType.TickCandles && TickCandleValues.Count == 0 && ChartValues.Count > 0)
+            BuildTickCandlesFromHistory();
     }
 
     public async Task LoadCandlesAsync()
@@ -93,7 +95,14 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
     private bool _candlesLoaded;
     private int _candleGranularity = 60;
 
+    public List<CandleData> TickCandleValues { get; } = new();
+    private int _ticksPerCandle = 5;
+    private int _currentTickCount;
+    [ObservableProperty] private bool _isTickCandlesEnabled;
+
     public event EventHandler? CandleUpdated;
+    public event EventHandler? TickCandleUpdated;
+    public event EventHandler<TickData>? TickReceived;
 
     public MarketTabViewModel(MarketInfo market, ITickStreamService tickService, IContractService contractService)
     {
@@ -113,7 +122,25 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
         if (e.PropertyName is nameof(ContractPanelViewModel.DurationUnit) or nameof(ContractPanelViewModel.DurationText))
         {
             UpdateCandlesEnabled();
-            UpdateGranularityFromPanel();
+
+            if (ContractPanel.DurationUnit == DurationUnitType.Ticks)
+            {
+                if (int.TryParse(ContractPanel.DurationText, out var n) && n >= 1)
+                {
+                    _ticksPerCandle = n;
+                    BuildTickCandlesFromHistory();
+                }
+                if (ChartType == ChartType.Candles)
+                    ChartType = ChartType.TickCandles;
+                else if (ChartType == ChartType.Line && TickCandleValues.Count == 0 && ChartValues.Count > 0)
+                    ChartType = ChartType.TickCandles;
+            }
+            else
+            {
+                if (ChartType == ChartType.TickCandles)
+                    ChartType = ChartType.Line;
+                UpdateGranularityFromPanel();
+            }
         }
     }
 
@@ -134,8 +161,30 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
 
     private void UpdateCandlesEnabled()
     {
-        IsCandlesEnabled = ContractPanel.DurationUnit != DurationUnitType.Minutes
-            || (int.TryParse(ContractPanel.DurationText, out var val) && val >= 1);
+        IsCandlesEnabled = ContractPanel.DurationUnit != DurationUnitType.Ticks
+            && (ContractPanel.DurationUnit != DurationUnitType.Minutes
+                || (int.TryParse(ContractPanel.DurationText, out var val) && val >= 1));
+        IsTickCandlesEnabled = ContractPanel.DurationUnit == DurationUnitType.Ticks
+            && int.TryParse(ContractPanel.DurationText, out var v) && v >= 1;
+    }
+
+    public void EnableTickCandles(int ticksPerCandle)
+    {
+        _ticksPerCandle = ticksPerCandle;
+        IsTickCandlesEnabled = true;
+        IsCandlesEnabled = false;
+        BuildTickCandlesFromHistory();
+        if (ChartType != ChartType.TickCandles)
+            ChartType = ChartType.TickCandles;
+    }
+
+    public void DisableTickCandles()
+    {
+        IsTickCandlesEnabled = ContractPanel.DurationUnit == DurationUnitType.Ticks
+            && int.TryParse(ContractPanel.DurationText, out var v) && v >= 1;
+        IsCandlesEnabled = ContractPanel.DurationUnit != DurationUnitType.Ticks;
+        if (ChartType == ChartType.TickCandles && ContractPanel.DurationUnit != DurationUnitType.Ticks)
+            ChartType = ChartType.Line;
     }
 
     private void OnTickReceived(object? sender, TickData tick)
@@ -173,6 +222,11 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
 
             if (_candlesLoaded && CandleValues.Count > 0)
                 UpdateCandleWithTick(tick);
+
+            if (ChartType == ChartType.TickCandles)
+                UpdateTickCandleWithTick(tick);
+
+            TickReceived?.Invoke(this, tick);
         });
     }
 
@@ -213,6 +267,75 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
         CandleUpdated?.Invoke(this, EventArgs.Empty);
     }
 
+    private void BuildTickCandlesFromHistory()
+    {
+        TickCandleValues.Clear();
+        _currentTickCount = 0;
+
+        int count = ChartValues.Count;
+        if (count == 0 || _ticksPerCandle < 1) return;
+
+        for (int i = 0; i < count; i += _ticksPerCandle)
+        {
+            int end = Math.Min(i + _ticksPerCandle, count);
+            decimal open = ChartValues[i];
+            decimal close = ChartValues[end - 1];
+            decimal high = open;
+            decimal low = open;
+
+            for (int j = i; j < end; j++)
+            {
+                var q = ChartValues[j];
+                if (q > high) high = q;
+                if (q < low) low = q;
+            }
+
+            long epoch = i < ChartEpochs.Count ? ChartEpochs[i] : 0;
+            TickCandleValues.Add(new CandleData
+            {
+                Epoch = epoch,
+                Open = open,
+                High = high,
+                Low = low,
+                Close = close
+            });
+        }
+
+        _currentTickCount = count % _ticksPerCandle;
+        if (_currentTickCount == 0 && TickCandleValues.Count > 0)
+            _currentTickCount = _ticksPerCandle;
+
+        TickCandleUpdated?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void UpdateTickCandleWithTick(TickData tick)
+    {
+        if (_ticksPerCandle < 1) return;
+
+        if (TickCandleValues.Count == 0 || _currentTickCount >= _ticksPerCandle)
+        {
+            TickCandleValues.Add(new CandleData
+            {
+                Epoch = tick.Epoch,
+                Open = tick.Quote,
+                High = tick.Quote,
+                Low = tick.Quote,
+                Close = tick.Quote
+            });
+            _currentTickCount = 1;
+        }
+        else
+        {
+            var last = TickCandleValues[^1];
+            last.Close = tick.Quote;
+            if (tick.Quote > last.High) last.High = tick.Quote;
+            if (tick.Quote < last.Low) last.Low = tick.Quote;
+            _currentTickCount++;
+        }
+
+        TickCandleUpdated?.Invoke(this, EventArgs.Empty);
+    }
+
     public async Task ActivateAsync()
     {
         if (_isActive) return;
@@ -229,7 +352,9 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
                 ChartEpochs.Clear();
                 ChartDirections.Clear();
                 CandleValues.Clear();
+                TickCandleValues.Clear();
                 _candlesLoaded = false;
+                _currentTickCount = 0;
             });
 
             // Load history — non-fatal if it fails (chart will be empty but contracts still load)
@@ -293,6 +418,8 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
             // Reload candles if chart was already in candle mode
             if (ChartType == ChartType.Candles)
                 _ = LoadCandlesAsync();
+            else if (ChartType == ChartType.TickCandles)
+                BuildTickCandlesFromHistory();
         }
         catch (Exception ex)
         {

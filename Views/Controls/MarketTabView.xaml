@@ -141,6 +141,22 @@
                                         <TextBlock Text="Gráfico de candles" Foreground="#e0eef8" FontSize="12" VerticalAlignment="Center"/>
                                     </StackPanel>
                                 </Border>
+                                <Border x:Name="TickCandlesOption" Background="Transparent"
+                                        CornerRadius="4" Padding="8,5" Cursor="Hand"
+                                        MouseLeftButtonUp="ChartTypeTickCandles_Click"
+                                        MouseEnter="MenuOption_MouseEnter"
+                                        MouseLeave="MenuOption_MouseLeave"
+                                        IsEnabled="{Binding IsTickCandlesEnabled}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Canvas Width="16" Height="12" Margin="0,0,8,0">
+                                            <Line X1="4" Y1="0" X2="4" Y2="12" Stroke="#00bcd4" StrokeThickness="1"/>
+                                            <Rectangle Canvas.Left="2" Canvas.Top="3" Width="4" Height="5" Fill="#00bcd4"/>
+                                            <Line X1="12" Y1="0" X2="12" Y2="12" Stroke="#ff9800" StrokeThickness="1"/>
+                                            <Rectangle Canvas.Left="10" Canvas.Top="2" Width="4" Height="6" Fill="#ff9800"/>
+                                        </Canvas>
+                                        <TextBlock Text="Tick Candles" Foreground="#e0eef8" FontSize="12" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Border>
                             </StackPanel>
                         </Border>
                     </Popup>

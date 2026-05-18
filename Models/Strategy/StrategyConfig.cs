@@ -32,4 +32,10 @@ public sealed class StrategyConfig
         IndicatorType.CandlePattern,
         IndicatorType.Momentum
     };
+
+    // Tick Scalper settings
+    public int TickScalperCooldown { get; set; } = 5;
+    public double TickScalperThreshold { get; set; } = 0.70;
+    public int TickScalperMinAgreement { get; set; } = 2;
+    public bool TickScalperFlatFilter { get; set; } = true;
 }

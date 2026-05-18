@@ -60,14 +60,18 @@ public sealed class StrategyExecutor : IDisposable
         _callProposalId = string.Empty;
         _putProposalId = string.Empty;
         AppLogger.Info(Src, $"Executor started for {symbol}, TP={config.TakeProfitUsd}, SL={config.StopLossUsd}, trailing={config.EnableTrailingStop}, recover={config.RecoverMode}");
-        _ = SubscribeBotProposalsAsync();
+        _ = SubscribeBotProposalsAsync().ContinueWith(
+            t => AppLogger.Warn(Src, $"Initial proposal subscribe error: {t.Exception?.InnerException?.Message}"),
+            TaskContinuationOptions.OnlyOnFaulted);
     }
 
     public void Stop()
     {
         _active = false;
         _proposalsReady = false;
-        _ = UnsubscribeBotProposalsAsync();
+        _ = UnsubscribeBotProposalsAsync().ContinueWith(
+            t => AppLogger.Warn(Src, $"Proposal unsubscribe error: {t.Exception?.InnerException?.Message}"),
+            TaskContinuationOptions.OnlyOnFaulted);
         AppLogger.Info(Src, "Executor stopped");
     }
 
@@ -120,7 +124,9 @@ public sealed class StrategyExecutor : IDisposable
         if (!_active) return;
         _proposalsReady = false;
         AppLogger.Info(Src, "RefreshProposals — resubscribing bot proposals");
-        _ = SubscribeBotProposalsAsync();
+        _ = SubscribeBotProposalsAsync().ContinueWith(
+            t => AppLogger.Warn(Src, $"RefreshProposals error: {t.Exception?.InnerException?.Message}"),
+            TaskContinuationOptions.OnlyOnFaulted);
     }
 
     private async Task SubscribeBotProposalsAsync()
@@ -297,7 +303,9 @@ public sealed class StrategyExecutor : IDisposable
                 AppLogger.Info(Src, $"Buying via pre-subscribed proposal {proposalId}, ask={askPrice}, stake={stake}");
                 result = await _contractService.BuyContractAsync(proposalId, askPrice);
 
-                _ = ResubscribeAfterBuyAsync(signal.Direction);
+                _ = ResubscribeAfterBuyAsync(signal.Direction).ContinueWith(
+                    t => AppLogger.Warn(Src, $"ResubscribeAfterBuy error: {t.Exception?.InnerException?.Message}"),
+                    TaskContinuationOptions.OnlyOnFaulted);
             }
             else
             {
@@ -311,7 +319,9 @@ public sealed class StrategyExecutor : IDisposable
                     _config.DurationApiUnit,
                     barrierForBuy);
 
-                _ = SubscribeBotProposalsAsync();
+                _ = SubscribeBotProposalsAsync().ContinueWith(
+                    t => AppLogger.Warn(Src, $"SubscribeBotProposals error: {t.Exception?.InnerException?.Message}"),
+                    TaskContinuationOptions.OnlyOnFaulted);
             }
 
             if (result.ContractId > 0)

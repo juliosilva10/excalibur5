@@ -100,9 +100,23 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
     private bool _barriersAreRelative; // true when _apiBarriers contains relative offsets (duration mode)
     private decimal _spotForBarriers;
     private bool _barrierLocked;
+    private bool _proposalsSuspended;
 
     public void LockBarrier() => _barrierLocked = true;
     public void UnlockBarrier() => _barrierLocked = false;
+
+    public async void SuspendProposals()
+    {
+        _proposalsSuspended = true;
+        _proposalCts?.Cancel();
+        await _contractService.UnsubscribeAllProposalsAsync();
+    }
+
+    public void ResumeProposals()
+    {
+        _proposalsSuspended = false;
+        RequestProposalDebounced();
+    }
 
     public bool UseEndTime => !UseDuration;
     public string StrikePriceDisplay => StrikePrice.ToString("F2", CultureInfo.InvariantCulture);
@@ -1055,7 +1069,7 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
 
     private async void RequestProposalDebounced()
     {
-        if (!_active || !ContractsLoaded) return;
+        if (!_active || !ContractsLoaded || _proposalsSuspended) return;
 
         _proposalCts?.Cancel();
         _proposalCts = new CancellationTokenSource();

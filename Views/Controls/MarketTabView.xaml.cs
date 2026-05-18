@@ -71,6 +71,7 @@ public partial class MarketTabView : UserControl
             old.ChartValues.CollectionChanged -= OnChartValuesChanged;
             old.PropertyChanged -= OnVmPropertyChanged;
             old.CandleUpdated -= OnCandleUpdated;
+            old.TickCandleUpdated -= OnTickCandleUpdated;
         }
 
         if (e.NewValue is MarketTabViewModel vm)
@@ -82,6 +83,7 @@ public partial class MarketTabView : UserControl
             vm.ChartValues.CollectionChanged += OnChartValuesChanged;
             vm.PropertyChanged += OnVmPropertyChanged;
             vm.CandleUpdated += OnCandleUpdated;
+            vm.TickCandleUpdated += OnTickCandleUpdated;
             UpdateButtonIcon(vm.ChartType);
             ScheduleRedraw();
         }
@@ -96,7 +98,7 @@ public partial class MarketTabView : UserControl
 
     private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(MarketTabViewModel.ChartType) or nameof(MarketTabViewModel.CandleValues))
+        if (e.PropertyName is nameof(MarketTabViewModel.ChartType) or nameof(MarketTabViewModel.CandleValues) or nameof(MarketTabViewModel.TickCandleValues))
         {
             ScheduleRedraw();
             if (e.PropertyName == nameof(MarketTabViewModel.ChartType) && Vm != null)
@@ -119,12 +121,27 @@ public partial class MarketTabView : UserControl
         ScheduleRedraw();
     }
 
+    private void OnTickCandleUpdated(object? sender, EventArgs e)
+    {
+        if (Vm?.ChartType != ChartType.TickCandles) return;
+
+        if (_candleViewEnd >= 0)
+        {
+            var total = Vm.TickCandleValues.Count;
+            var (_, currentEnd) = GetVisibleTickCandleRange(Vm);
+            if (currentEnd >= total - 1)
+                _candleViewEnd = total;
+        }
+
+        ScheduleRedraw();
+    }
+
     private void OnSizeChanged(object sender, SizeChangedEventArgs e) => ScheduleRedraw();
 
     private void OnChartValuesChanged(object? sender,
         System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
     {
-        if (Vm?.ChartType == ChartType.Candles) return;
+        if (Vm?.ChartType is ChartType.Candles or ChartType.TickCandles) return;
         ScheduleRedraw();
     }
 
@@ -184,14 +201,33 @@ public partial class MarketTabView : UserControl
         return (start, end);
     }
 
+    private (int start, int end) GetVisibleTickCandleRange(MarketTabViewModel vm)
+    {
+        int total = vm.TickCandleValues.Count;
+        int baseVisible = Math.Min(DefaultVisibleCandles, total);
+        int visible;
+        if (_candleZoomLevel == 0)
+            visible = baseVisible;
+        else if (_candleZoomLevel > 0)
+            visible = Math.Max(3, baseVisible / (1 + _candleZoomLevel));
+        else
+            visible = Math.Min(baseVisible * (1 - _candleZoomLevel), total);
+
+        int end = _candleViewEnd < 0 ? total : Math.Min(_candleViewEnd, total);
+        int start = Math.Max(0, end - visible);
+        return (start, end);
+    }
+
     private void ChartCanvas_MouseWheel(object sender, MouseWheelEventArgs e)
     {
         var vm = Vm;
         if (vm == null) return;
 
-        if (vm.ChartType == ChartType.Candles)
+        if (vm.ChartType is ChartType.Candles or ChartType.TickCandles)
         {
-            int total = vm.CandleValues.Count;
+            int total = vm.ChartType == ChartType.TickCandles
+                ? vm.TickCandleValues.Count
+                : vm.CandleValues.Count;
             if (total < 2) return;
 
             if (e.Delta > 0)
@@ -252,14 +288,19 @@ public partial class MarketTabView : UserControl
         double chartWidth = ChartCanvas.ActualWidth;
         double drawWidth = chartWidth - PadRight;
 
-        if (vm.ChartType == ChartType.Candles && vm.CandleValues.Count > 0)
+        if (vm.ChartType is ChartType.Candles or ChartType.TickCandles)
         {
-            int numVisible = _visibleCandleEnd - _visibleCandleStart;
-            if (numVisible < 1) return;
-            double gap = drawWidth / numVisible;
-            int candleIdx = (int)(pos.X / gap);
-            candleIdx = Math.Clamp(candleIdx, 0, numVisible - 1);
-            ShowCandleMarkerAt(_visibleCandleStart + candleIdx, pos, numVisible);
+            var candleList = vm.ChartType == ChartType.TickCandles
+                ? vm.TickCandleValues : vm.CandleValues;
+            if (candleList.Count > 0)
+            {
+                int numVisible = _visibleCandleEnd - _visibleCandleStart;
+                if (numVisible < 1) return;
+                double gap = drawWidth / numVisible;
+                int candleIdx = (int)(pos.X / gap);
+                candleIdx = Math.Clamp(candleIdx, 0, numVisible - 1);
+                ShowCandleMarkerAt(_visibleCandleStart + candleIdx, pos, numVisible);
+            }
         }
         else if (vm.ChartValues.Count >= 2)
         {
@@ -285,10 +326,12 @@ public partial class MarketTabView : UserControl
             double dx = pos.X - _dragStart.X;
             if (Math.Abs(dx) < 3) return;
 
-            if (vm.ChartType == ChartType.Candles)
+            if (vm.ChartType is ChartType.Candles or ChartType.TickCandles)
             {
-                int total = vm.CandleValues.Count;
-                var (cStart, cEnd) = GetVisibleCandleRange(vm);
+                int total = vm.ChartType == ChartType.TickCandles
+                    ? vm.TickCandleValues.Count : vm.CandleValues.Count;
+                var (cStart, cEnd) = vm.ChartType == ChartType.TickCandles
+                    ? GetVisibleTickCandleRange(vm) : GetVisibleCandleRange(vm);
                 int numVisible = cEnd - cStart;
                 if (numVisible < 1) return;
                 double pixelsPerCandle = drawWidth / numVisible;
@@ -319,14 +362,19 @@ public partial class MarketTabView : UserControl
 
         if (_isPinned) return;
 
-        if (vm.ChartType == ChartType.Candles && vm.CandleValues.Count > 0)
+        if (vm.ChartType is ChartType.Candles or ChartType.TickCandles)
         {
-            int numVisible = _visibleCandleEnd - _visibleCandleStart;
-            if (numVisible < 1) return;
-            double gap = drawWidth / numVisible;
-            int candleIdx = (int)(pos.X / gap);
-            candleIdx = Math.Clamp(candleIdx, 0, numVisible - 1);
-            ShowCandleMarkerAt(_visibleCandleStart + candleIdx, pos, numVisible);
+            var candleList = vm.ChartType == ChartType.TickCandles
+                ? vm.TickCandleValues : vm.CandleValues;
+            if (candleList.Count > 0)
+            {
+                int numVisible = _visibleCandleEnd - _visibleCandleStart;
+                if (numVisible < 1) return;
+                double gap = drawWidth / numVisible;
+                int candleIdx = (int)(pos.X / gap);
+                candleIdx = Math.Clamp(candleIdx, 0, numVisible - 1);
+                ShowCandleMarkerAt(_visibleCandleStart + candleIdx, pos, numVisible);
+            }
             return;
         }
 
@@ -349,9 +397,10 @@ public partial class MarketTabView : UserControl
         _isDragging = true;
         _dragStart = e.GetPosition(ChartCanvas);
 
-        if (vm.ChartType == ChartType.Candles)
+        if (vm.ChartType is ChartType.Candles or ChartType.TickCandles)
         {
-            int total = vm.CandleValues.Count;
+            int total = vm.ChartType == ChartType.TickCandles
+                ? vm.TickCandleValues.Count : vm.CandleValues.Count;
             _dragStartCandleViewEnd = _candleViewEnd < 0 ? total : _candleViewEnd;
         }
         else
@@ -381,7 +430,7 @@ public partial class MarketTabView : UserControl
             var vm = Vm;
             if (vm == null) return;
 
-            if (vm.ChartType == ChartType.Candles)
+            if (vm.ChartType is ChartType.Candles or ChartType.TickCandles)
             {
                 // no pin for candles
             }
@@ -515,9 +564,13 @@ public partial class MarketTabView : UserControl
     private void ShowCandleMarkerAt(int candleIdx, Point pos, int numVisible)
     {
         var vm = Vm;
-        if (vm == null || vm.CandleValues.Count == 0) return;
+        if (vm == null) return;
 
-        var c = vm.CandleValues[candleIdx];
+        var candleList = vm.ChartType == ChartType.TickCandles
+            ? vm.TickCandleValues : vm.CandleValues;
+        if (candleList.Count == 0) return;
+
+        var c = candleList[candleIdx];
         var pipSize = GetPipSize();
         double chartWidth = ChartCanvas.ActualWidth;
         double chartHeight = ChartCanvas.ActualHeight;
@@ -636,16 +689,29 @@ public partial class MarketTabView : UserControl
         var chartHeight = ChartCanvas.ActualHeight;
         if (chartWidth <= 0 || chartHeight <= 0) return;
 
-        if (vm.ChartType == ChartType.Candles)
+        try
         {
-            if (vm.CandleValues.Count < 2) return;
-            var (cStart, cEnd) = GetVisibleCandleRange(vm);
-            _visibleCandleStart = cStart;
-            _visibleCandleEnd = cEnd;
-            DrawCandles(cStart, cEnd, chartWidth, chartHeight);
-            DrawXAxisCandles(chartWidth, cStart, cEnd);
-            return;
-        }
+            if (vm.ChartType == ChartType.TickCandles)
+            {
+                if (vm.TickCandleValues.Count < 2) return;
+                var (tcStart, tcEnd) = GetVisibleTickCandleRange(vm);
+                _visibleCandleStart = tcStart;
+                _visibleCandleEnd = tcEnd;
+                DrawTickCandles(tcStart, tcEnd, chartWidth, chartHeight);
+                DrawXAxisTickCandles(chartWidth, tcStart, tcEnd);
+                return;
+            }
+
+            if (vm.ChartType == ChartType.Candles)
+            {
+                if (vm.CandleValues.Count < 2) return;
+                var (cStart, cEnd) = GetVisibleCandleRange(vm);
+                _visibleCandleStart = cStart;
+                _visibleCandleEnd = cEnd;
+                DrawCandles(cStart, cEnd, chartWidth, chartHeight);
+                DrawXAxisCandles(chartWidth, cStart, cEnd);
+                return;
+            }
 
         if (vm.ChartValues.Count < 2)
         {
@@ -661,6 +727,9 @@ public partial class MarketTabView : UserControl
         }
 
         var (start, end) = GetVisibleRange();
+        int total = vm.ChartValues.Count;
+        if (end > total) end = total;
+        if (start >= end) return;
         _visibleStart = start;
         _visibleEnd = end;
         int count = end - start;
@@ -717,6 +786,8 @@ public partial class MarketTabView : UserControl
 
         if (_isPinned && _pinnedGlobalIdx >= 0)
             ShowMarkerAt(_pinnedGlobalIdx);
+        }
+        catch (ArgumentOutOfRangeException) { }
     }
 
     private static readonly SolidColorBrush AxisBrush = new(Color.FromRgb(0xc0, 0xd8, 0xe8));
@@ -725,6 +796,9 @@ public partial class MarketTabView : UserControl
     private static readonly SolidColorBrush NeutralBrush = new(Color.FromRgb(0xa3, 0xb8, 0xcc));
     private static readonly SolidColorBrush NeutralLightBrush = new(Color.FromRgb(0xe0, 0xee, 0xf8));
 
+    private static readonly SolidColorBrush CyanBrush = new(Color.FromRgb(0x00, 0xbc, 0xd4));
+    private static readonly SolidColorBrush OrangeBrush = new(Color.FromRgb(0xff, 0x98, 0x00));
+
     static MarketTabView()
     {
         AxisBrush.Freeze();
@@ -732,6 +806,8 @@ public partial class MarketTabView : UserControl
         RedBrush.Freeze();
         NeutralBrush.Freeze();
         NeutralLightBrush.Freeze();
+        CyanBrush.Freeze();
+        OrangeBrush.Freeze();
     }
 
     private void DrawYAxis(double min, double max)
@@ -873,11 +949,31 @@ public partial class MarketTabView : UserControl
         CloseChartPopup();
     }
 
+    private void ChartTypeTickCandles_Click(object sender, MouseButtonEventArgs e)
+    {
+        if (Vm != null) Vm.ChartType = ChartType.TickCandles;
+        UpdateButtonIcon(ChartType.TickCandles);
+        CloseChartPopup();
+    }
+
     private void UpdateButtonIcon(ChartType type)
     {
         ChartTypeButton.Child = null;
 
-        if (type == ChartType.Candles)
+        if (type == ChartType.TickCandles)
+        {
+            var canvas = new Canvas { Width = 14, Height = 12, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+            canvas.Children.Add(new Line { X1 = 3, Y1 = 0, X2 = 3, Y2 = 12, Stroke = CyanBrush, StrokeThickness = 1 });
+            canvas.Children.Add(new Rectangle { Width = 4, Height = 5, Fill = CyanBrush });
+            Canvas.SetLeft(canvas.Children[1], 1);
+            Canvas.SetTop(canvas.Children[1], 3);
+            canvas.Children.Add(new Line { X1 = 11, Y1 = 0, X2 = 11, Y2 = 12, Stroke = OrangeBrush, StrokeThickness = 1 });
+            canvas.Children.Add(new Rectangle { Width = 4, Height = 6, Fill = OrangeBrush });
+            Canvas.SetLeft(canvas.Children[3], 9);
+            Canvas.SetTop(canvas.Children[3], 2);
+            ChartTypeButton.Child = canvas;
+        }
+        else if (type == ChartType.Candles)
         {
             var canvas = new Canvas { Width = 14, Height = 12, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
             canvas.Children.Add(new Line { X1 = 3, Y1 = 0, X2 = 3, Y2 = 12, Stroke = GreenBrush, StrokeThickness = 1 });
@@ -962,6 +1058,116 @@ public partial class MarketTabView : UserControl
         }
     }
 
+    private void DrawTickCandles(int startIdx, int endIdx, double chartWidth, double chartHeight)
+    {
+        ClearChartElements();
+
+        var vm = Vm;
+        if (vm == null || vm.TickCandleValues.Count == 0) return;
+
+        var candles = vm.TickCandleValues;
+        int total = candles.Count;
+        if (endIdx > total) endIdx = total;
+        if (startIdx >= endIdx) return;
+        int numVisible = endIdx - startIdx;
+
+        double candleMin = double.MaxValue;
+        double candleMax = double.MinValue;
+        for (int i = startIdx; i < endIdx; i++)
+        {
+            var c = candles[i];
+            if ((double)c.Low < candleMin) candleMin = (double)c.Low;
+            if ((double)c.High > candleMax) candleMax = (double)c.High;
+        }
+        var candleRange = candleMax - candleMin;
+        if (candleRange == 0) candleRange = 1;
+
+        _drawPadTop = chartHeight * 0.06;
+        double padBot = chartHeight * 0.06;
+        _drawH = chartHeight - _drawPadTop - padBot;
+        _drawMin = candleMin;
+        _drawRange = candleRange;
+
+        double drawWidth = chartWidth - PadRight;
+        double gap = drawWidth / numVisible;
+        double candleWidth = Math.Max(2, gap * 0.7);
+
+        for (int i = 0; i < numVisible; i++)
+        {
+            var c = candles[startIdx + i];
+            bool bullish = c.Close >= c.Open;
+            var brush = bullish ? CyanBrush : OrangeBrush;
+
+            double x = i * gap + gap / 2;
+            double yHigh  = _drawPadTop + _drawH - (((double)c.High - candleMin) / candleRange) * _drawH;
+            double yLow   = _drawPadTop + _drawH - (((double)c.Low - candleMin) / candleRange) * _drawH;
+            double yOpen  = _drawPadTop + _drawH - (((double)c.Open - candleMin) / candleRange) * _drawH;
+            double yClose = _drawPadTop + _drawH - (((double)c.Close - candleMin) / candleRange) * _drawH;
+
+            var wick = new Line
+            {
+                X1 = x, X2 = x, Y1 = yHigh, Y2 = yLow,
+                Stroke = brush, StrokeThickness = 1
+            };
+            ChartCanvas.Children.Add(wick);
+
+            double bodyTop = Math.Min(yOpen, yClose);
+            double bodyHeight = Math.Max(1, Math.Abs(yOpen - yClose));
+
+            var body = new Rectangle
+            {
+                Width = candleWidth,
+                Height = bodyHeight,
+                Fill = brush,
+                Stroke = brush,
+                StrokeThickness = 1
+            };
+            Canvas.SetLeft(body, x - candleWidth / 2);
+            Canvas.SetTop(body, bodyTop);
+            ChartCanvas.Children.Add(body);
+        }
+
+        DrawYAxis(candleMin, candleMax);
+    }
+
+    private void DrawXAxisTickCandles(double chartWidth, int startIdx, int endIdx)
+    {
+        XAxisCanvas.Children.Clear();
+        var vm = Vm;
+        if (vm == null || vm.TickCandleValues.Count < 2) return;
+
+        int numVisible = endIdx - startIdx;
+        if (numVisible < 2) return;
+        double drawWidth = chartWidth - PadRight;
+        double gap = drawWidth / numVisible;
+
+        int maxLabels = Math.Max(2, (int)(chartWidth / 70));
+        int labelCount = Math.Min(maxLabels, numVisible);
+        if (labelCount < 2) return;
+
+        for (int i = 0; i < labelCount; i++)
+        {
+            int localIdx = (int)((long)i * (numVisible - 1) / (labelCount - 1));
+            double x = localIdx * gap + gap / 2;
+
+            int candleNumber = startIdx + localIdx + 1;
+            string label = $"#{candleNumber}";
+
+            var tb = new TextBlock
+            {
+                Text = label,
+                FontFamily = new FontFamily("Consolas"),
+                FontSize = 9,
+                Foreground = AxisBrush
+            };
+            double labelX = x - 12;
+            if (i == 0) labelX = Math.Max(8, labelX);
+            Canvas.SetLeft(tb, labelX);
+            Canvas.SetTop(tb, 2);
+            XAxisCanvas.Children.Add(tb);
+        }
+    }
+
     private void ClearChartElements()
     {
         var preserve = new List<UIElement>();
@@ -984,8 +1190,10 @@ public partial class MarketTabView : UserControl
         if (vm == null || vm.CandleValues.Count == 0) return;
 
         var candles = vm.CandleValues;
+        int total = candles.Count;
+        if (endIdx > total) endIdx = total;
+        if (startIdx >= endIdx) return;
         int numVisible = endIdx - startIdx;
-        if (numVisible < 1) return;
 
         // Calculate min/max only for visible candles
         double candleMin = double.MaxValue;

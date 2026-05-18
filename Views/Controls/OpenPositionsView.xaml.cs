@@ -39,7 +39,7 @@ public sealed class ProfitToBrushConverter : IValueConverter
         if (parameter is string p && p == "type")
         {
             var label = value as string ?? "";
-            return label == "Call" ? GreenBrush : RedBrush;
+            return label is "Call" or "Rise" ? GreenBrush : RedBrush;
         }
 
         if (value is decimal profit)

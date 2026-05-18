@@ -21,9 +21,11 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
     private readonly IContractService _contractService;
     private readonly StrategyEngine _engine = new();
     private readonly TrendEngine _trendEngine = new();
+    private readonly TickScalperEngine _tickScalperEngine = new();
     private StrategyExecutor? _executor;
     private string _activeSymbol = string.Empty;
     private EventHandler? _candleHandler;
+    private EventHandler<TickData>? _tickHandler;
     private MarketTabViewModel? _activeMarketTab;
     private bool _restoringState;
     private RecoverViewModel? _recoverVm;
@@ -50,11 +52,18 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string _deficitMaxStakeText = "50";
     [ObservableProperty] private string _deficitRecoveryTradesText = "1";
 
+    // Tick Scalper config
+    [ObservableProperty] private int _tickScalperCooldown = 5;
+    [ObservableProperty] private double _tickScalperThreshold = 0.70;
+    [ObservableProperty] private int _tickScalperMinAgreement = 2;
+    [ObservableProperty] private bool _tickScalperFlatFilter = true;
+
     public ObservableCollection<string> AvailableBarrierDisplays { get; } = new();
     public bool UseEndTime => !UseDuration;
     public List<string> RecoverModes { get; } = ["", "Martingale", "Deficit Recovery"];
-    public List<string> StrategyModes { get; } = ["Multi-Indicador", "Tendência"];
+    public List<string> StrategyModes { get; } = ["Multi-Indicador", "Tendência", "Tick Scalper"];
     public bool IsTrendMode => StrategyMode == "Tendência";
+    public bool IsTickScalperMode => StrategyMode == "Tick Scalper";
     public bool IsDeficitMode => RecoverMode == "Deficit Recovery";
 
     // Indicators
@@ -79,6 +88,7 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
     {
         _contractService = contractService;
         _engine.SignalGenerated += OnSignalGenerated;
+        _tickScalperEngine.SignalGenerated += OnTickScalperSignal;
         RestoreState();
     }
 
@@ -113,6 +123,10 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
         EnableCandlePattern = s.EnableCandlePattern;
         EnableMomentum = s.EnableMomentum;
         EnableTrailingStop = s.EnableTrailingStop;
+        TickScalperCooldown = s.TickScalperCooldown;
+        TickScalperThreshold = s.TickScalperThreshold;
+        TickScalperMinAgreement = s.TickScalperMinAgreement;
+        TickScalperFlatFilter = s.TickScalperFlatFilter;
         _restoringState = false;
     }
 
@@ -142,7 +156,11 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
             EnableBollinger = EnableBollinger,
             EnableCandlePattern = EnableCandlePattern,
             EnableMomentum = EnableMomentum,
-            EnableTrailingStop = EnableTrailingStop
+            EnableTrailingStop = EnableTrailingStop,
+            TickScalperCooldown = TickScalperCooldown,
+            TickScalperThreshold = TickScalperThreshold,
+            TickScalperMinAgreement = TickScalperMinAgreement,
+            TickScalperFlatFilter = TickScalperFlatFilter
         });
     }
 
@@ -163,6 +181,7 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
         };
         SaveState();
         UpdateChartGranularity();
+        SyncDurationToMarketTab();
     }
     partial void OnDurationTextChanged(string value)
     {
@@ -182,6 +201,7 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
         }
         SaveState();
         UpdateChartGranularity();
+        SyncDurationToMarketTab();
     }
     partial void OnSelectedEndDateChanged(DateTime value) => SaveState();
     partial void OnDirectionModeChanged(string value) => SaveState();
@@ -206,12 +226,17 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
     partial void OnStrategyModeChanged(string value)
     {
         OnPropertyChanged(nameof(IsTrendMode));
+        OnPropertyChanged(nameof(IsTickScalperMode));
         SaveState();
         UpdateChartGranularity();
     }
     partial void OnSampleSizeTextChanged(string value) => SaveState();
     partial void OnDeficitMaxStakeTextChanged(string value) => SaveState();
     partial void OnDeficitRecoveryTradesTextChanged(string value) => SaveState();
+    partial void OnTickScalperCooldownChanged(int value) => SaveState();
+    partial void OnTickScalperThresholdChanged(double value) => SaveState();
+    partial void OnTickScalperMinAgreementChanged(int value) => SaveState();
+    partial void OnTickScalperFlatFilterChanged(bool value) => SaveState();
 
     [RelayCommand]
     private void ToggleBot()
@@ -220,7 +245,7 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
-    private void Start()
+    private async Task Start()
     {
         if (IsRunning) return;
         if (_activeMarketTab == null)
@@ -232,6 +257,10 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
         var config = BuildConfig();
         _activeSymbol = _activeMarketTab.Symbol;
 
+        _activeMarketTab.ContractPanel.LockBarrier();
+        _activeMarketTab.ContractPanel.SuspendProposals();
+        await Task.Delay(200);
+
         _executor?.Dispose();
         _executor = new StrategyExecutor(_contractService, _engine);
         _executor.StatsUpdated += OnStatsUpdated;
@@ -239,10 +268,31 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
         _executor.PositionOpened += OnBotPositionOpened;
         _executor.TradeCompleted += OnBotTradeCompleted;
 
-        if (!IsTrendMode)
+        if (IsTickScalperMode)
+        {
+            _tickScalperEngine.Start(
+                TickScalperCooldown,
+                TickScalperThreshold,
+                TickScalperMinAgreement,
+                TickScalperFlatFilter);
+            _executor.Start(config, _activeSymbol);
+
+            // Feed tick history
+            var history = _activeMarketTab.ChartValues;
+            if (history.Count > 0)
+                _tickScalperEngine.FeedHistory(history);
+
+            // Subscribe to live ticks
+            _tickHandler = (_, tick) => OnTickReceived(tick);
+            _activeMarketTab.TickReceived += _tickHandler;
+        }
+        else if (!IsTrendMode)
         {
             _engine.Start(config);
             _executor.Start(config, _activeSymbol);
+
+            if (!_activeMarketTab.CandleValues.Any())
+                await _activeMarketTab.LoadCandlesAsync();
 
             _engine.BeginBulkFeed();
             foreach (var candle in _activeMarketTab.CandleValues)
@@ -256,10 +306,11 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
                 ? _activeMarketTab.CandleValues[^1].Epoch : 0;
         }
 
-        _candleHandler = (_, _) => OnCandleUpdated();
-        _activeMarketTab.CandleUpdated += _candleHandler;
-
-        _activeMarketTab.ContractPanel.LockBarrier();
+        if (!IsTickScalperMode)
+        {
+            _candleHandler = (_, _) => OnCandleUpdated();
+            _activeMarketTab.CandleUpdated += _candleHandler;
+        }
 
         IsRunning = true;
         IsPaused = false;
@@ -291,6 +342,7 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
         if (!IsRunning) return;
 
         _engine.Stop();
+        _tickScalperEngine.Stop();
         _executor?.Stop();
 
         if (_activeMarketTab != null && _candleHandler != null)
@@ -299,7 +351,14 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
             _candleHandler = null;
         }
 
+        if (_activeMarketTab != null && _tickHandler != null)
+        {
+            _activeMarketTab.TickReceived -= _tickHandler;
+            _tickHandler = null;
+        }
+
         _activeMarketTab?.ContractPanel.UnlockBarrier();
+        _activeMarketTab?.ContractPanel.ResumeProposals();
 
         IsRunning = false;
         IsPaused = false;
@@ -324,6 +383,7 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
             _activeMarketTab.ContractPanel.PropertyChanged += OnContractPanelSync;
             SyncFromContractPanel();
             UpdateChartGranularity();
+            SyncDurationToMarketTab();
         }
     }
 
@@ -453,7 +513,27 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
 
     private void OnBotTradeCompleted(object? sender, TradeCompleted e)
     {
+        if (IsTickScalperMode)
+            _tickScalperEngine.SetCooldown();
         BotTradeCompleted?.Invoke(this, e);
+    }
+
+    private void OnTickReceived(TickData tick)
+    {
+        if (!IsRunning || IsPaused) return;
+        _executor?.UpdateCurrentSpot(tick.Quote);
+        _tickScalperEngine.FeedTick(tick.Quote);
+    }
+
+    private void OnTickScalperSignal(object? sender, TradeSignal signal)
+    {
+        _engine.EmitExternalSignal(signal);
+
+        Application.Current?.Dispatcher?.InvokeAsync(() =>
+        {
+            var dir = signal.Direction == SignalDirection.Call ? "CALL" : "PUT";
+            CurrentSignalText = $"{dir} (conf: {signal.Confidence:P0})";
+        });
     }
 
     private StrategyConfig BuildConfig()
@@ -498,7 +578,11 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
             StrategyMode = StrategyMode,
             SampleSize = int.TryParse(SampleSizeText, out var ss) && ss >= 1 ? ss : 5,
             DeficitMaxStake = decimal.TryParse(DeficitMaxStakeText, NumberStyles.Any, CultureInfo.InvariantCulture, out var dms) ? dms : 50m,
-            DeficitRecoveryTrades = int.TryParse(DeficitRecoveryTradesText, out var drt) ? Math.Max(1, drt) : 1
+            DeficitRecoveryTrades = int.TryParse(DeficitRecoveryTradesText, out var drt) ? Math.Max(1, drt) : 1,
+            TickScalperCooldown = TickScalperCooldown,
+            TickScalperThreshold = TickScalperThreshold,
+            TickScalperMinAgreement = TickScalperMinAgreement,
+            TickScalperFlatFilter = TickScalperFlatFilter
         };
     }
 
@@ -535,6 +619,21 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
         _ = _activeMarketTab.SetCandleGranularityAsync(seconds);
     }
 
+    private void SyncDurationToMarketTab()
+    {
+        if (_restoringState || _activeMarketTab == null) return;
+
+        if (DurationUnit == "Ticks")
+        {
+            if (int.TryParse(DurationText, out var n) && n >= 1)
+                _activeMarketTab.EnableTickCandles(n);
+        }
+        else
+        {
+            _activeMarketTab.DisableTickCandles();
+        }
+    }
+
     private string GetSelectedBarrier()
     {
         if (_activeMarketTab != null)
@@ -562,6 +661,7 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
         if (_activeMarketTab != null)
             _activeMarketTab.ContractPanel.PropertyChanged -= OnContractPanelSync;
         _engine.SignalGenerated -= OnSignalGenerated;
+        _tickScalperEngine.SignalGenerated -= OnTickScalperSignal;
         _executor?.Dispose();
     }
 }

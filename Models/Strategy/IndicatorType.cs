@@ -9,5 +9,10 @@ public enum IndicatorType
     BollingerBands,
     Atr,
     CandlePattern,
-    Momentum
+    Momentum,
+    TickMomentum,
+    TickEmaCrossover,
+    TickVelocity,
+    TickReversal,
+    TickRange
 }

@@ -277,7 +277,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
             LoginId     = e.LoginId;
             AccountType = e.IsVirtual ? "virtual" : "real";
             Balance     = e.Balance;
-            InitialBalance = e.Balance;
+            if (IsConnecting)
+                InitialBalance = e.Balance;
             Currency    = e.Currency;
             AppLogger.Info(Src, $"UI updated: {e.LoginId} {e.Balance} {e.Currency}");
         }).Task.ContinueWith(t =>
@@ -458,7 +459,12 @@ public partial class MainViewModel : ObservableObject, IDisposable
                     _restoringState = true;
                     tab.ContractPanel.RestoreState(state.DurationUnit, state.DurationText, state.StakeText, state.UseDuration, state.SelectedBarrierDisplay, state.SelectedStrategy, state.AllowEquals, state.RecoverMode);
                     if (!string.IsNullOrEmpty(state.ChartType) && Enum.TryParse<ChartType>(state.ChartType, out var ct))
-                        tab.ChartType = ct;
+                    {
+                        if (ct == ChartType.TickCandles && int.TryParse(state.DurationText, out var n) && n >= 1)
+                            tab.EnableTickCandles(n);
+                        else
+                            tab.ChartType = ct;
+                    }
                     await Markets.SelectTabAsync(tab);
                     _restoringState = false;
                 }

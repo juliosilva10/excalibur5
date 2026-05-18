@@ -32,6 +32,7 @@
         <converters:TickDirectionToColorConverter x:Key="DirToColor"/>
         <converters:ConfidenceToColorConverter x:Key="ConfidenceToColor"/>
         <converters:ContainsToVisibilityConverter x:Key="ContainsToVis"/>
+        <converters:StringMatchToBoolConverter x:Key="StringMatch"/>
         <BooleanToVisibilityConverter   x:Key="BoolToVis"/>
 
         <!-- Confidence Slider Style: colored track (red→orange→yellow→blue→green) -->

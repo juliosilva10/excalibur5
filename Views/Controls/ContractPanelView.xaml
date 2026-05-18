@@ -194,30 +194,35 @@
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                             <RadioButton x:Name="RbTicks" GroupName="DurationUnit"
                                          Click="DurationUnit_Click" Tag="Ticks"
+                                         IsChecked="{Binding DurationUnit, Converter={StaticResource StringMatch}, ConverterParameter=Ticks, Mode=OneWay}"
                                          Content="Ticks" Foreground="#a3b8cc" FontSize="11"
                                          Margin="0,0,10,0" Cursor="Hand"
                                          ToolTip="Ticks (cada tick = 2 segundos)"
                                          Visibility="{Binding SelectedStrategy.AvailableDurationUnits, Converter={StaticResource ContainsToVis}, ConverterParameter=Ticks}"/>
                             <RadioButton x:Name="RbSeconds" GroupName="DurationUnit"
                                          Click="DurationUnit_Click" Tag="Seconds"
+                                         IsChecked="{Binding DurationUnit, Converter={StaticResource StringMatch}, ConverterParameter=Seconds, Mode=OneWay}"
                                          Content="Seg" Foreground="#a3b8cc" FontSize="11"
                                          Margin="0,0,10,0" Cursor="Hand"
                                          ToolTip="Segundos"
                                          Visibility="{Binding SelectedStrategy.AvailableDurationUnits, Converter={StaticResource ContainsToVis}, ConverterParameter=Seconds}"/>
                             <RadioButton x:Name="RbMinutes" GroupName="DurationUnit"
-                                         IsChecked="True" Click="DurationUnit_Click" Tag="Minutes"
+                                         Click="DurationUnit_Click" Tag="Minutes"
+                                         IsChecked="{Binding DurationUnit, Converter={StaticResource StringMatch}, ConverterParameter=Minutes, Mode=OneWay}"
                                          Content="Min" Foreground="#a3b8cc" FontSize="11"
                                          Margin="0,0,10,0" Cursor="Hand"
                                          ToolTip="Minutos"
                                          Visibility="{Binding SelectedStrategy.AvailableDurationUnits, Converter={StaticResource ContainsToVis}, ConverterParameter=Minutes}"/>
                             <RadioButton x:Name="RbHours" GroupName="DurationUnit"
                                          Click="DurationUnit_Click" Tag="Hours"
+                                         IsChecked="{Binding DurationUnit, Converter={StaticResource StringMatch}, ConverterParameter=Hours, Mode=OneWay}"
                                          Content="Hrs" Foreground="#a3b8cc" FontSize="11"
                                          Margin="0,0,10,0" Cursor="Hand"
                                          ToolTip="Horas"
                                          Visibility="{Binding SelectedStrategy.AvailableDurationUnits, Converter={StaticResource ContainsToVis}, ConverterParameter=Hours}"/>
                             <RadioButton x:Name="RbDays" GroupName="DurationUnit"
                                          Click="DurationUnit_Click" Tag="Days"
+                                         IsChecked="{Binding DurationUnit, Converter={StaticResource StringMatch}, ConverterParameter=Days, Mode=OneWay}"
                                          Content="Dias" Foreground="#a3b8cc" FontSize="11"
                                          Cursor="Hand"
                                          ToolTip="Dias"
@@ -482,26 +487,31 @@
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                                 <RadioButton GroupName="BotDurationUnit"
                                              Click="BotDurationUnit_Click" Tag="Ticks"
+                                             IsChecked="{Binding DurationUnit, Converter={StaticResource StringMatch}, ConverterParameter=Ticks, Mode=OneWay}"
                                              Content="Ticks" Foreground="#a3b8cc" FontSize="11"
                                              Margin="0,0,10,0" Cursor="Hand" ToolTip="Ticks"
                                              Visibility="{Binding DataContext.SelectedStrategy.AvailableDurationUnits, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource ContainsToVis}, ConverterParameter=Ticks}"/>
                                 <RadioButton GroupName="BotDurationUnit"
                                              Click="BotDurationUnit_Click" Tag="Seconds"
+                                             IsChecked="{Binding DurationUnit, Converter={StaticResource StringMatch}, ConverterParameter=Seconds, Mode=OneWay}"
                                              Content="Seg" Foreground="#a3b8cc" FontSize="11"
                                              Margin="0,0,10,0" Cursor="Hand" ToolTip="Segundos"
                                              Visibility="{Binding DataContext.SelectedStrategy.AvailableDurationUnits, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource ContainsToVis}, ConverterParameter=Seconds}"/>
-                                <RadioButton GroupName="BotDurationUnit" IsChecked="True"
+                                <RadioButton GroupName="BotDurationUnit"
                                              Click="BotDurationUnit_Click" Tag="Minutes"
+                                             IsChecked="{Binding DurationUnit, Converter={StaticResource StringMatch}, ConverterParameter=Minutes, Mode=OneWay}"
                                              Content="Min" Foreground="#a3b8cc" FontSize="11"
                                              Margin="0,0,10,0" Cursor="Hand" ToolTip="Minutos"
                                              Visibility="{Binding DataContext.SelectedStrategy.AvailableDurationUnits, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource ContainsToVis}, ConverterParameter=Minutes}"/>
                                 <RadioButton GroupName="BotDurationUnit"
                                              Click="BotDurationUnit_Click" Tag="Hours"
+                                             IsChecked="{Binding DurationUnit, Converter={StaticResource StringMatch}, ConverterParameter=Hours, Mode=OneWay}"
                                              Content="Hrs" Foreground="#a3b8cc" FontSize="11"
                                              Margin="0,0,10,0" Cursor="Hand" ToolTip="Horas"
                                              Visibility="{Binding DataContext.SelectedStrategy.AvailableDurationUnits, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource ContainsToVis}, ConverterParameter=Hours}"/>
                                 <RadioButton GroupName="BotDurationUnit"
                                              Click="BotDurationUnit_Click" Tag="Days"
+                                             IsChecked="{Binding DurationUnit, Converter={StaticResource StringMatch}, ConverterParameter=Days, Mode=OneWay}"
                                              Content="Dias" Foreground="#a3b8cc" FontSize="11"
                                              Cursor="Hand" ToolTip="Dias"
                                              Visibility="{Binding DataContext.SelectedStrategy.AvailableDurationUnits, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource ContainsToVis}, ConverterParameter=Days}"/>
@@ -571,14 +581,17 @@
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
                                 <RadioButton Content="Call" Tag="Call" GroupName="BotDirection"
                                              Click="BotDirection_Click"
+                                             IsChecked="{Binding DirectionMode, Converter={StaticResource StringMatch}, ConverterParameter=Call, Mode=OneWay}"
                                              Foreground="#a3b8cc" FontSize="11" Margin="0,0,10,0" Cursor="Hand"
                                              ToolTip="Apenas operações Call (alta)"/>
                                 <RadioButton Content="Put" Tag="Put" GroupName="BotDirection"
                                              Click="BotDirection_Click"
+                                             IsChecked="{Binding DirectionMode, Converter={StaticResource StringMatch}, ConverterParameter=Put, Mode=OneWay}"
                                              Foreground="#a3b8cc" FontSize="11" Margin="0,0,10,0" Cursor="Hand"
                                              ToolTip="Apenas operações Put (baixa)"/>
                                 <RadioButton Content="Ambos" Tag="Ambos" GroupName="BotDirection"
-                                             IsChecked="True" Click="BotDirection_Click"
+                                             Click="BotDirection_Click"
+                                             IsChecked="{Binding DirectionMode, Converter={StaticResource StringMatch}, ConverterParameter=Ambos, Mode=OneWay}"
                                              Foreground="#a3b8cc" FontSize="11" Cursor="Hand"
                                              ToolTip="Operar em ambas as direções"/>
                             </StackPanel>

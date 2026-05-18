@@ -54,4 +54,10 @@ public class BotState
     public string SampleSizeText { get; set; } = "5";
     public string DeficitMaxStakeText { get; set; } = "50";
     public string DeficitRecoveryTradesText { get; set; } = "1";
+
+    // Tick Scalper
+    public int TickScalperCooldown { get; set; } = 5;
+    public double TickScalperThreshold { get; set; } = 0.70;
+    public int TickScalperMinAgreement { get; set; } = 2;
+    public bool TickScalperFlatFilter { get; set; } = true;
 }
