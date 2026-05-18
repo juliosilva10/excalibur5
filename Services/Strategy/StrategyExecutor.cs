@@ -277,6 +277,8 @@ public sealed class StrategyExecutor : IDisposable
 
         try
         {
+            await ResolveExpiredPositionsBeforeBuyAsync();
+
             var activeCount = CountActivePositions();
             if (activeCount >= _config.MaxConcurrentContracts)
             {
@@ -335,7 +337,7 @@ public sealed class StrategyExecutor : IDisposable
                     Signal = signal,
                     DynamicStopLoss = -GetEffectiveStopLoss(),
                     EntryEpoch = now,
-                    ExpiryEpoch = now + _config.DurationSeconds,
+                    ExpiryEpoch = now + _config.DurationSeconds + 5,
                     EntrySpot = _currentSpot
                 };
                 lock (_positions)
@@ -594,10 +596,11 @@ public sealed class StrategyExecutor : IDisposable
             await ResolveStalePositionAsync(pos);
     }
 
-    private async Task ResolveStalePositionAsync(TrackedPosition pos)
+    private async Task<bool> ResolveStalePositionAsync(TrackedPosition pos)
     {
         decimal profit = -pos.BuyPrice;
         bool won = false;
+        bool resolved = false;
 
         try
         {
@@ -606,6 +609,7 @@ public sealed class StrategyExecutor : IDisposable
             {
                 profit = status.Profit;
                 won = profit >= 0;
+                resolved = true;
             }
         }
         catch (Exception ex)
@@ -613,10 +617,19 @@ public sealed class StrategyExecutor : IDisposable
             AppLogger.Warn(Src, $"Failed to query stale contract {pos.ContractId}: {ex.Message}");
         }
 
+        if (!resolved)
+        {
+            lock (_positions)
+                _positions[pos.ContractId] = pos;
+            AppLogger.Info(Src, $"Position {pos.ContractId} not yet settled by API — re-queued");
+            return false;
+        }
+
         _engine.RecordTradeResult(pos.Signal.ContributingIndicators, won);
         RecordResult(pos, profit);
         TradeCompleted?.Invoke(this, new TradeCompleted(pos.ContractId, profit, won));
         AppLogger.Info(Src, $"Resolved stale position {pos.ContractId}: profit={profit:F2}, won={won} (stake={GetCurrentStake()})");
+        return true;
     }
 
     private int CountActivePositions()
