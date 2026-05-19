@@ -26,6 +26,7 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
     private string _activeSymbol = string.Empty;
     private EventHandler? _candleHandler;
     private EventHandler<TickData>? _tickHandler;
+    private EventHandler? _tickCandleHandler;
     private MarketTabViewModel? _activeMarketTab;
     private bool _restoringState;
     private RecoverViewModel? _recoverVm;
@@ -282,9 +283,17 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
             if (history.Count > 0)
                 _tickScalperEngine.FeedHistory(history);
 
+            // Feed tick candles
+            if (_activeMarketTab.TickCandleValues.Count > 0)
+                _tickScalperEngine.FeedTickCandles(_activeMarketTab.TickCandleValues);
+
             // Subscribe to live ticks
             _tickHandler = (_, tick) => OnTickReceived(tick);
             _activeMarketTab.TickReceived += _tickHandler;
+
+            // Subscribe to tick candle updates
+            _tickCandleHandler = (_, _) => OnTickCandleUpdated();
+            _activeMarketTab.TickCandleUpdated += _tickCandleHandler;
         }
         else if (!IsTrendMode)
         {
@@ -355,6 +364,12 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
         {
             _activeMarketTab.TickReceived -= _tickHandler;
             _tickHandler = null;
+        }
+
+        if (_activeMarketTab != null && _tickCandleHandler != null)
+        {
+            _activeMarketTab.TickCandleUpdated -= _tickCandleHandler;
+            _tickCandleHandler = null;
         }
 
         _activeMarketTab?.ContractPanel.UnlockBarrier();
@@ -526,6 +541,12 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
         if (!IsRunning || IsPaused) return;
         _executor?.UpdateCurrentSpot(tick.Quote);
         _tickScalperEngine.FeedTick(tick.Quote);
+    }
+
+    private void OnTickCandleUpdated()
+    {
+        if (!IsRunning || IsPaused || _activeMarketTab == null) return;
+        _tickScalperEngine.FeedTickCandles(_activeMarketTab.TickCandleValues);
     }
 
     private void OnTickScalperSignal(object? sender, TradeSignal signal)

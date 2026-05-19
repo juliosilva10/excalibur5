@@ -1,3 +1,4 @@
+using Excalibur5.Models;
 using Excalibur5.Models.Strategy;
 using Excalibur5.Services.Strategy.TickIndicators;
 
@@ -11,9 +12,11 @@ public sealed class TickScalperEngine
     private const int DirectionLookback = 3;
     private const int ChopLookback = 20;
     private const double ChopThreshold = 0.60;
+    private const double MinCandleBodyRatio = 0.30;
 
     private readonly List<decimal> _ticks = new(MaxTicks);
     private readonly List<ITickIndicator> _indicators = new();
+    private readonly List<CandleData> _tickCandles = new();
     private int _cooldownTicks;
     private int _cooldownSetting = 12;
     private double _threshold = 0.80;
@@ -50,9 +53,16 @@ public sealed class TickScalperEngine
     {
         _isRunning = false;
         _ticks.Clear();
+        _tickCandles.Clear();
         foreach (var ind in _indicators)
             ind.Reset();
         AppLogger.Info(Src, "Stopped");
+    }
+
+    public void FeedTickCandles(IList<CandleData> candles)
+    {
+        _tickCandles.Clear();
+        _tickCandles.AddRange(candles);
     }
 
     public void FeedTick(decimal price)
@@ -75,6 +85,9 @@ public sealed class TickScalperEngine
             return;
 
         if (IsChoppy())
+            return;
+
+        if (IsCandleTooSmall())
             return;
 
         EvaluateSignals();
@@ -144,6 +157,42 @@ public sealed class TickScalperEngine
 
         double chopRatio = (double)reversals / (lookback - 1);
         return chopRatio >= ChopThreshold;
+    }
+
+    private bool IsCandleTooSmall()
+    {
+        if (_tickCandles.Count < 2) return false;
+
+        var lastCandle = _tickCandles[^1];
+        decimal body = Math.Abs(lastCandle.Close - lastCandle.Open);
+        decimal totalRange = lastCandle.High - lastCandle.Low;
+
+        if (totalRange == 0)
+        {
+            AppLogger.Info(Src, "Candle mirradinho — range zero, skipping");
+            return true;
+        }
+
+        double bodyRatio = (double)(body / totalRange);
+        if (bodyRatio < MinCandleBodyRatio)
+        {
+            AppLogger.Info(Src, $"Candle mirradinho — body/range={bodyRatio:P0} < {MinCandleBodyRatio:P0}, skipping");
+            return true;
+        }
+
+        return false;
+    }
+
+    private SignalDirection? GetCandleDirection()
+    {
+        if (_tickCandles.Count < 1) return null;
+
+        var lastCandle = _tickCandles[^1];
+        decimal body = lastCandle.Close - lastCandle.Open;
+
+        if (body > 0) return SignalDirection.Call;
+        if (body < 0) return SignalDirection.Put;
+        return null;
     }
 
     private bool IsDirectionConfirmed(SignalDirection direction)
@@ -217,6 +266,13 @@ public sealed class TickScalperEngine
         if (!IsDirectionConfirmed(direction))
         {
             AppLogger.Info(Src, $"Signal {direction} rejected — recent ticks contradict direction");
+            return;
+        }
+
+        var candleDir = GetCandleDirection();
+        if (candleDir != null && candleDir != direction)
+        {
+            AppLogger.Info(Src, $"Signal {direction} rejected — last candle points {candleDir}");
             return;
         }
 

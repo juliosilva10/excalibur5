@@ -37,14 +37,32 @@ public partial class PerformancePanelView : UserControl
         if (e.PropertyName == nameof(PerformanceViewModel.LargestStake))
         {
             var vm = DataContext as PerformanceViewModel;
-            DrawMiniCandleChart(LargestStakeChart, vm?.LargestStake?.CandleSnapshot, vm?.LargestStake?.TickSnapshot);
+            DrawAfterLayout(LargestStakeChart, vm?.LargestStake?.CandleSnapshot, vm?.LargestStake?.TickSnapshot);
         }
 
         if (e.PropertyName == nameof(PerformanceViewModel.MaxDrawdown))
         {
             var vm = DataContext as PerformanceViewModel;
-            DrawMiniCandleChart(DrawdownChart, vm?.MaxDrawdown?.CandleSnapshot, vm?.MaxDrawdown?.TickSnapshot);
+            DrawAfterLayout(DrawdownChart, vm?.MaxDrawdown?.CandleSnapshot, vm?.MaxDrawdown?.TickSnapshot);
         }
+    }
+
+    private static void DrawAfterLayout(Canvas canvas, CandleSnapshot? candleSnapshot, TickSnapshot? tickSnapshot)
+    {
+        if (canvas.ActualWidth > 0)
+        {
+            DrawMiniCandleChart(canvas, candleSnapshot, tickSnapshot);
+            return;
+        }
+
+        void handler(object? s, EventArgs args)
+        {
+            canvas.LayoutUpdated -= handler;
+            DrawMiniCandleChart(canvas, candleSnapshot, tickSnapshot);
+        }
+
+        canvas.LayoutUpdated += handler;
+        canvas.InvalidateMeasure();
     }
 
     private static void DrawMiniCandleChart(Canvas canvas, CandleSnapshot? candleSnapshot, TickSnapshot? tickSnapshot)
