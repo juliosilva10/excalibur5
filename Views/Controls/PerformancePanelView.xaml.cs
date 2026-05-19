@@ -45,6 +45,16 @@ public partial class PerformancePanelView : UserControl
             var vm = DataContext as PerformanceViewModel;
             DrawAfterLayout(DrawdownChart, vm?.MaxDrawdown?.CandleSnapshot, vm?.MaxDrawdown?.TickSnapshot);
         }
+
+        if (e.PropertyName == nameof(PerformanceViewModel.IsPerformanceVisible))
+        {
+            var vm = DataContext as PerformanceViewModel;
+            if (vm?.IsPerformanceVisible == true)
+            {
+                DrawAfterLayout(LargestStakeChart, vm.LargestStake?.CandleSnapshot, vm.LargestStake?.TickSnapshot);
+                DrawAfterLayout(DrawdownChart, vm.MaxDrawdown?.CandleSnapshot, vm.MaxDrawdown?.TickSnapshot);
+            }
+        }
     }
 
     private static void DrawAfterLayout(Canvas canvas, CandleSnapshot? candleSnapshot, TickSnapshot? tickSnapshot)
@@ -55,14 +65,24 @@ public partial class PerformancePanelView : UserControl
             return;
         }
 
+        int attempts = 0;
         void handler(object? s, EventArgs args)
         {
-            canvas.LayoutUpdated -= handler;
-            DrawMiniCandleChart(canvas, candleSnapshot, tickSnapshot);
+            attempts++;
+            if (canvas.ActualWidth > 0)
+            {
+                canvas.LayoutUpdated -= handler;
+                DrawMiniCandleChart(canvas, candleSnapshot, tickSnapshot);
+            }
+            else if (attempts > 5)
+            {
+                canvas.LayoutUpdated -= handler;
+            }
         }
 
         canvas.LayoutUpdated += handler;
         canvas.InvalidateMeasure();
+        canvas.UpdateLayout();
     }
 
     private static void DrawMiniCandleChart(Canvas canvas, CandleSnapshot? candleSnapshot, TickSnapshot? tickSnapshot)

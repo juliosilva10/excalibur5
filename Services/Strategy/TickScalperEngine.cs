@@ -12,7 +12,9 @@ public sealed class TickScalperEngine
     private const int DirectionLookback = 3;
     private const int ChopLookback = 20;
     private const double ChopThreshold = 0.60;
-    private const double MinCandleBodyRatio = 0.30;
+    private const double MinCandleBodyRatio = 0.40;
+    private const int CandleFlowLookback = 3;
+    private const int MinExpressiveCandles = 2;
 
     private readonly List<decimal> _ticks = new(MaxTicks);
     private readonly List<ITickIndicator> _indicators = new();
@@ -161,22 +163,46 @@ public sealed class TickScalperEngine
 
     private bool IsCandleTooSmall()
     {
-        if (_tickCandles.Count < 2) return false;
+        if (_tickCandles.Count < CandleFlowLookback) return true;
 
-        var lastCandle = _tickCandles[^1];
-        decimal body = Math.Abs(lastCandle.Close - lastCandle.Open);
-        decimal totalRange = lastCandle.High - lastCandle.Low;
+        int expressiveCount = 0;
+        SignalDirection? flowDirection = null;
+        int sameDirectionCount = 0;
 
-        if (totalRange == 0)
+        int start = Math.Max(0, _tickCandles.Count - CandleFlowLookback);
+        for (int i = start; i < _tickCandles.Count; i++)
         {
-            AppLogger.Info(Src, "Candle mirradinho — range zero, skipping");
+            var candle = _tickCandles[i];
+            decimal body = Math.Abs(candle.Close - candle.Open);
+            decimal totalRange = candle.High - candle.Low;
+
+            if (totalRange == 0) continue;
+
+            double bodyRatio = (double)(body / totalRange);
+            if (bodyRatio >= MinCandleBodyRatio)
+            {
+                expressiveCount++;
+
+                var dir = candle.Close > candle.Open ? SignalDirection.Call : SignalDirection.Put;
+                if (flowDirection == dir)
+                    sameDirectionCount++;
+                else
+                {
+                    flowDirection = dir;
+                    sameDirectionCount = 1;
+                }
+            }
+        }
+
+        if (expressiveCount < MinExpressiveCandles)
+        {
+            AppLogger.Info(Src, $"Candle flow fraco — apenas {expressiveCount}/{CandleFlowLookback} candles expressivas (min: {MinExpressiveCandles})");
             return true;
         }
 
-        double bodyRatio = (double)(body / totalRange);
-        if (bodyRatio < MinCandleBodyRatio)
+        if (sameDirectionCount < MinExpressiveCandles)
         {
-            AppLogger.Info(Src, $"Candle mirradinho — body/range={bodyRatio:P0} < {MinCandleBodyRatio:P0}, skipping");
+            AppLogger.Info(Src, $"Candle flow sem direção — candles expressivas não alinham na mesma direção");
             return true;
         }
 
@@ -185,13 +211,27 @@ public sealed class TickScalperEngine
 
     private SignalDirection? GetCandleDirection()
     {
-        if (_tickCandles.Count < 1) return null;
+        if (_tickCandles.Count < CandleFlowLookback) return null;
 
-        var lastCandle = _tickCandles[^1];
-        decimal body = lastCandle.Close - lastCandle.Open;
+        int bullish = 0, bearish = 0;
+        int start = Math.Max(0, _tickCandles.Count - CandleFlowLookback);
 
-        if (body > 0) return SignalDirection.Call;
-        if (body < 0) return SignalDirection.Put;
+        for (int i = start; i < _tickCandles.Count; i++)
+        {
+            var candle = _tickCandles[i];
+            decimal body = Math.Abs(candle.Close - candle.Open);
+            decimal totalRange = candle.High - candle.Low;
+            if (totalRange == 0) continue;
+
+            double bodyRatio = (double)(body / totalRange);
+            if (bodyRatio < MinCandleBodyRatio) continue;
+
+            if (candle.Close > candle.Open) bullish++;
+            else bearish++;
+        }
+
+        if (bullish >= MinExpressiveCandles && bullish > bearish) return SignalDirection.Call;
+        if (bearish >= MinExpressiveCandles && bearish > bullish) return SignalDirection.Put;
         return null;
     }
 
