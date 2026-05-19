@@ -14,5 +14,6 @@ public enum IndicatorType
     TickEmaCrossover,
     TickVelocity,
     TickReversal,
-    TickRange
+    TickRange,
+    TickCandleSequence
 }

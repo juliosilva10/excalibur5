@@ -13,12 +13,13 @@ public sealed class TickScalperEngine
     private const int ChopLookback = 20;
     private const double ChopThreshold = 0.60;
     private const double MinCandleBodyRatio = 0.40;
-    private const int CandleFlowLookback = 3;
-    private const int MinExpressiveCandles = 2;
+    private const int CandleFlowLookback = 5;
+    private const int MinExpressiveCandles = 1;
 
     private readonly List<decimal> _ticks = new(MaxTicks);
     private readonly List<ITickIndicator> _indicators = new();
     private readonly List<CandleData> _tickCandles = new();
+    private readonly TickCandleSequenceIndicator _candleSequenceIndicator = new();
     private int _cooldownTicks;
     private int _cooldownSetting = 12;
     private double _threshold = 0.80;
@@ -166,8 +167,6 @@ public sealed class TickScalperEngine
         if (_tickCandles.Count < CandleFlowLookback) return true;
 
         int expressiveCount = 0;
-        SignalDirection? flowDirection = null;
-        int sameDirectionCount = 0;
 
         int start = Math.Max(0, _tickCandles.Count - CandleFlowLookback);
         for (int i = start; i < _tickCandles.Count; i++)
@@ -180,29 +179,12 @@ public sealed class TickScalperEngine
 
             double bodyRatio = (double)(body / totalRange);
             if (bodyRatio >= MinCandleBodyRatio)
-            {
                 expressiveCount++;
-
-                var dir = candle.Close > candle.Open ? SignalDirection.Call : SignalDirection.Put;
-                if (flowDirection == dir)
-                    sameDirectionCount++;
-                else
-                {
-                    flowDirection = dir;
-                    sameDirectionCount = 1;
-                }
-            }
         }
 
         if (expressiveCount < MinExpressiveCandles)
         {
             AppLogger.Info(Src, $"Candle flow fraco — apenas {expressiveCount}/{CandleFlowLookback} candles expressivas (min: {MinExpressiveCandles})");
-            return true;
-        }
-
-        if (sameDirectionCount < MinExpressiveCandles)
-        {
-            AppLogger.Info(Src, $"Candle flow sem direção — candles expressivas não alinham na mesma direção");
             return true;
         }
 
@@ -263,6 +245,8 @@ public sealed class TickScalperEngine
             signals.Add(signal);
         }
 
+        var candleSeqSignal = _candleSequenceIndicator.Evaluate(_tickCandles);
+
         int callCount = 0, putCount = 0;
         double callScore = 0, putScore = 0;
 
@@ -278,6 +262,17 @@ public sealed class TickScalperEngine
                 putCount++;
                 putScore += s.Strength;
             }
+        }
+
+        if (candleSeqSignal.Direction == SignalDirection.Call && candleSeqSignal.Strength > 0)
+        {
+            callCount++;
+            callScore += candleSeqSignal.Strength * 1.5;
+        }
+        else if (candleSeqSignal.Direction == SignalDirection.Put && candleSeqSignal.Strength > 0)
+        {
+            putCount++;
+            putScore += candleSeqSignal.Strength * 1.5;
         }
 
         SignalDirection direction;
@@ -309,6 +304,12 @@ public sealed class TickScalperEngine
             return;
         }
 
+        if (candleSeqSignal.Direction != SignalDirection.None && candleSeqSignal.Strength >= 0.5 && candleSeqSignal.Direction != direction)
+        {
+            AppLogger.Info(Src, $"Signal {direction} rejected — candle sequence strongly points {candleSeqSignal.Direction} ({candleSeqSignal.Reason})");
+            return;
+        }
+
         var candleDir = GetCandleDirection();
         if (candleDir != null && candleDir != direction)
         {
@@ -325,6 +326,13 @@ public sealed class TickScalperEngine
             .Select(s => s.Type)
             .ToList();
 
+        if (candleSeqSignal.Direction == direction && candleSeqSignal.Strength > 0)
+        {
+            reasons += $" + {candleSeqSignal.Reason}";
+            contributors.Add(candleSeqSignal.Type);
+        }
+
+        int totalIndicators = _indicators.Count + 1;
         var tradeSignal = new TradeSignal
         {
             Direction = direction,
@@ -334,7 +342,7 @@ public sealed class TickScalperEngine
             ContributingIndicators = contributors
         };
 
-        AppLogger.Info(Src, $"Signal: {direction} (score: {score:P0}, agree: {count}/5) — {reasons}");
+        AppLogger.Info(Src, $"Signal: {direction} (score: {score:P0}, agree: {count}/{totalIndicators}) — {reasons}");
         SignalGenerated?.Invoke(this, tradeSignal);
     }
 }
