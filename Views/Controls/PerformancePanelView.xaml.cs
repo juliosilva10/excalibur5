@@ -46,6 +46,12 @@ public partial class PerformancePanelView : UserControl
             DrawAfterLayout(DrawdownChart, vm?.MaxDrawdown?.CandleSnapshot, vm?.MaxDrawdown?.TickSnapshot);
         }
 
+        if (e.PropertyName == nameof(PerformanceViewModel.LongestLossStreak))
+        {
+            var vm = DataContext as PerformanceViewModel;
+            DrawAfterLayout(LossStreakChart, vm?.LongestLossStreak?.CandleSnapshot, vm?.LongestLossStreak?.TickSnapshot);
+        }
+
         if (e.PropertyName == nameof(PerformanceViewModel.IsPerformanceVisible))
         {
             var vm = DataContext as PerformanceViewModel;
@@ -53,6 +59,7 @@ public partial class PerformancePanelView : UserControl
             {
                 DrawAfterLayout(LargestStakeChart, vm.LargestStake?.CandleSnapshot, vm.LargestStake?.TickSnapshot);
                 DrawAfterLayout(DrawdownChart, vm.MaxDrawdown?.CandleSnapshot, vm.MaxDrawdown?.TickSnapshot);
+                DrawAfterLayout(LossStreakChart, vm.LongestLossStreak?.CandleSnapshot, vm.LongestLossStreak?.TickSnapshot);
             }
         }
     }

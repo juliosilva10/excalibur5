@@ -179,11 +179,15 @@ public partial class PerformanceViewModel : ObservableObject
         {
             if (_currentLossStreak.Count > (LongestLossStreak?.Length ?? 0))
             {
+                _tickSnapshots.TryGetValue(trade.ContractId, out var tickSnap);
+                _candleSnapshots.TryGetValue(trade.ContractId, out var candleSnap);
                 LongestLossStreak = new LossStreakInfo
                 {
                     Length = _currentLossStreak.Count,
                     Stakes = new List<decimal>(_currentLossStreak),
-                    TotalLost = _currentLossStreak.Sum()
+                    TotalLost = _currentLossStreak.Sum(),
+                    TickSnapshot = tickSnap,
+                    CandleSnapshot = candleSnap
                 };
             }
         }

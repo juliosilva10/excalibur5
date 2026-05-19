@@ -45,6 +45,8 @@ public sealed class LossStreakInfo
     public int Length { get; init; }
     public List<decimal> Stakes { get; init; } = new();
     public decimal TotalLost { get; init; }
+    public TickSnapshot? TickSnapshot { get; init; }
+    public CandleSnapshot? CandleSnapshot { get; init; }
 }
 
 public sealed class StrategyPerformance

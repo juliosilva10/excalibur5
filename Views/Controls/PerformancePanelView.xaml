@@ -195,36 +195,51 @@
                                        Visibility="{Binding LongestLossStreak, Converter={StaticResource NullToVis}}"/>
 
                             <StackPanel Visibility="{Binding LongestLossStreak, Converter={StaticResource NotNullToVis}}">
-                                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                    <TextBlock Text="Derrotas consecutivas:" Foreground="#6090a8" FontSize="13"
-                                               VerticalAlignment="Center"/>
-                                    <TextBlock Text="{Binding LongestLossStreak.Length}" Foreground="#FF6B6B"
-                                               FontSize="20" FontWeight="Bold" Margin="8,0,0,0"
-                                               FontFamily="Consolas" VerticalAlignment="Center"/>
-                                </StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="220"/>
+                                    </Grid.ColumnDefinitions>
 
-                                <ItemsControl ItemsSource="{Binding LongestLossStreak.Stakes}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <StackPanel Orientation="Horizontal" Margin="0,1">
-                                                <TextBlock Text="•" Foreground="#FF6B6B" FontSize="13" Margin="0,0,6,0"/>
-                                                <TextBlock Text="{Binding StringFormat=Stake: {0:F2}}"
-                                                           Foreground="#e0eef8" FontSize="13" FontFamily="Consolas"/>
+                                    <StackPanel Grid.Column="0">
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                            <TextBlock Text="Derrotas consecutivas:" Foreground="#6090a8" FontSize="13"
+                                                       VerticalAlignment="Center"/>
+                                            <TextBlock Text="{Binding LongestLossStreak.Length}" Foreground="#FF6B6B"
+                                                       FontSize="20" FontWeight="Bold" Margin="8,0,0,0"
+                                                       FontFamily="Consolas" VerticalAlignment="Center"/>
+                                        </StackPanel>
+
+                                        <ItemsControl ItemsSource="{Binding LongestLossStreak.Stakes}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <StackPanel Orientation="Horizontal" Margin="0,1">
+                                                        <TextBlock Text="•" Foreground="#FF6B6B" FontSize="13" Margin="0,0,6,0"/>
+                                                        <TextBlock Text="{Binding StringFormat=Stake: {0:F2}}"
+                                                                   Foreground="#e0eef8" FontSize="13" FontFamily="Consolas"/>
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+
+                                        <Border Margin="0,6,0,0" Padding="8,4" CornerRadius="3"
+                                                Background="#1a0a0a" BorderBrush="#4a2020" BorderThickness="1">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="Total perdido:" Foreground="#6090a8" FontSize="13"
+                                                           VerticalAlignment="Center"/>
+                                                <TextBlock Text="{Binding LongestLossStreak.TotalLost, StringFormat=-{0:F2} USD}"
+                                                           Foreground="#FF6B6B" FontSize="15" FontWeight="Bold"
+                                                           Margin="8,0,0,0" FontFamily="Consolas" VerticalAlignment="Center"/>
                                             </StackPanel>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-
-                                <Border Margin="0,6,0,0" Padding="8,4" CornerRadius="3"
-                                        Background="#1a0a0a" BorderBrush="#4a2020" BorderThickness="1">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="Total perdido:" Foreground="#6090a8" FontSize="13"
-                                                   VerticalAlignment="Center"/>
-                                        <TextBlock Text="{Binding LongestLossStreak.TotalLost, StringFormat=-{0:F2} USD}"
-                                                   Foreground="#FF6B6B" FontSize="15" FontWeight="Bold"
-                                                   Margin="8,0,0,0" FontFamily="Consolas" VerticalAlignment="Center"/>
+                                        </Border>
                                     </StackPanel>
-                                </Border>
+
+                                    <!-- Mini candle chart -->
+                                    <Border Grid.Column="1" CornerRadius="4" Background="#0a1821"
+                                            BorderBrush="#1d4957" BorderThickness="1" Margin="8,0,0,0">
+                                        <Canvas x:Name="LossStreakChart" Height="90" ClipToBounds="True"/>
+                                    </Border>
+                                </Grid>
                             </StackPanel>
                         </StackPanel>
                     </Border>
