@@ -588,6 +588,8 @@ public sealed class ContractService : IContractService, IDisposable
             IsExpired = pocEl.TryGetProperty("is_expired", out var ie) && (ie.ValueKind == JsonValueKind.True || (ie.ValueKind == JsonValueKind.Number && ie.GetInt32() == 1)),
             IsSold = pocEl.TryGetProperty("is_sold", out var isl) && (isl.ValueKind == JsonValueKind.True || (isl.ValueKind == JsonValueKind.Number && isl.GetInt32() == 1)),
             IsValidToSell = pocEl.TryGetProperty("is_valid_to_sell", out var ivs) && (ivs.ValueKind == JsonValueKind.True || (ivs.ValueKind == JsonValueKind.Number && ivs.GetInt32() == 1)),
+            SellTime = pocEl.TryGetProperty("sell_time", out var stm) && stm.GetInt64() > 0 ? stm.GetInt64()
+                     : pocEl.TryGetProperty("exit_tick_time", out var ett2) ? ett2.GetInt64() : 0,
             Status = pocEl.TryGetProperty("status", out var st) ? st.GetString() ?? "" : "",
             SubscriptionId = subId
         };
@@ -685,7 +687,8 @@ public sealed class ContractService : IContractService, IDisposable
                     BuyPrice = t.TryGetProperty("buy_price", out var bp) ? ParseDecimal(bp) : 0m,
                     SellPrice = t.TryGetProperty("sell_price", out var sp) ? ParseDecimal(sp) : 0m,
                     PurchaseTime = t.TryGetProperty("purchase_time", out var ptm) ? ptm.GetInt64() : 0,
-                    SellTime = t.TryGetProperty("sell_time", out var stm) ? stm.GetInt64() : 0,
+                    SellTime = t.TryGetProperty("sell_time", out var stm) && stm.GetInt64() > 0 ? stm.GetInt64()
+                             : t.TryGetProperty("exit_tick_time", out var ett3) ? ett3.GetInt64() : 0,
                     ProfitLoss = t.TryGetProperty("sell_price", out var sp2) && t.TryGetProperty("buy_price", out var bp2)
                         ? ParseDecimal(sp2) - ParseDecimal(bp2) : 0m,
                     EntrySpot = ParseSpotField(t, "entry_spot", "entry_tick", "entry_tick_display_value"),

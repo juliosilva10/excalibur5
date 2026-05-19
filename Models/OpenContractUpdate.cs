@@ -18,6 +18,7 @@ public sealed class OpenContractUpdate
     public bool IsExpired { get; init; }
     public bool IsSold { get; init; }
     public bool IsValidToSell { get; init; }
+    public long SellTime { get; init; }
     public string Status { get; init; } = string.Empty;
     public string SubscriptionId { get; init; } = string.Empty;
 }

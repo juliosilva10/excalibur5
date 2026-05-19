@@ -392,7 +392,7 @@ public sealed class StrategyExecutor : IDisposable
             _engine.RecordTradeResult(tracked.Signal.ContributingIndicators, won);
             RecordResult(tracked, update.Profit);
             RemovePosition(update.ContractId);
-            TradeCompleted?.Invoke(this, new TradeCompleted(update.ContractId, update.Profit, won));
+            TradeCompleted?.Invoke(this, new TradeCompleted(update.ContractId, update.Profit, won, update.SellTime));
             return;
         }
 
@@ -675,4 +675,4 @@ public sealed class StrategyExecutor : IDisposable
 }
 
 public sealed record BotPositionOpened(BuyResponse BuyResult, string ContractType);
-public sealed record TradeCompleted(long ContractId, decimal Profit, bool Won);
+public sealed record TradeCompleted(long ContractId, decimal Profit, bool Won, long SellTime = 0);

@@ -139,9 +139,9 @@
                     <DataGridTextColumn Header="Estratégia" Binding="{Binding Estrategia}" Width="1.2*"/>
                     <DataGridTextColumn Header="Tipo" Binding="{Binding Tipo}" Width="1.5*"/>
                     <DataGridTextColumn Header="Nº Ref." Binding="{Binding ReferenceNumber}" Width="1.4*"/>
-                    <DataGridTextColumn Header="Compra" Binding="{Binding PurchaseTime, StringFormat=dd/MM HH:mm}" Width="1.3*"/>
+                    <DataGridTextColumn Header="Compra" Binding="{Binding PurchaseTime, StringFormat=dd/MM HH:mm:ss}" Width="1.6*"/>
                     <DataGridTextColumn Header="Stake" Binding="{Binding Stake, StringFormat=F2}" Width="1*"/>
-                    <DataGridTextColumn Header="Venda" Binding="{Binding SellTime, StringFormat=dd/MM HH:mm}" Width="1.3*"/>
+                    <DataGridTextColumn Header="Venda" Binding="{Binding SellTime, StringFormat=dd/MM HH:mm:ss}" Width="1.6*"/>
                     <DataGridTextColumn Header="Entry Spot" Binding="{Binding EntrySpot}" Width="1.3*"/>
                     <DataGridTextColumn Header="Exit Spot" Binding="{Binding ExitSpot}" Width="1.3*"/>
                     <DataGridTextColumn Header="Valor" Binding="{Binding ContractValue, StringFormat=F2}" Width="1*"/>

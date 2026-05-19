@@ -42,6 +42,14 @@ public partial class HistoryViewModel : ObservableObject
                          : update.CurrentSpot > 0 ? update.CurrentSpot.ToString(CultureInfo.InvariantCulture)
                          : item.ExitSpot;
 
+            DateTime? sellTime = update.SellTime > 0
+                ? DateTimeOffset.FromUnixTimeSeconds(update.SellTime).LocalDateTime
+                : null;
+
+            var purchaseTime = update.EntryTickTime > 0
+                ? DateTimeOffset.FromUnixTimeSeconds(update.EntryTickTime).LocalDateTime
+                : item.PurchaseTime;
+
             Trades[idx] = new TradeHistoryItem
             {
                 Operacao = item.Operacao,
@@ -49,11 +57,9 @@ public partial class HistoryViewModel : ObservableObject
                 Market = item.Market,
                 Tipo = item.Tipo,
                 ReferenceNumber = item.ReferenceNumber,
-                PurchaseTime = item.PurchaseTime,
+                PurchaseTime = purchaseTime,
                 Stake = item.Stake,
-                SellTime = update.DateExpiry > 0
-                    ? DateTimeOffset.FromUnixTimeSeconds(update.DateExpiry).LocalDateTime
-                    : DateTime.Now,
+                SellTime = sellTime,
                 EntrySpot = update.EntrySpotRaw.Length > 0 ? update.EntrySpotRaw : item.EntrySpot,
                 ExitSpot = exitSpot,
                 ContractValue = update.BidPrice,
@@ -62,6 +68,9 @@ public partial class HistoryViewModel : ObservableObject
             };
 
             TradeSettled?.Invoke(this, Trades[idx]);
+
+            if (sellTime == null && update.ContractId > 0)
+                _ = FetchSellTimeAsync(update.ContractId);
         });
     }
 
@@ -125,25 +134,42 @@ public partial class HistoryViewModel : ObservableObject
 
     private async Task FetchSpotsAsync()
     {
-        var items = Trades.Where(t => t.ContractId > 0 && string.IsNullOrEmpty(t.EntrySpot)).ToList();
+        var items = Trades.Where(t => t.ContractId > 0).ToList();
         foreach (var item in items)
         {
             try
             {
-                var (entry, exit) = await _contractService.GetContractSpotsAsync(item.ContractId);
-                if (!string.IsNullOrEmpty(entry) || !string.IsNullOrEmpty(exit))
+                var status = await _contractService.GetContractStatusAsync(item.ContractId);
+                if (status == null) continue;
+
+                Application.Current.Dispatcher.Invoke(() =>
                 {
-                    Application.Current.Dispatcher.Invoke(() =>
+                    var idx = Trades.IndexOf(item);
+                    if (idx < 0) return;
+
+                    var entryTime = status.EntryTickTime > 0
+                        ? DateTimeOffset.FromUnixTimeSeconds(status.EntryTickTime).LocalDateTime
+                        : item.PurchaseTime;
+
+                    Trades[idx] = new TradeHistoryItem
                     {
-                        var idx = Trades.IndexOf(item);
-                        if (idx >= 0)
-                        {
-                            item.EntrySpot = entry;
-                            item.ExitSpot = exit;
-                            Trades[idx] = item;
-                        }
-                    });
-                }
+                        Operacao = item.Operacao,
+                        Estrategia = item.Estrategia,
+                        Market = item.Market,
+                        Tipo = item.Tipo,
+                        ReferenceNumber = item.ReferenceNumber,
+                        PurchaseTime = entryTime,
+                        Stake = item.Stake,
+                        SellTime = status.SellTime > 0
+                            ? DateTimeOffset.FromUnixTimeSeconds(status.SellTime).LocalDateTime
+                            : item.SellTime,
+                        EntrySpot = !string.IsNullOrEmpty(status.EntrySpotRaw) ? status.EntrySpotRaw : item.EntrySpot,
+                        ExitSpot = !string.IsNullOrEmpty(status.ExitSpotRaw) ? status.ExitSpotRaw : item.ExitSpot,
+                        ContractValue = item.ContractValue,
+                        ProfitLoss = item.ProfitLoss,
+                        ContractId = item.ContractId
+                    };
+                });
             }
             catch { }
         }
@@ -185,7 +211,7 @@ public partial class HistoryViewModel : ObservableObject
         });
     }
 
-    public void UpdateTradeResult(long contractId, decimal profit)
+    public void UpdateTradeResult(long contractId, decimal profit, long sellTime = 0)
     {
         Application.Current.Dispatcher.Invoke(() =>
         {
@@ -194,6 +220,10 @@ public partial class HistoryViewModel : ObservableObject
 
             var idx = Trades.IndexOf(item);
             if (idx < 0) return;
+
+            DateTime? resolvedSellTime = sellTime > 0
+                ? DateTimeOffset.FromUnixTimeSeconds(sellTime).LocalDateTime
+                : item.SellTime;
 
             Trades[idx] = new TradeHistoryItem
             {
@@ -204,14 +234,75 @@ public partial class HistoryViewModel : ObservableObject
                 ReferenceNumber = item.ReferenceNumber,
                 PurchaseTime = item.PurchaseTime,
                 Stake = item.Stake,
-                SellTime = DateTime.Now,
+                SellTime = resolvedSellTime,
                 EntrySpot = item.EntrySpot,
                 ExitSpot = item.ExitSpot,
                 ContractValue = item.Stake + profit,
                 ProfitLoss = profit,
                 ContractId = item.ContractId
             };
+
+            if (resolvedSellTime == null && contractId > 0)
+                _ = FetchSellTimeAsync(contractId);
         });
+    }
+
+    private async Task FetchSellTimeAsync(long contractId)
+    {
+        int[] delays = [500, 1500, 3000];
+        foreach (var delay in delays)
+        {
+            try
+            {
+                await Task.Delay(delay);
+
+                var alreadyFilled = Application.Current.Dispatcher.Invoke(() =>
+                    Trades.FirstOrDefault(t => t.ContractId == contractId)?.SellTime != null);
+                if (alreadyFilled) return;
+
+                var status = await _contractService.GetContractStatusAsync(contractId);
+                if (status == null || status.SellTime <= 0) continue;
+
+                var sellTime = DateTimeOffset.FromUnixTimeSeconds(status.SellTime).LocalDateTime;
+
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    var item = Trades.FirstOrDefault(t => t.ContractId == contractId);
+                    if (item == null) return;
+
+                    var idx = Trades.IndexOf(item);
+                    if (idx < 0) return;
+
+                    if (item.SellTime != null) return;
+
+                    var entryTime = status.EntryTickTime > 0
+                        ? DateTimeOffset.FromUnixTimeSeconds(status.EntryTickTime).LocalDateTime
+                        : item.PurchaseTime;
+
+                    Trades[idx] = new TradeHistoryItem
+                    {
+                        Operacao = item.Operacao,
+                        Estrategia = item.Estrategia,
+                        Market = item.Market,
+                        Tipo = item.Tipo,
+                        ReferenceNumber = item.ReferenceNumber,
+                        PurchaseTime = entryTime,
+                        Stake = item.Stake,
+                        SellTime = sellTime,
+                        EntrySpot = !string.IsNullOrEmpty(status.EntrySpotRaw) ? status.EntrySpotRaw : item.EntrySpot,
+                        ExitSpot = !string.IsNullOrEmpty(status.ExitSpotRaw) ? status.ExitSpotRaw : item.ExitSpot,
+                        ContractValue = item.ContractValue,
+                        ProfitLoss = item.ProfitLoss,
+                        ContractId = item.ContractId
+                    };
+                });
+                return;
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Warn(Src, $"FetchSellTime error for {contractId}: {ex.Message}");
+            }
+        }
     }
 
     private static string FormatContractType(string raw)

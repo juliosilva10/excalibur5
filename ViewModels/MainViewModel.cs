@@ -176,7 +176,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
         Strategy.BotTradeCompleted += (_, e) =>
         {
-            History.UpdateTradeResult(e.ContractId, e.Profit);
+            History.UpdateTradeResult(e.ContractId, e.Profit, e.SellTime);
         };
 
         _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(10) };
