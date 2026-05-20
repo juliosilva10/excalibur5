@@ -22,6 +22,7 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
     private readonly StrategyEngine _engine = new();
     private readonly TrendEngine _trendEngine = new();
     private readonly TickScalperEngine _tickScalperEngine = new();
+    private readonly CandleDynamicsEngine _candleDynamicsEngine = new();
     private StrategyExecutor? _executor;
     private string _activeSymbol = string.Empty;
     private EventHandler? _candleHandler;
@@ -59,12 +60,18 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
     [ObservableProperty] private int _tickScalperMinAgreement = 2;
     [ObservableProperty] private bool _tickScalperFlatFilter = true;
 
+    // Candle Dynamics config
+    [ObservableProperty] private int _candleDynamicsCooldown = 10;
+    [ObservableProperty] private double _candleDynamicsThreshold = 0.55;
+    [ObservableProperty] private int _candleDynamicsMinStreak = 3;
+
     public ObservableCollection<string> AvailableBarrierDisplays { get; } = new();
     public bool UseEndTime => !UseDuration;
     public List<string> RecoverModes { get; } = ["", "Martingale", "Deficit Recovery"];
-    public List<string> StrategyModes { get; } = ["Multi-Indicador", "Tendência", "Tick Scalper"];
+    public List<string> StrategyModes { get; } = ["Multi-Indicador", "Tendência", "Tick Scalper", "Candle Dynamics"];
     public bool IsTrendMode => StrategyMode == "Tendência";
     public bool IsTickScalperMode => StrategyMode == "Tick Scalper";
+    public bool IsCandleDynamicsMode => StrategyMode == "Candle Dynamics";
     public bool IsDeficitMode => RecoverMode == "Deficit Recovery";
 
     // Indicators
@@ -90,6 +97,7 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
         _contractService = contractService;
         _engine.SignalGenerated += OnSignalGenerated;
         _tickScalperEngine.SignalGenerated += OnTickScalperSignal;
+        _candleDynamicsEngine.SignalGenerated += OnCandleDynamicsSignal;
         RestoreState();
     }
 
@@ -128,6 +136,9 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
         TickScalperThreshold = s.TickScalperThreshold;
         TickScalperMinAgreement = s.TickScalperMinAgreement;
         TickScalperFlatFilter = s.TickScalperFlatFilter;
+        CandleDynamicsCooldown = s.CandleDynamicsCooldown;
+        CandleDynamicsThreshold = s.CandleDynamicsThreshold;
+        CandleDynamicsMinStreak = s.CandleDynamicsMinStreak;
         _restoringState = false;
     }
 
@@ -161,7 +172,10 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
             TickScalperCooldown = TickScalperCooldown,
             TickScalperThreshold = TickScalperThreshold,
             TickScalperMinAgreement = TickScalperMinAgreement,
-            TickScalperFlatFilter = TickScalperFlatFilter
+            TickScalperFlatFilter = TickScalperFlatFilter,
+            CandleDynamicsCooldown = CandleDynamicsCooldown,
+            CandleDynamicsThreshold = CandleDynamicsThreshold,
+            CandleDynamicsMinStreak = CandleDynamicsMinStreak
         });
     }
 
@@ -228,8 +242,10 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
     {
         OnPropertyChanged(nameof(IsTrendMode));
         OnPropertyChanged(nameof(IsTickScalperMode));
+        OnPropertyChanged(nameof(IsCandleDynamicsMode));
         SaveState();
         UpdateChartGranularity();
+        SyncDurationToMarketTab();
     }
     partial void OnSampleSizeTextChanged(string value) => SaveState();
     partial void OnDeficitMaxStakeTextChanged(string value) => SaveState();
@@ -238,6 +254,9 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
     partial void OnTickScalperThresholdChanged(double value) => SaveState();
     partial void OnTickScalperMinAgreementChanged(int value) => SaveState();
     partial void OnTickScalperFlatFilterChanged(bool value) => SaveState();
+    partial void OnCandleDynamicsCooldownChanged(int value) => SaveState();
+    partial void OnCandleDynamicsThresholdChanged(double value) => SaveState();
+    partial void OnCandleDynamicsMinStreakChanged(int value) => SaveState();
 
     [RelayCommand]
     private void ToggleBot()
@@ -295,6 +314,24 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
             _tickCandleHandler = (_, _) => OnTickCandleUpdated();
             _activeMarketTab.TickCandleUpdated += _tickCandleHandler;
         }
+        else if (IsCandleDynamicsMode)
+        {
+            _candleDynamicsEngine.Start(
+                CandleDynamicsCooldown,
+                CandleDynamicsThreshold,
+                CandleDynamicsMinStreak);
+            _executor.Start(config, _activeSymbol);
+
+            var history = _activeMarketTab.ChartValues;
+            if (history.Count > 0)
+                _candleDynamicsEngine.FeedHistory(history);
+
+            _tickHandler = (_, tick) => OnTickReceived(tick);
+            _activeMarketTab.TickReceived += _tickHandler;
+
+            _tickCandleHandler = (_, _) => OnTickCandleUpdated();
+            _activeMarketTab.TickCandleUpdated += _tickCandleHandler;
+        }
         else if (!IsTrendMode)
         {
             _engine.Start(config);
@@ -315,7 +352,7 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
                 ? _activeMarketTab.CandleValues[^1].Epoch : 0;
         }
 
-        if (!IsTickScalperMode)
+        if (!IsTickScalperMode && !IsCandleDynamicsMode)
         {
             _candleHandler = (_, _) => OnCandleUpdated();
             _activeMarketTab.CandleUpdated += _candleHandler;
@@ -352,6 +389,7 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
 
         _engine.Stop();
         _tickScalperEngine.Stop();
+        _candleDynamicsEngine.Stop();
         _executor?.Stop();
 
         if (_activeMarketTab != null && _candleHandler != null)
@@ -534,6 +572,12 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
             if (e.Won)
                 _tickScalperEngine.SetCooldown();
         }
+        else if (IsCandleDynamicsMode)
+        {
+            _candleDynamicsEngine.ReportTradeResult(e.Won);
+            if (e.Won)
+                _candleDynamicsEngine.SetCooldown();
+        }
         BotTradeCompleted?.Invoke(this, e);
     }
 
@@ -541,7 +585,11 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
     {
         if (!IsRunning || IsPaused) return;
         _executor?.UpdateCurrentSpot(tick.Quote);
-        _tickScalperEngine.FeedTick(tick.Quote);
+
+        if (IsTickScalperMode)
+            _tickScalperEngine.FeedTick(tick.Quote);
+        else if (IsCandleDynamicsMode)
+            _candleDynamicsEngine.FeedTick(tick.Quote);
     }
 
     private void OnTickCandleUpdated()
@@ -551,6 +599,17 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
     }
 
     private void OnTickScalperSignal(object? sender, TradeSignal signal)
+    {
+        _engine.EmitExternalSignal(signal);
+
+        Application.Current?.Dispatcher?.InvokeAsync(() =>
+        {
+            var dir = signal.Direction == SignalDirection.Call ? "CALL" : "PUT";
+            CurrentSignalText = $"{dir} (conf: {signal.Confidence:P0})";
+        });
+    }
+
+    private void OnCandleDynamicsSignal(object? sender, TradeSignal signal)
     {
         _engine.EmitExternalSignal(signal);
 
@@ -607,7 +666,10 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
             TickScalperCooldown = TickScalperCooldown,
             TickScalperThreshold = TickScalperThreshold,
             TickScalperMinAgreement = TickScalperMinAgreement,
-            TickScalperFlatFilter = TickScalperFlatFilter
+            TickScalperFlatFilter = TickScalperFlatFilter,
+            CandleDynamicsCooldown = CandleDynamicsCooldown,
+            CandleDynamicsThreshold = CandleDynamicsThreshold,
+            CandleDynamicsMinStreak = CandleDynamicsMinStreak
         };
     }
 
@@ -652,6 +714,10 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
         {
             if (int.TryParse(DurationText, out var n) && n >= 1)
                 _activeMarketTab.EnableTickCandles(n);
+        }
+        else if (IsCandleDynamicsMode)
+        {
+            _activeMarketTab.EnableTickCandles(10);
         }
         else
         {

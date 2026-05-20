@@ -15,5 +15,6 @@ public enum IndicatorType
     TickVelocity,
     TickReversal,
     TickRange,
-    TickCandleSequence
+    TickCandleSequence,
+    CandleDynamics
 }

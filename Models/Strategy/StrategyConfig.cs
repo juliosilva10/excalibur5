@@ -38,4 +38,9 @@ public sealed class StrategyConfig
     public double TickScalperThreshold { get; set; } = 0.80;
     public int TickScalperMinAgreement { get; set; } = 3;
     public bool TickScalperFlatFilter { get; set; } = true;
+
+    // Candle Dynamics settings
+    public int CandleDynamicsCooldown { get; set; } = 10;
+    public double CandleDynamicsThreshold { get; set; } = 0.55;
+    public int CandleDynamicsMinStreak { get; set; } = 3;
 }

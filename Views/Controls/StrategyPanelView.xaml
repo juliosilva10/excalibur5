@@ -66,6 +66,47 @@
                              ToolTip="Quantidade de candles analisados para determinar a tendência (mín. 1)"/>
                 </StackPanel>
 
+                <!-- Candle Dynamics config -->
+                <StackPanel Margin="0,0,0,10"
+                            Visibility="{Binding IsCandleDynamicsMode, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Text="Candle Dynamics" Foreground="#90b5c9" FontSize="10" Margin="0,0,0,6"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="Min Streak" Foreground="#6090a8" FontSize="9" Margin="0,0,0,2"/>
+                            <TextBox Style="{StaticResource DerivTextBox}"
+                                     Text="{Binding CandleDynamicsMinStreak, UpdateSourceTrigger=PropertyChanged}"
+                                     Height="26" MaxLength="2"
+                                     ToolTip="Mínimo de candles consecutivos para sinal de reversão (3-6)"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="2">
+                            <TextBlock Text="Cooldown" Foreground="#6090a8" FontSize="9" Margin="0,0,0,2"/>
+                            <TextBox Style="{StaticResource DerivTextBox}"
+                                     Text="{Binding CandleDynamicsCooldown, UpdateSourceTrigger=PropertyChanged}"
+                                     Height="26" MaxLength="3"
+                                     ToolTip="Ticks de cooldown entre sinais"/>
+                        </StackPanel>
+                    </Grid>
+                    <StackPanel Margin="0,6,0,0">
+                        <TextBlock Text="Confiança mínima" Foreground="#6090a8" FontSize="9" Margin="0,0,0,2"/>
+                        <StackPanel Orientation="Horizontal">
+                            <Slider Width="140"
+                                    Style="{StaticResource ConfidenceSliderStyle}"
+                                    Value="{Binding CandleDynamicsThreshold}"
+                                    Minimum="0.30" Maximum="0.90"
+                                    VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding CandleDynamicsThreshold, StringFormat=P0}"
+                                       Foreground="#e0eef8" FontSize="10"
+                                       FontFamily="Consolas" Margin="8,0,0,0"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+
                 <!-- Direction (hidden in Trend mode) -->
                 <StackPanel Visibility="{Binding IsTrendMode, Converter={StaticResource InverseBoolToVis}}">
                     <TextBlock Text="Direção" Foreground="#90b5c9" FontSize="10" Margin="0,0,0,4"/>

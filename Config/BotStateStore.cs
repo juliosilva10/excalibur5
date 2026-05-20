@@ -60,4 +60,9 @@ public class BotState
     public double TickScalperThreshold { get; set; } = 0.70;
     public int TickScalperMinAgreement { get; set; } = 2;
     public bool TickScalperFlatFilter { get; set; } = true;
+
+    // Candle Dynamics
+    public int CandleDynamicsCooldown { get; set; } = 10;
+    public double CandleDynamicsThreshold { get; set; } = 0.55;
+    public int CandleDynamicsMinStreak { get; set; } = 3;
 }
