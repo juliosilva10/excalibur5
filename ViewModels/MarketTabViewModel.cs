@@ -462,8 +462,8 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
         _isActive = true;
         _tickService.TickReceived += OnTickReceived;
 
-        const int maxRetries = 3;
-        int[] delaysMs = [1000, 2000, 4000];
+        const int maxRetries = 6;
+        int[] delaysMs = [1000, 2000, 3000, 5000, 8000, 12000];
 
         for (int attempt = 0; attempt <= maxRetries; attempt++)
         {
@@ -471,11 +471,16 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
 
             try
             {
+                if (attempt == 0 || attempt == 3)
+                    await _tickService.ForgetAllTicksAsync();
+
                 _tickService.ClearSubscription(Symbol);
                 await _tickService.SubscribeAsync(Symbol);
                 IsSubscribed = true;
                 _lastTickTime = DateTime.UtcNow;
+                _watchdogFailCount = 0;
                 StartWatchdog();
+                AppLogger.Info("MarketTab", $"ReactivateStream succeeded for {Symbol} on attempt {attempt + 1}");
                 break;
             }
             catch (Exception ex)
@@ -542,7 +547,12 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
 
         try
         {
-            // First attempt: just clear local state and resubscribe
+            if (_watchdogFailCount >= 3)
+            {
+                AppLogger.Warn("MarketTab", $"Watchdog: {_watchdogFailCount} consecutive failures — forget_all + full resubscribe for {Symbol}");
+                await _tickService.ForgetAllTicksAsync();
+            }
+
             _tickService.ClearSubscription(Symbol);
             await _tickService.SubscribeAsync(Symbol);
             IsSubscribed = true;
@@ -552,7 +562,7 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
         }
         catch (Exception ex)
         {
-            AppLogger.Warn("MarketTab", $"Watchdog: resubscribe failed for {Symbol}: {ex.Message}");
+            AppLogger.Warn("MarketTab", $"Watchdog: resubscribe failed for {Symbol} (attempt {_watchdogFailCount}): {ex.Message}");
             _tickService.ClearSubscription(Symbol);
             _lastTickTime = DateTime.UtcNow;
         }
