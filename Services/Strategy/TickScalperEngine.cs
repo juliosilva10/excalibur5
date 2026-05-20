@@ -343,6 +343,7 @@ public sealed class TickScalperEngine
         };
 
         AppLogger.Info(Src, $"Signal: {direction} (score: {score:P0}, agree: {count}/{totalIndicators}) — {reasons}");
+        _cooldownTicks = _cooldownSetting;
         SignalGenerated?.Invoke(this, tradeSignal);
     }
 }

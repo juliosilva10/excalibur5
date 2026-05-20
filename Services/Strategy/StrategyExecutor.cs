@@ -115,7 +115,7 @@ public sealed class StrategyExecutor : IDisposable
             _engine.RecordTradeResult(pos.Signal.ContributingIndicators, won);
             RecordResult(pos, estimatedProfit);
             TradeCompleted?.Invoke(this, new TradeCompleted(pos.ContractId, estimatedProfit, won));
-            AppLogger.Info(Src, $"Resolved locally {pos.ContractId}: entry={pos.EntrySpot}, close={lastCandleClose}, won={won} (stake={GetCurrentStake()})");
+            AppLogger.Info(Src, $"Resolved locally {pos.ContractId}: entry={pos.EntrySpot}, close={lastCandleClose}, won={won} (buyPrice={pos.BuyPrice}, currentStake={GetCurrentStake()})");
         }
     }
 
@@ -285,6 +285,8 @@ public sealed class StrategyExecutor : IDisposable
                 AppLogger.Info(Src, $"Signal ignored — max contracts reached ({activeCount}/{_config.MaxConcurrentContracts})");
                 return;
             }
+
+            AppLogger.Info(Src, $"Active positions: {activeCount}/{_config.MaxConcurrentContracts}");
 
             string contractType = signal.Direction == SignalDirection.Call
                 ? _config.CallContractType
@@ -493,7 +495,7 @@ public sealed class StrategyExecutor : IDisposable
         StatsUpdated?.Invoke(this, EventArgs.Empty);
 
         if (_active && GetCurrentStake() != previousStake)
-            _ = ResubscribeAndReEvaluateAsync();
+            _ = ResubscribeProposalsOnlyAsync();
     }
 
     private async Task ResubscribeAndReEvaluateAsync()
@@ -504,6 +506,11 @@ public sealed class StrategyExecutor : IDisposable
             _engine.ResetCooldown();
             _engine.ReEvaluate();
         }
+    }
+
+    private async Task ResubscribeProposalsOnlyAsync()
+    {
+        await SubscribeBotProposalsAsync();
     }
 
     private decimal GetCurrentStake()
@@ -628,7 +635,7 @@ public sealed class StrategyExecutor : IDisposable
         _engine.RecordTradeResult(pos.Signal.ContributingIndicators, won);
         RecordResult(pos, profit);
         TradeCompleted?.Invoke(this, new TradeCompleted(pos.ContractId, profit, won));
-        AppLogger.Info(Src, $"Resolved stale position {pos.ContractId}: profit={profit:F2}, won={won} (stake={GetCurrentStake()})");
+        AppLogger.Info(Src, $"Resolved stale position {pos.ContractId}: profit={profit:F2}, won={won} (buyPrice={pos.BuyPrice}, currentStake={GetCurrentStake()})");
         return true;
     }
 

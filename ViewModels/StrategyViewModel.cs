@@ -531,7 +531,8 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
         if (IsTickScalperMode)
         {
             _tickScalperEngine.ReportTradeResult(e.Won);
-            _tickScalperEngine.SetCooldown();
+            if (e.Won)
+                _tickScalperEngine.SetCooldown();
         }
         BotTradeCompleted?.Invoke(this, e);
     }
