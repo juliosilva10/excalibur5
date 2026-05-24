@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using Excalibur5.Models;
 
 namespace Excalibur5.ViewModels;
 
@@ -32,7 +33,7 @@ public partial class OpenPositionItem : ObservableObject
         ContractId = contractId;
         Symbol = symbol;
         DisplayName = displayName;
-        ContractTypeLabel = GetContractLabel(contractType);
+        ContractTypeLabel = ContractTypeFormatter.ToDisplayLabel(contractType);
         BuyPrice = buyPrice;
         DateStart = dateStart;
         DateExpiry = dateExpiry;
@@ -66,12 +67,4 @@ public partial class OpenPositionItem : ObservableObject
         return $"{seconds / 3600}h{(seconds % 3600) / 60}m";
     }
 
-    private static string GetContractLabel(string contractType) => contractType switch
-    {
-        "CALL" or "CALLE" => "Rise",
-        "PUT" or "PUTE" => "Fall",
-        "VANILLALONGCALL" => "Call",
-        "VANILLALONGPUT" => "Put",
-        _ => contractType.Contains("CALL") ? "Call" : "Put"
-    };
 }

@@ -10,6 +10,9 @@ public sealed class TickCandleSequenceIndicator
     private const double StrongBodyRatio = 0.55;
     private const int StreakThreshold = 3;
     private const double DominanceRatio = 0.70;
+    private const int ForecastPatternLength = 3;
+    private const int MinForecastSamples = 3;
+    private const double ForecastProbabilityThreshold = 0.62;
 
     public IndicatorType Type => IndicatorType.TickCandleSequence;
 
@@ -84,6 +87,9 @@ public sealed class TickCandleSequenceIndicator
         double bearishDominance = (double)bearishCount / totalCandles;
         double avgBullishStr = bullishCount > 0 ? totalBullishStrength / bullishCount : 0;
         double avgBearishStr = bearishCount > 0 ? totalBearishStrength / bearishCount : 0;
+        var forecastSignal = GetPatternForecastSignal(candles);
+        if (forecastSignal.Direction != SignalDirection.None && forecastSignal.Strength >= 0.60)
+            return forecastSignal;
 
         SignalDirection signalDir = SignalDirection.None;
         double confidence = 0;
@@ -145,4 +151,91 @@ public sealed class TickCandleSequenceIndicator
     }
 
     public void Reset() { }
+
+    private static IndicatorSignal GetPatternForecastSignal(IList<CandleData> candles)
+    {
+        if (candles.Count < ForecastPatternLength + MinForecastSamples)
+            return NoSignal();
+
+        var forecast = CountPatternFollowers(candles);
+        double totalWeight = forecast.CallWeight + forecast.PutWeight;
+        if (forecast.Samples < MinForecastSamples || totalWeight <= 0)
+            return NoSignal();
+
+        double callProbability = forecast.CallWeight / totalWeight;
+        double putProbability = forecast.PutWeight / totalWeight;
+        return BuildForecastSignal(callProbability, putProbability, forecast.Samples);
+    }
+
+    private static IndicatorSignal BuildForecastSignal(double callProbability, double putProbability, int samples)
+    {
+        var direction = callProbability >= putProbability ? SignalDirection.Call : SignalDirection.Put;
+        double probability = Math.Max(callProbability, putProbability);
+        if (probability < ForecastProbabilityThreshold)
+            return NoSignal();
+
+        double strength = 0.38
+            + (probability - ForecastProbabilityThreshold) * 1.4
+            + Math.Min(samples, 8) * 0.02;
+
+        string label = direction == SignalDirection.Call ? "BULL" : "BEAR";
+        return new IndicatorSignal
+        {
+            Direction = direction,
+            Strength = Math.Clamp(strength, 0.38, 0.90),
+            Reason = $"Tick candle pattern -> {label} ({probability:P0}, n={samples})",
+            Type = IndicatorType.TickCandleSequence
+        };
+    }
+
+    private static (double CallWeight, double PutWeight, int Samples) CountPatternFollowers(IList<CandleData> candles)
+    {
+        double callWeight = 0;
+        double putWeight = 0;
+        int samples = 0;
+        int currentPatternStart = candles.Count - ForecastPatternLength;
+        int lastCandidateStart = currentPatternStart - ForecastPatternLength;
+
+        for (int start = 0; start < lastCandidateStart; start++)
+        {
+            if (!MatchesPattern(candles, start, currentPatternStart)) continue;
+            AddFollowerWeight(candles, start, currentPatternStart, ref callWeight, ref putWeight);
+            samples++;
+        }
+
+        return (callWeight, putWeight, samples);
+    }
+
+    private static void AddFollowerWeight(IList<CandleData> candles, int start, int currentStart, ref double callWeight, ref double putWeight)
+    {
+        double recency = 1.0 + (double)start / Math.Max(1, currentStart) * 0.5;
+        var direction = GetDirection(candles[start + ForecastPatternLength]);
+        if (direction == SignalDirection.Call)
+            callWeight += recency;
+        else if (direction == SignalDirection.Put)
+            putWeight += recency;
+    }
+
+    private static bool MatchesPattern(IList<CandleData> candles, int candidateStart, int currentStart)
+    {
+        for (int offset = 0; offset < ForecastPatternLength; offset++)
+        {
+            if (GetDirection(candles[candidateStart + offset]) != GetDirection(candles[currentStart + offset]))
+                return false;
+        }
+
+        return true;
+    }
+
+    private static SignalDirection GetDirection(CandleData candle)
+    {
+        if (candle.Close > candle.Open) return SignalDirection.Call;
+        if (candle.Close < candle.Open) return SignalDirection.Put;
+        return SignalDirection.None;
+    }
+
+    private static IndicatorSignal NoSignal()
+    {
+        return new IndicatorSignal { Direction = SignalDirection.None, Strength = 0 };
+    }
 }

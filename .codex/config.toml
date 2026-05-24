@@ -1,0 +1,3 @@
+[mcp_servers.excalibur5-logs]
+args = ["mcp-server/index.js"]
+command = "node"

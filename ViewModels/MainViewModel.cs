@@ -76,7 +76,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         Strategy = new StrategyViewModel(contractService);
         Strategy.SetRecoverViewModel(Recover);
         History = new HistoryViewModel(contractService);
-        History.TradeSettled += (_, trade) => Performance.OnTradeCompleted(trade);
+        History.TradeSettled += OnTradeSettledForPerformance;
 
         Markets.MarketsRequested += () =>
         {
@@ -176,6 +176,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
         Strategy.BotTradeCompleted += (_, e) =>
         {
+            var tab = Markets.SelectedTab;
+            if (tab != null)
+                Performance.OnTradeClosed(e.ContractId, tab.ChartType, tab.TickCandleValues, tab.CandleValues);
+
             History.UpdateTradeResult(e.ContractId, e.Profit, e.SellTime);
         };
 
@@ -195,6 +199,22 @@ public partial class MainViewModel : ObservableObject, IDisposable
         };
 
         AppLogger.Info(Src, $"MainViewModel created — log: {AppLogger.GetLogPath()}");
+    }
+
+    private void OnTradeSettledForPerformance(object? sender, TradeHistoryItem trade)
+    {
+        var tab = Markets.SelectedTab;
+        if (tab != null && IsTradeFromSelectedMarket(trade, tab))
+            Performance.OnTradeClosed(trade.ContractId, tab.ChartType, tab.TickCandleValues, tab.CandleValues);
+
+        Performance.OnTradeCompleted(trade);
+    }
+
+    private static bool IsTradeFromSelectedMarket(TradeHistoryItem trade, MarketTabViewModel tab)
+    {
+        return string.IsNullOrWhiteSpace(trade.Market)
+            || trade.Market.Equals(tab.DisplayName, StringComparison.OrdinalIgnoreCase)
+            || trade.Market.Equals(tab.Symbol, StringComparison.OrdinalIgnoreCase);
     }
 
     public void SetToken(string token)

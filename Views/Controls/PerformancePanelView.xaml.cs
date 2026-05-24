@@ -118,6 +118,16 @@ public partial class PerformancePanelView : UserControl
 
         double min = (double)candles.Min(c => c.Low);
         double max = (double)candles.Max(c => c.High);
+        if (snapshot.EntryPrice.HasValue)
+        {
+            min = Math.Min(min, (double)snapshot.EntryPrice.Value);
+            max = Math.Max(max, (double)snapshot.EntryPrice.Value);
+        }
+        if (snapshot.ExitPrice.HasValue)
+        {
+            min = Math.Min(min, (double)snapshot.ExitPrice.Value);
+            max = Math.Max(max, (double)snapshot.ExitPrice.Value);
+        }
         double range = max - min;
         if (range == 0) range = 1;
 
@@ -167,6 +177,9 @@ public partial class PerformancePanelView : UserControl
             Canvas.SetTop(body, bodyTop);
             canvas.Children.Add(body);
         }
+
+        // ── Desenha indicadores de entrada (compra) e saída (venda) ──
+        DrawEntryExitMarkers(canvas, snapshot, padding, drawWidth, drawHeight, min, range, candles.Count);
     }
 
     private static void DrawPolyline(Canvas canvas, TickSnapshot snapshot)
@@ -216,5 +229,107 @@ public partial class PerformancePanelView : UserControl
         };
 
         canvas.Children.Insert(0, fillPolygon);
+    }
+
+    /// <summary>
+    /// Desenha marcadores visuais de entrada (compra) e saída (venda) sobre o gráfico de candles.
+    /// </summary>
+    private static void DrawEntryExitMarkers(Canvas canvas, CandleSnapshot snapshot,
+        double padding, double drawWidth, double drawHeight,
+        double min, double range, int candleCount)
+    {
+        if (!snapshot.EntryPrice.HasValue && !snapshot.ExitPrice.HasValue)
+            return;
+
+        // ── Indicador de ENTRADA (compra) — triângulo verde apontando pra cima ──
+        if (snapshot.EntryPrice.HasValue)
+        {
+            double entryPrice = (double)snapshot.EntryPrice.Value;
+            double entryY = padding + drawHeight - ((entryPrice - min) / range) * drawHeight;
+            double entryX = GetMarkerX(snapshot.EntryIndex, snapshot.HighlightIndex, candleCount, padding, drawWidth);
+
+            // Pequeno triângulo ▲
+            var entryTriangle = new Polygon
+            {
+                Points = new PointCollection
+                {
+                    new(entryX, entryY - 5),
+                    new(entryX - 4, entryY + 3),
+                    new(entryX + 4, entryY + 3)
+                },
+                Fill = new SolidColorBrush(Color.FromRgb(0x34, 0xC7, 0x59)), // verde
+                Stroke = Brushes.White,
+                StrokeThickness = 0.5,
+                ToolTip = $"Entrada: {snapshot.EntryPrice.Value}"
+            };
+            canvas.Children.Add(entryTriangle);
+
+            // Linha tracejada horizontal no preço de entrada
+            var entryLine = new Line
+            {
+                X1 = padding, X2 = padding + drawWidth,
+                Y1 = entryY, Y2 = entryY,
+                Stroke = new SolidColorBrush(Color.FromArgb(0x88, 0x34, 0xC7, 0x59)),
+                StrokeThickness = 0.8,
+                StrokeDashArray = new DoubleCollection { 3, 3 }
+            };
+            canvas.Children.Add(entryLine);
+            canvas.Children.Add(CreateVerticalMarkerLine(padding, drawHeight, entryX, entryLine.Stroke));
+        }
+
+        // ── Indicador de SAÍDA (venda) — triângulo vermelho apontando pra baixo ──
+        if (snapshot.ExitPrice.HasValue)
+        {
+            double exitPrice = (double)snapshot.ExitPrice.Value;
+            double exitY = padding + drawHeight - ((exitPrice - min) / range) * drawHeight;
+            double exitX = GetMarkerX(snapshot.ExitIndex, snapshot.HighlightIndex, candleCount, padding, drawWidth);
+
+            // Pequeno triângulo ▼
+            var exitTriangle = new Polygon
+            {
+                Points = new PointCollection
+                {
+                    new(exitX, exitY + 5),
+                    new(exitX - 4, exitY - 3),
+                    new(exitX + 4, exitY - 3)
+                },
+                Fill = new SolidColorBrush(Color.FromRgb(0xFF, 0x6B, 0x6B)), // vermelho
+                Stroke = Brushes.White,
+                StrokeThickness = 0.5,
+                ToolTip = $"Saída: {snapshot.ExitPrice.Value}"
+            };
+            canvas.Children.Add(exitTriangle);
+
+            // Linha tracejada horizontal no preço de saída
+            var exitLine = new Line
+            {
+                X1 = padding, X2 = padding + drawWidth,
+                Y1 = exitY, Y2 = exitY,
+                Stroke = new SolidColorBrush(Color.FromArgb(0x88, 0xFF, 0x6B, 0x6B)),
+                StrokeThickness = 0.8,
+                StrokeDashArray = new DoubleCollection { 3, 3 }
+            };
+            canvas.Children.Add(exitLine);
+            canvas.Children.Add(CreateVerticalMarkerLine(padding, drawHeight, exitX, exitLine.Stroke));
+        }
+    }
+
+    private static double GetMarkerX(int? index, int fallbackIndex, int count, double padding, double drawWidth)
+    {
+        int markerIndex = Math.Clamp(index ?? fallbackIndex, 0, Math.Max(0, count - 1));
+        double gap = drawWidth / count;
+        return padding + markerIndex * gap + gap / 2;
+    }
+
+    private static Line CreateVerticalMarkerLine(double padding, double drawHeight, double x, Brush brush)
+    {
+        return new Line
+        {
+            X1 = x, X2 = x,
+            Y1 = padding, Y2 = padding + drawHeight,
+            Stroke = brush,
+            StrokeThickness = 0.8,
+            StrokeDashArray = new DoubleCollection { 2, 3 }
+        };
     }
 }

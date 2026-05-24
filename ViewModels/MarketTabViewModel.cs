@@ -97,6 +97,7 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
 
     public List<CandleData> TickCandleValues { get; } = new();
     private int _ticksPerCandle = 5;
+    public int TicksPerCandle => _ticksPerCandle;
     private int _currentTickCount;
     [ObservableProperty] private bool _isTickCandlesEnabled;
 

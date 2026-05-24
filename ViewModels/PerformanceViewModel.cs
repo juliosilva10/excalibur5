@@ -18,11 +18,13 @@ public partial class PerformanceViewModel : ObservableObject
     private readonly List<BalancePoint> _balanceHistory = new();
     private readonly Dictionary<long, TickSnapshot> _tickSnapshots = new();
     private readonly Dictionary<long, CandleSnapshot> _candleSnapshots = new();
+    private readonly HashSet<long> _settledTrades = new();
     private readonly List<decimal> _currentLossStreak = new();
     private decimal _peakBalance;
     private decimal _maxDrawdownValue;
     private TickSnapshot? _lastTickSnapshot;
     private CandleSnapshot? _lastCandleSnapshot;
+    private long _longestLossStreakContractId;
 
     [RelayCommand]
     private void TogglePerformance()
@@ -53,6 +55,15 @@ public partial class PerformanceViewModel : ObservableObject
             _candleSnapshots[contractId] = candleSnap;
             _lastCandleSnapshot = candleSnap;
         }
+    }
+
+    public void OnTradeClosed(long contractId, ChartType chartType, IList<CandleData> tickCandles, IList<CandleData> candles)
+    {
+        var candleSnap = CaptureCandleSnapshot(chartType, tickCandles, candles);
+        if (candleSnap == null) return;
+
+        _candleSnapshots[contractId] = candleSnap;
+        _lastCandleSnapshot = candleSnap;
     }
 
     public void OnBalanceUpdated(decimal balance)
@@ -99,10 +110,19 @@ public partial class PerformanceViewModel : ObservableObject
 
     public void OnTradeCompleted(TradeHistoryItem trade)
     {
-        TotalOperations++;
+        bool firstSettlement = trade.ContractId <= 0 || _settledTrades.Add(trade.ContractId);
+        if (firstSettlement)
+            TotalOperations++;
+
         UpdateLargestStake(trade);
-        UpdateStrategyStats(trade);
-        UpdateLossStreak(trade);
+        if (firstSettlement)
+        {
+            UpdateStrategyStats(trade);
+            UpdateLossStreak(trade);
+            return;
+        }
+
+        RefreshLossStreakSnapshot(trade);
     }
 
     private static CandleSnapshot? CaptureCandleSnapshot(ChartType chartType, IList<CandleData> tickCandles, IList<CandleData> candles)
@@ -146,22 +166,27 @@ public partial class PerformanceViewModel : ObservableObject
         {
             Candles = captured,
             Type = snapshotType,
-            HighlightIndex = captured.Count - 1
+            HighlightIndex = captured.Count - 1,
+            EntryPrice = null,
+            ExitPrice = null,
+            EntryIndex = null,
+            ExitIndex = null
         };
     }
 
     private void UpdateLargestStake(TradeHistoryItem trade)
     {
-        if (LargestStake == null || trade.Stake > LargestStake.Trade.Stake)
+        if (LargestStake == null || trade.Stake > LargestStake.Trade.Stake || trade.ContractId == LargestStake.Trade.ContractId)
         {
             _tickSnapshots.TryGetValue(trade.ContractId, out var snapshot);
             _candleSnapshots.TryGetValue(trade.ContractId, out var candleSnap);
+            var candleWithPrices = AddTradeMarkers(candleSnap, trade);
             LargestStake = new LargestStakeInfo
             {
                 Trade = trade,
                 Market = trade.Market,
                 TickSnapshot = snapshot,
-                CandleSnapshot = candleSnap
+                CandleSnapshot = candleWithPrices
             };
         }
     }
@@ -181,19 +206,152 @@ public partial class PerformanceViewModel : ObservableObject
             {
                 _tickSnapshots.TryGetValue(trade.ContractId, out var tickSnap);
                 _candleSnapshots.TryGetValue(trade.ContractId, out var candleSnap);
+                var candleWithPrices = AddTradeMarkers(candleSnap, trade);
                 LongestLossStreak = new LossStreakInfo
                 {
                     Length = _currentLossStreak.Count,
                     Stakes = new List<decimal>(_currentLossStreak),
                     TotalLost = _currentLossStreak.Sum(),
                     TickSnapshot = tickSnap,
-                    CandleSnapshot = candleSnap
+                    CandleSnapshot = candleWithPrices
                 };
+                _longestLossStreakContractId = trade.ContractId;
             }
         }
 
         if (!lost)
             _currentLossStreak.Clear();
+    }
+
+    private void RefreshLossStreakSnapshot(TradeHistoryItem trade)
+    {
+        if (trade.ContractId != _longestLossStreakContractId || LongestLossStreak == null)
+            return;
+
+        _candleSnapshots.TryGetValue(trade.ContractId, out var candleSnap);
+        LongestLossStreak = new LossStreakInfo
+        {
+            Length = LongestLossStreak.Length,
+            Stakes = LongestLossStreak.Stakes,
+            TotalLost = LongestLossStreak.TotalLost,
+            TickSnapshot = LongestLossStreak.TickSnapshot,
+            CandleSnapshot = AddTradeMarkers(candleSnap, trade)
+        };
+    }
+
+    private static CandleSnapshot? AddTradeMarkers(CandleSnapshot? snapshot, TradeHistoryItem trade)
+    {
+        snapshot ??= CreateFallbackSnapshot(trade);
+        if (snapshot == null) return null;
+
+        var entryEpoch = ToEpochSeconds(trade.PurchaseTime);
+        var exitEpoch = ToEpochSeconds(trade.SellTime);
+        if (snapshot.Type == ChartSnapshotType.TickCandles)
+            return AddTickCandleTradeMarkers(snapshot, trade, entryEpoch, exitEpoch);
+
+        return new CandleSnapshot
+        {
+            Candles = snapshot.Candles,
+            Type = snapshot.Type,
+            HighlightIndex = snapshot.HighlightIndex,
+            EntryPrice = ParseDecimal(trade.EntrySpot),
+            ExitPrice = ParseDecimal(trade.ExitSpot),
+            EntryIndex = FindCandleIndex(snapshot.Candles, entryEpoch),
+            ExitIndex = FindCandleIndex(snapshot.Candles, exitEpoch)
+        };
+    }
+
+    private static CandleSnapshot? CreateFallbackSnapshot(TradeHistoryItem trade)
+    {
+        var entryPrice = ParseDecimal(trade.EntrySpot);
+        var exitPrice = ParseDecimal(trade.ExitSpot);
+        if (!entryPrice.HasValue || !exitPrice.HasValue)
+            return null;
+
+        long entryEpoch = ToEpochSeconds(trade.PurchaseTime) ?? DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        long exitEpoch = ToEpochSeconds(trade.SellTime) ?? entryEpoch + 1;
+        if (exitEpoch <= entryEpoch)
+            exitEpoch = entryEpoch + 1;
+
+        var candles = new List<CandleData>
+        {
+            new()
+            {
+                Epoch = entryEpoch,
+                Open = entryPrice.Value,
+                High = Math.Max(entryPrice.Value, exitPrice.Value),
+                Low = Math.Min(entryPrice.Value, exitPrice.Value),
+                Close = exitPrice.Value
+            },
+            new()
+            {
+                Epoch = exitEpoch,
+                Open = exitPrice.Value,
+                High = exitPrice.Value,
+                Low = exitPrice.Value,
+                Close = exitPrice.Value
+            }
+        };
+
+        return new CandleSnapshot
+        {
+            Candles = candles,
+            Type = ChartSnapshotType.Candles,
+            HighlightIndex = 0,
+            EntryPrice = null,
+            ExitPrice = null,
+            EntryIndex = null,
+            ExitIndex = null
+        };
+    }
+
+    private static CandleSnapshot AddTickCandleTradeMarkers(CandleSnapshot snapshot, TradeHistoryItem trade, long? entryEpoch, long? exitEpoch)
+    {
+        int markerIndex = FindCandleIndex(snapshot.Candles, exitEpoch)
+            ?? FindCandleIndex(snapshot.Candles, entryEpoch)
+            ?? snapshot.HighlightIndex;
+
+        return new CandleSnapshot
+        {
+            Candles = snapshot.Candles,
+            Type = snapshot.Type,
+            HighlightIndex = snapshot.HighlightIndex,
+            EntryPrice = ParseDecimal(trade.EntrySpot),
+            ExitPrice = ParseDecimal(trade.ExitSpot),
+            EntryIndex = markerIndex,
+            ExitIndex = markerIndex
+        };
+    }
+
+    private static int? FindCandleIndex(IReadOnlyList<CandleData> candles, long? epoch)
+    {
+        if (!epoch.HasValue || candles.Count == 0) return null;
+
+        for (int i = 0; i < candles.Count; i++)
+        {
+            long start = candles[i].Epoch;
+            long end = i + 1 < candles.Count ? candles[i + 1].Epoch : long.MaxValue;
+            if (epoch.Value >= start && epoch.Value < end)
+                return i;
+        }
+
+        return null;
+    }
+
+    private static long? ToEpochSeconds(DateTime? value)
+    {
+        if (!value.HasValue) return null;
+
+        var local = DateTime.SpecifyKind(value.Value, DateTimeKind.Local);
+        return new DateTimeOffset(local).ToUnixTimeSeconds();
+    }
+
+    private static decimal? ParseDecimal(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        if (decimal.TryParse(value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var result))
+            return result;
+        return null;
     }
 
     private void UpdateStrategyStats(TradeHistoryItem trade)

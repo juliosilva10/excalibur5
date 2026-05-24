@@ -291,6 +291,7 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
         if (IsTickScalperMode)
         {
             _tickScalperEngine.Start(
+                _activeMarketTab.TicksPerCandle,
                 TickScalperCooldown,
                 TickScalperThreshold,
                 TickScalperMinAgreement,
@@ -301,10 +302,6 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
             var history = _activeMarketTab.ChartValues;
             if (history.Count > 0)
                 _tickScalperEngine.FeedHistory(history);
-
-            // Feed tick candles
-            if (_activeMarketTab.TickCandleValues.Count > 0)
-                _tickScalperEngine.FeedTickCandles(_activeMarketTab.TickCandleValues);
 
             // Subscribe to live ticks
             _tickHandler = (_, tick) => OnTickReceived(tick);
@@ -317,6 +314,7 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
         else if (IsCandleDynamicsMode)
         {
             _candleDynamicsEngine.Start(
+                _activeMarketTab.TicksPerCandle,
                 CandleDynamicsCooldown,
                 CandleDynamicsThreshold,
                 CandleDynamicsMinStreak);
@@ -558,7 +556,7 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
     {
         if (_activeMarketTab == null) return;
         var openPos = _activeMarketTab.ContractPanel.OpenPositions;
-        var durationSec = CalculateDurationSeconds();
+        var durationSec = GetEffectiveDurationSeconds();
         var expiry = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + durationSec;
         _ = openPos.AddPositionAsync(e.BuyResult, _activeSymbol, _activeMarketTab.DisplayName, e.ContractType, expiry, durationSec);
         BotTradeOpened?.Invoke(this, e);
@@ -595,7 +593,7 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
     private void OnTickCandleUpdated()
     {
         if (!IsRunning || IsPaused || _activeMarketTab == null) return;
-        _tickScalperEngine.FeedTickCandles(_activeMarketTab.TickCandleValues);
+        // Tick candle updated - feed is handled via FeedTick on live ticks
     }
 
     private void OnTickScalperSignal(object? sender, TradeSignal signal)
@@ -639,6 +637,12 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
         };
 
         var (apiValue, apiUnit) = GetDurationApi();
+        var durationSeconds = GetEffectiveDurationSeconds();
+        if ((IsTickScalperMode || IsCandleDynamicsMode) && _activeMarketTab?.TicksPerCandle > 0)
+        {
+            apiValue = _activeMarketTab.TicksPerCandle;
+            apiUnit = "t";
+        }
 
         return new StrategyConfig
         {
@@ -647,7 +651,7 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
             TakeProfitUsd = decimal.TryParse(TakeProfitText, NumberStyles.Any, CultureInfo.InvariantCulture, out var tp) ? tp : 5m,
             StopLossUsd = decimal.TryParse(StopLossText, NumberStyles.Any, CultureInfo.InvariantCulture, out var sl) ? sl : 3m,
             MaxConcurrentContracts = int.TryParse(MaxContractsText, out var mc) ? mc : 3,
-            DurationSeconds = CalculateDurationSeconds(),
+            DurationSeconds = durationSeconds,
             DurationApiValue = apiValue,
             DurationApiUnit = apiUnit,
             ConfidenceThreshold = ConfidenceThreshold,
@@ -684,6 +688,14 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
             "Days" => val * 86400,
             _ => val * 60
         };
+    }
+
+    private int GetEffectiveDurationSeconds()
+    {
+        if ((IsTickScalperMode || IsCandleDynamicsMode) && _activeMarketTab?.TicksPerCandle > 0)
+            return Math.Max(1, _activeMarketTab.TicksPerCandle * 2);
+
+        return CalculateDurationSeconds();
     }
 
     private (int value, string unit) GetDurationApi()

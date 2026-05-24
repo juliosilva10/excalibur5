@@ -105,7 +105,7 @@ public partial class HistoryViewModel : ObservableObject
                     {
                         Operacao = "Manual",
                         Estrategia = "",
-                        Tipo = FormatContractType(e.ContractType),
+                        Tipo = ContractTypeFormatter.ToDisplayLabel(e.ContractType),
                         ReferenceNumber = e.ContractId.ToString(),
                         PurchaseTime = DateTimeOffset.FromUnixTimeSeconds(e.PurchaseTime).LocalDateTime,
                         Stake = e.BuyPrice,
@@ -184,7 +184,7 @@ public partial class HistoryViewModel : ObservableObject
                 Operacao = "Bot",
                 Estrategia = strategyName,
                 Market = market,
-                Tipo = FormatContractType(contractType),
+                Tipo = ContractTypeFormatter.ToDisplayLabel(contractType),
                 ReferenceNumber = buy.ContractId.ToString(),
                 PurchaseTime = DateTimeOffset.FromUnixTimeSeconds(buy.StartTime).LocalDateTime,
                 Stake = buy.BuyPrice,
@@ -202,7 +202,7 @@ public partial class HistoryViewModel : ObservableObject
                 Operacao = "Manual",
                 Estrategia = "",
                 Market = market,
-                Tipo = FormatContractType(contractType),
+                Tipo = ContractTypeFormatter.ToDisplayLabel(contractType),
                 ReferenceNumber = buy.ContractId.ToString(),
                 PurchaseTime = DateTimeOffset.FromUnixTimeSeconds(buy.StartTime).LocalDateTime,
                 Stake = buy.BuyPrice,
@@ -241,6 +241,8 @@ public partial class HistoryViewModel : ObservableObject
                 ProfitLoss = profit,
                 ContractId = item.ContractId
             };
+
+            TradeSettled?.Invoke(this, Trades[idx]);
 
             if (resolvedSellTime == null && contractId > 0)
                 _ = FetchSellTimeAsync(contractId);
@@ -295,6 +297,8 @@ public partial class HistoryViewModel : ObservableObject
                         ProfitLoss = item.ProfitLoss,
                         ContractId = item.ContractId
                     };
+
+                    TradeSettled?.Invoke(this, Trades[idx]);
                 });
                 return;
             }
@@ -305,19 +309,4 @@ public partial class HistoryViewModel : ObservableObject
         }
     }
 
-    private static string FormatContractType(string raw)
-    {
-        return raw switch
-        {
-            "VANILLALONGCALL" => "Vanillas Call",
-            "VANILLALONGPUT" => "Vanillas Put",
-            "CALL" => "Rise",
-            "PUT" => "Fall",
-            "CALLE" => "Higher",
-            "PUTE" => "Lower",
-            "MULTUP" => "Multiplier Up",
-            "MULTDOWN" => "Multiplier Down",
-            _ => raw
-        };
-    }
 }

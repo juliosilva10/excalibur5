@@ -18,25 +18,26 @@ public sealed class SignalFilter
         double score,
         StrategyConfig config)
     {
-        if (candles.Count < TrendEmaPeriod + 2)
+        // In Tick Scalper mode there are no candles to filter against.
+        if (config.StrategyMode == "Tick Scalper")
             return false;
 
+        // Apply cooldown after a loss.
         if (_cooldownCandles > 0)
         {
             _cooldownCandles--;
-            AppLogger.Info(Src, $"Signal filtered: cooldown ({_cooldownCandles} remaining)");
-            return true;
+            return true; // filter signal during cooldown
         }
 
-        if (candles.Count >= AtrBaselinePeriod && IsVolatilityCollapsed(candles))
+        // Simple volatility collapse filter.
+        if (IsVolatilityCollapsed(candles))
             return true;
 
+        // Trend alignment filter.
         if (!IsTrendAligned(candles, direction))
-        {
-            AppLogger.Info(Src, $"Signal filtered: against EMA50 trend");
             return true;
-        }
 
+        // No filtering conditions met.
         return false;
     }
 

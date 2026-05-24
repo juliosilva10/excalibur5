@@ -295,7 +295,7 @@ public sealed class StrategyExecutor : IDisposable
             var stake = GetCurrentStake();
             BuyResponse result;
 
-            if (_proposalsReady && _proposalStake == stake)
+            if (CanUseSubscribedProposal(signal.Direction, stake))
             {
                 var proposalId = signal.Direction == SignalDirection.Call
                     ? _callProposalId
@@ -313,6 +313,16 @@ public sealed class StrategyExecutor : IDisposable
             }
             else
             {
+                if (RequiresSynchronizedTickEntry())
+                {
+                    AppLogger.Warn(Src, "Signal skipped - synchronized tick entry requires a ready subscribed proposal");
+                    TradeExecuted?.Invoke(this, "Sinal ignorado: proposta do candle ainda não estava pronta");
+                    _ = SubscribeBotProposalsAsync().ContinueWith(
+                        t => AppLogger.Warn(Src, $"SubscribeBotProposals error: {t.Exception?.InnerException?.Message}"),
+                        TaskContinuationOptions.OnlyOnFaulted);
+                    return;
+                }
+
                 var barrierForBuy = _config.CallContractType is "CALL" or "CALLE" ? null : _config.Barrier;
                 AppLogger.Info(Src, $"Proposals stake mismatch or not ready (proposal={_proposalStake}, current={stake}) — using BuyDirectAsync");
                 result = await _contractService.BuyDirectAsync(
@@ -367,6 +377,24 @@ public sealed class StrategyExecutor : IDisposable
         {
             _signalLock.Release();
         }
+    }
+
+    private bool CanUseSubscribedProposal(SignalDirection direction, decimal stake)
+    {
+        if (!_proposalsReady || _proposalStake != stake) return false;
+
+        var proposalId = direction == SignalDirection.Call ? _callProposalId : _putProposalId;
+        var askPrice = direction == SignalDirection.Call ? _callAskPrice : _putAskPrice;
+        if (!string.IsNullOrWhiteSpace(proposalId) && askPrice > 0) return true;
+
+        AppLogger.Warn(Src, $"Subscribed proposal not ready for {direction}: id='{proposalId}', ask={askPrice}");
+        return false;
+    }
+
+    private bool RequiresSynchronizedTickEntry()
+    {
+        return _config.DurationApiUnit == "t"
+            || _config.StrategyMode is "Tick Scalper" or "Candle Dynamics";
     }
 
     private async void OnOpenContractUpdated(object? sender, OpenContractUpdate update)

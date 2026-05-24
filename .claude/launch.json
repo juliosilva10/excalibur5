@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Excalibur5",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "Excalibur5.csproj"],
+      "port": 0
+    }
+  ]
+}

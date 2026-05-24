@@ -13,12 +13,16 @@ public sealed class TickScalperEngine
     private const int ChopLookback = 20;
     private const double ChopThreshold = 0.60;
     private const double MinCandleBodyRatio = 0.40;
+    private const double SmallCandleBodyRatio = 0.30;
     private const int CandleFlowLookback = 5;
-    private const int MinExpressiveCandles = 1;
+    private const int MinExpressiveCandles = 2;
+    private const int RecentIndecisionLookback = 3;
 
     private readonly List<decimal> _ticks = new(MaxTicks);
     private readonly List<ITickIndicator> _indicators = new();
     private readonly List<CandleData> _tickCandles = new();
+    private readonly List<decimal> _currentCandleTicks = new();
+    private TickCandleManager _candleManager = null!;
     private readonly TickCandleSequenceIndicator _candleSequenceIndicator = new();
     private int _cooldownTicks;
     private int _cooldownSetting = 12;
@@ -27,12 +31,14 @@ public sealed class TickScalperEngine
     private bool _flatFilter = true;
     private bool _isRunning;
     private int _consecutiveLosses;
+    private int _ticksPerCandle = 5;
 
     public event EventHandler<TradeSignal>? SignalGenerated;
     public bool IsRunning => _isRunning;
 
-    public void Start(int cooldown, double threshold, int minAgreement, bool flatFilter)
+    public void Start(int ticksPerCandle, int cooldown, double threshold, int minAgreement, bool flatFilter)
     {
+        _ticksPerCandle = ticksPerCandle;
         _cooldownSetting = cooldown;
         _threshold = threshold;
         _minAgreement = minAgreement;
@@ -40,7 +46,15 @@ public sealed class TickScalperEngine
         _cooldownTicks = 0;
         _consecutiveLosses = 0;
         _ticks.Clear();
+        _tickCandles.Clear();
+        _currentCandleTicks.Clear();
         _indicators.Clear();
+
+        if (_candleManager != null)
+            _candleManager.CandleDied -= OnCandleDied;
+
+        _candleManager = new TickCandleManager(ticksPerCandle);
+        _candleManager.CandleDied += OnCandleDied;
 
         _indicators.Add(new TickMomentumIndicator());
         _indicators.Add(new TickEmaCrossoverIndicator());
@@ -49,7 +63,7 @@ public sealed class TickScalperEngine
         _indicators.Add(new TickRangeIndicator());
 
         _isRunning = true;
-        AppLogger.Info(Src, $"Started — cooldown={cooldown}, threshold={threshold:P0}, minAgree={minAgreement}, flat={flatFilter}");
+        AppLogger.Info(Src, $"Started — ticksPerCandle={ticksPerCandle}, cooldown={cooldown}, threshold={threshold:P0}, minAgree={minAgreement}, flat={flatFilter}");
     }
 
     public void Stop()
@@ -57,15 +71,10 @@ public sealed class TickScalperEngine
         _isRunning = false;
         _ticks.Clear();
         _tickCandles.Clear();
-        foreach (var ind in _indicators)
-            ind.Reset();
+        _currentCandleTicks.Clear();
+        if (_candleManager != null)
+            _candleManager.CandleDied -= OnCandleDied;
         AppLogger.Info(Src, "Stopped");
-    }
-
-    public void FeedTickCandles(IList<CandleData> candles)
-    {
-        _tickCandles.Clear();
-        _tickCandles.AddRange(candles);
     }
 
     public void FeedTick(decimal price)
@@ -76,24 +85,32 @@ public sealed class TickScalperEngine
         if (_ticks.Count > MaxTicks)
             _ticks.RemoveAt(0);
 
-        if (_cooldownTicks > 0)
+        _currentCandleTicks.Add(price);
+        bool candleDied = _candleManager.FeedTick(price, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+
+        // Only evaluate signals when a candle dies (completes)
+        if (candleDied)
         {
-            _cooldownTicks--;
-            return;
+            AppLogger.Info(Src, $"Candle died — evaluating");
+            EvaluateSignals();
         }
+    }
 
-        if (_ticks.Count < MinTicksRequired) return;
+    private void OnCandleDied(object? sender, CandleDiedEventArgs e)
+    {
+        _tickCandles.Add(new CandleData
+        {
+            Epoch = e.BirthEpoch,
+            Open = e.Open,
+            High = e.High,
+            Low = e.Low,
+            Close = e.Close
+        });
 
-        if (_flatFilter && IsFlat())
-            return;
+        if (_tickCandles.Count > 100)
+            _tickCandles.RemoveAt(0);
 
-        if (IsChoppy())
-            return;
-
-        if (IsCandleTooSmall())
-            return;
-
-        EvaluateSignals();
+        _currentCandleTicks.Clear();
     }
 
     public void SetCooldown()
@@ -112,33 +129,56 @@ public sealed class TickScalperEngine
             _consecutiveLosses++;
             int progressiveCooldown = _cooldownSetting * (1 << Math.Min(_consecutiveLosses, 4));
             _cooldownTicks = progressiveCooldown;
-            AppLogger.Info(Src, $"Progressive cooldown: {progressiveCooldown} ticks (losses: {_consecutiveLosses})");
+            AppLogger.Info(Src, $"Progressive cooldown: {progressiveCooldown} candles (losses: {_consecutiveLosses})");
         }
     }
 
     public void FeedHistory(IReadOnlyList<decimal> history)
     {
         _ticks.Clear();
+        _tickCandles.Clear();
+        _currentCandleTicks.Clear();
+
         int start = Math.Max(0, history.Count - MaxTicks);
         for (int i = start; i < history.Count; i++)
             _ticks.Add(history[i]);
+
+        var candles = _candleManager.FeedHistory(history, null);
+        _tickCandles.AddRange(candles.TakeLast(100));
+        RestoreCurrentCandleTicks(history, candles.Count);
+
+        AppLogger.Info(Src, $"History fed: {history.Count} ticks");
+    }
+
+    private void RestoreCurrentCandleTicks(IReadOnlyList<decimal> history, int completedCandles)
+    {
+        int firstOpenTick = completedCandles * _ticksPerCandle;
+        for (int i = firstOpenTick; i < history.Count; i++)
+            _currentCandleTicks.Add(history[i]);
+    }
+
+    private bool IsSignalContextBlocked()
+    {
+        if (_ticks.Count < MinTicksRequired) return true;
+        if (_flatFilter && IsFlat()) return true;
+        if (IsChoppy()) return true;
+        return IsCandleFlowWeak();
     }
 
     private bool IsFlat()
     {
         int lookback = Math.Min(30, _ticks.Count);
-        decimal high = decimal.MinValue;
-        decimal low = decimal.MaxValue;
+        decimal high = _ticks[^lookback];
+        decimal low = high;
 
-        for (int i = _ticks.Count - lookback; i < _ticks.Count; i++)
+        for (int i = _ticks.Count - lookback + 1; i < _ticks.Count; i++)
         {
-            if (_ticks[i] > high) high = _ticks[i];
-            if (_ticks[i] < low) low = _ticks[i];
+            high = Math.Max(high, _ticks[i]);
+            low = Math.Min(low, _ticks[i]);
         }
 
         if (low == 0) return false;
-        decimal range = (high - low) / low;
-        return range < 0.00005m;
+        return (high - low) / low < 0.00005m;
     }
 
     private bool IsChoppy()
@@ -146,203 +186,220 @@ public sealed class TickScalperEngine
         int lookback = Math.Min(ChopLookback, _ticks.Count - 1);
         if (lookback < 6) return false;
 
-        int reversals = 0;
-        int prevDir = 0;
+        int reversals = CountRecentReversals(lookback);
+        double chopRatio = (double)reversals / (lookback - 1);
+        if (chopRatio < ChopThreshold) return false;
 
+        AppLogger.Info(Src, $"Signal filtered: choppy market ({chopRatio:P0} reversals)");
+        return true;
+    }
+
+    private int CountRecentReversals(int lookback)
+    {
+        int reversals = 0;
+        int previousDirection = 0;
         for (int i = _ticks.Count - lookback; i < _ticks.Count; i++)
         {
-            int dir = _ticks[i] > _ticks[i - 1] ? 1 : _ticks[i] < _ticks[i - 1] ? -1 : 0;
-            if (dir == 0) continue;
-            if (prevDir != 0 && dir != prevDir)
+            int direction = Math.Sign(_ticks[i] - _ticks[i - 1]);
+            if (direction == 0) continue;
+            if (previousDirection != 0 && direction != previousDirection)
                 reversals++;
-            prevDir = dir;
+            previousDirection = direction;
         }
-
-        double chopRatio = (double)reversals / (lookback - 1);
-        return chopRatio >= ChopThreshold;
+        return reversals;
     }
 
-    private bool IsCandleTooSmall()
+    private bool IsCandleFlowWeak()
     {
         if (_tickCandles.Count < CandleFlowLookback) return true;
+        if (HasRecentSmallCandles()) return true;
 
-        int expressiveCount = 0;
+        int expressive = CountExpressiveCandles();
+        if (expressive >= MinExpressiveCandles) return false;
 
-        int start = Math.Max(0, _tickCandles.Count - CandleFlowLookback);
-        for (int i = start; i < _tickCandles.Count; i++)
-        {
-            var candle = _tickCandles[i];
-            decimal body = Math.Abs(candle.Close - candle.Open);
-            decimal totalRange = candle.High - candle.Low;
-
-            if (totalRange == 0) continue;
-
-            double bodyRatio = (double)(body / totalRange);
-            if (bodyRatio >= MinCandleBodyRatio)
-                expressiveCount++;
-        }
-
-        if (expressiveCount < MinExpressiveCandles)
-        {
-            AppLogger.Info(Src, $"Candle flow fraco — apenas {expressiveCount}/{CandleFlowLookback} candles expressivas (min: {MinExpressiveCandles})");
-            return true;
-        }
-
-        return false;
+        AppLogger.Info(Src, $"Signal filtered: weak candle flow ({expressive}/{CandleFlowLookback})");
+        return true;
     }
 
-    private SignalDirection? GetCandleDirection()
+    private bool HasRecentSmallCandles()
     {
-        if (_tickCandles.Count < CandleFlowLookback) return null;
+        int start = _tickCandles.Count - RecentIndecisionLookback;
+        if (start < 0) return true;
 
-        int bullish = 0, bearish = 0;
+        int smallCount = 0;
+        double bodyRatioSum = 0;
+        for (int i = start; i < _tickCandles.Count; i++)
+        {
+            double bodyRatio = GetBodyRatio(_tickCandles[i]);
+            bodyRatioSum += bodyRatio;
+            if (bodyRatio < SmallCandleBodyRatio)
+                smallCount++;
+        }
+
+        bool indecisive = smallCount >= RecentIndecisionLookback - 1
+            || bodyRatioSum / RecentIndecisionLookback < MinCandleBodyRatio;
+
+        if (indecisive)
+            AppLogger.Info(Src, $"Signal filtered: recent candles are too small ({smallCount}/{RecentIndecisionLookback})");
+
+        return indecisive;
+    }
+
+    private int CountExpressiveCandles()
+    {
+        int expressive = 0;
         int start = Math.Max(0, _tickCandles.Count - CandleFlowLookback);
-
         for (int i = start; i < _tickCandles.Count; i++)
         {
             var candle = _tickCandles[i];
-            decimal body = Math.Abs(candle.Close - candle.Open);
-            decimal totalRange = candle.High - candle.Low;
-            if (totalRange == 0) continue;
-
-            double bodyRatio = (double)(body / totalRange);
-            if (bodyRatio < MinCandleBodyRatio) continue;
-
-            if (candle.Close > candle.Open) bullish++;
-            else bearish++;
+            if (GetBodyRatio(candle) >= MinCandleBodyRatio)
+                expressive++;
         }
+        return expressive;
+    }
 
-        if (bullish >= MinExpressiveCandles && bullish > bearish) return SignalDirection.Call;
-        if (bearish >= MinExpressiveCandles && bearish > bullish) return SignalDirection.Put;
-        return null;
+    private static double GetBodyRatio(CandleData candle)
+    {
+        decimal range = candle.High - candle.Low;
+        return range > 0 ? (double)(Math.Abs(candle.Close - candle.Open) / range) : 0;
     }
 
     private bool IsDirectionConfirmed(SignalDirection direction)
     {
         if (_ticks.Count < DirectionLookback + 1) return true;
 
-        int ups = 0, downs = 0;
+        int ups = 0;
+        int downs = 0;
         for (int i = _ticks.Count - DirectionLookback; i < _ticks.Count; i++)
         {
             if (_ticks[i] > _ticks[i - 1]) ups++;
             else if (_ticks[i] < _ticks[i - 1]) downs++;
         }
 
-        if (direction == SignalDirection.Call)
-            return downs < DirectionLookback;
-        if (direction == SignalDirection.Put)
-            return ups < DirectionLookback;
-
-        return true;
+        return direction switch
+        {
+            SignalDirection.Call => downs < DirectionLookback,
+            SignalDirection.Put => ups < DirectionLookback,
+            _ => true
+        };
     }
 
     private void EvaluateSignals()
     {
+        if (_cooldownTicks > 0)
+        {
+            _cooldownTicks--;
+            AppLogger.Info(Src, $"Candle died during cooldown (remaining: {_cooldownTicks})");
+            return;
+        }
+
+        if (IsSignalContextBlocked()) return;
+
+        if (_ticks.Count < _ticksPerCandle) return;
+
         var signals = new List<IndicatorSignal>();
         foreach (var indicator in _indicators)
         {
-            var signal = indicator.Evaluate(_ticks);
-            signals.Add(signal);
+            var sig = indicator.Evaluate(_ticks);
+            signals.Add(sig);
         }
 
-        var candleSeqSignal = _candleSequenceIndicator.Evaluate(_tickCandles);
+        if (_tickCandles.Count >= 3)
+        {
+            var seqSignal = _candleSequenceIndicator.Evaluate(_tickCandles);
+            if (seqSignal.Direction != SignalDirection.None)
+                signals.Add(seqSignal);
+        }
 
-        int callCount = 0, putCount = 0;
         double callScore = 0, putScore = 0;
+        int callCount = 0, putCount = 0;
+        var callReasons = new List<string>();
+        var putReasons = new List<string>();
 
         foreach (var s in signals)
         {
             if (s.Direction == SignalDirection.Call && s.Strength > 0)
             {
-                callCount++;
                 callScore += s.Strength;
+                callCount++;
+                callReasons.Add(s.Reason);
             }
             else if (s.Direction == SignalDirection.Put && s.Strength > 0)
             {
-                putCount++;
                 putScore += s.Strength;
+                putCount++;
+                putReasons.Add(s.Reason);
             }
         }
 
-        if (candleSeqSignal.Direction == SignalDirection.Call && candleSeqSignal.Strength > 0)
+        // Flat filter: if too many ticks are flat, skip
+        if (_flatFilter)
         {
-            callCount++;
-            callScore += candleSeqSignal.Strength * 1.5;
-        }
-        else if (candleSeqSignal.Direction == SignalDirection.Put && candleSeqSignal.Strength > 0)
-        {
-            putCount++;
-            putScore += candleSeqSignal.Strength * 1.5;
+            int nonFlat = 0;
+            int start = Math.Max(0, _ticks.Count - 20);
+            for (int i = start; i < _ticks.Count; i++)
+            {
+                if (i > 0 && _ticks[i] != _ticks[i - 1])
+                    nonFlat++;
+            }
+            double flatRatio = 1.0 - (double)nonFlat / Math.Min(20, _ticks.Count - start);
+            if (flatRatio > 0.60)
+            {
+                AppLogger.Info(Src, $"Signal filtered: flat market ({flatRatio:P0} flat ticks)");
+                return;
+            }
         }
 
         SignalDirection direction;
-        int count;
         double score;
+        int agreement;
+        string reasons;
 
-        if (callCount >= putCount && callCount >= _minAgreement)
+        if (callScore >= putScore && callCount >= _minAgreement)
         {
             direction = SignalDirection.Call;
-            count = callCount;
-            score = callScore / count;
+            score = callCount > 0 ? callScore / callCount : 0;
+            agreement = callCount;
+            reasons = string.Join(" + ", callReasons);
         }
-        else if (putCount > callCount && putCount >= _minAgreement)
+        else if (putScore > callScore && putCount >= _minAgreement)
         {
             direction = SignalDirection.Put;
-            count = putCount;
-            score = putScore / count;
+            score = putCount > 0 ? putScore / putCount : 0;
+            agreement = putCount;
+            reasons = string.Join(" + ", putReasons);
         }
         else
         {
+            AppLogger.Info(Src, $"Signal suppressed: call({callScore:F2}/{callCount}) put({putScore:F2}/{putCount}) need ≥{_minAgreement} agreement");
             return;
         }
 
-        if (score < _threshold) return;
+        if (score < _threshold)
+        {
+            AppLogger.Info(Src, $"Signal suppressed: score {score:P0} below threshold {_threshold:P0}");
+            return;
+        }
 
         if (!IsDirectionConfirmed(direction))
         {
-            AppLogger.Info(Src, $"Signal {direction} rejected — recent ticks contradict direction");
+            AppLogger.Info(Src, $"Signal suppressed: recent ticks contradict {direction}");
             return;
         }
 
-        if (candleSeqSignal.Direction != SignalDirection.None && candleSeqSignal.Strength >= 0.5 && candleSeqSignal.Direction != direction)
-        {
-            AppLogger.Info(Src, $"Signal {direction} rejected — candle sequence strongly points {candleSeqSignal.Direction} ({candleSeqSignal.Reason})");
-            return;
-        }
-
-        var candleDir = GetCandleDirection();
-        if (candleDir != null && candleDir != direction)
-        {
-            AppLogger.Info(Src, $"Signal {direction} rejected — last candle points {candleDir}");
-            return;
-        }
-
-        var reasons = string.Join(" + ", signals
-            .Where(s => s.Direction == direction && s.Strength > 0)
-            .Select(s => s.Reason));
-
-        var contributors = signals
-            .Where(s => s.Direction == direction && s.Strength > 0)
-            .Select(s => s.Type)
-            .ToList();
-
-        if (candleSeqSignal.Direction == direction && candleSeqSignal.Strength > 0)
-        {
-            reasons += $" + {candleSeqSignal.Reason}";
-            contributors.Add(candleSeqSignal.Type);
-        }
-
-        int totalIndicators = _indicators.Count + 1;
         var tradeSignal = new TradeSignal
         {
             Direction = direction,
             Confidence = score,
             Reason = reasons,
             Timestamp = DateTimeOffset.UtcNow,
-            ContributingIndicators = contributors
+            ContributingIndicators = signals
+                .Where(s => s.Direction == direction && s.Strength > 0)
+                .Select(s => s.Type)
+                .ToList()
         };
 
-        AppLogger.Info(Src, $"Signal: {direction} (score: {score:P0}, agree: {count}/{totalIndicators}) — {reasons}");
+        AppLogger.Info(Src, $"Signal: {direction} (score: {score:P0}, agree: {agreement}/{_minAgreement}+) — {tradeSignal.Reason}");
         _cooldownTicks = _cooldownSetting;
         SignalGenerated?.Invoke(this, tradeSignal);
     }

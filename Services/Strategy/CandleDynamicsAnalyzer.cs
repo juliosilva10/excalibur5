@@ -7,9 +7,14 @@ public sealed class CandleDynamicsAnalyzer
 {
     private const int MaxCandles = 50;
     private const int MinCandlesForAnalysis = 5;
+    private const int ForecastPatternLength = 3;
+    private const int MinForecastSamples = 3;
+    private const double ForecastProbabilityThreshold = 0.62;
+    private const int IndecisionLookback = 3;
+    private const double SmallBodyRatio = 0.30;
+    private const double MinAverageBodyRatio = 0.35;
 
     private readonly List<CandleRecord> _candles = new(MaxCandles);
-    private readonly int[,] _transitions = new int[2, 2];
     private int _currentStreakLength;
     private SignalDirection _currentStreakDirection = SignalDirection.None;
     private double _velocityP75;
@@ -19,7 +24,6 @@ public sealed class CandleDynamicsAnalyzer
     public void Reset()
     {
         _candles.Clear();
-        Array.Clear(_transitions);
         _currentStreakLength = 0;
         _currentStreakDirection = SignalDirection.None;
         _velocityP75 = 0;
@@ -54,13 +58,6 @@ public sealed class CandleDynamicsAnalyzer
             Velocity = velocity,
             FirstHalfMove = ticks.Count >= 5 ? ticks[4] - ticks[0] : 0
         };
-
-        if (_candles.Count > 0)
-        {
-            int fromIdx = _candles[^1].Direction == SignalDirection.Call ? 0 : 1;
-            int toIdx = direction == SignalDirection.Call ? 0 : 1;
-            _transitions[fromIdx, toIdx]++;
-        }
 
         UpdateStreak(direction);
 
@@ -103,9 +100,9 @@ public sealed class CandleDynamicsAnalyzer
         if (_candles.Count < MinCandlesForAnalysis)
             return new IndicatorSignal { Direction = SignalDirection.None, Strength = 0 };
 
-        int lastIdx = _candles[^1].Direction == SignalDirection.Call ? 0 : 1;
-        int toBull = _transitions[lastIdx, 0];
-        int toBear = _transitions[lastIdx, 1];
+        var followers = CountFollowersOfLastDirection();
+        int toBull = followers.CallCount;
+        int toBear = followers.PutCount;
         int total = toBull + toBear;
 
         if (total < 5)
@@ -137,6 +134,34 @@ public sealed class CandleDynamicsAnalyzer
         }
 
         return new IndicatorSignal { Direction = SignalDirection.None, Strength = 0 };
+    }
+
+    public IndicatorSignal GetPatternForecastSignal()
+    {
+        if (_candles.Count < ForecastPatternLength + MinForecastSamples)
+            return NoSignal();
+
+        var forecast = CountPatternFollowers();
+        double totalWeight = forecast.CallWeight + forecast.PutWeight;
+        if (forecast.Samples < MinForecastSamples || totalWeight <= 0)
+            return NoSignal();
+
+        double callProbability = forecast.CallWeight / totalWeight;
+        double putProbability = forecast.PutWeight / totalWeight;
+        return BuildForecastSignal(callProbability, putProbability, forecast.Samples);
+    }
+
+    public bool IsRecentMarketIndecisive()
+    {
+        if (_candles.Count < IndecisionLookback)
+            return true;
+
+        var recent = _candles.Skip(_candles.Count - IndecisionLookback).ToList();
+        double averageBodyRatio = recent.Average(c => c.BodyRatio);
+        int smallCandles = recent.Count(c => c.BodyRatio < SmallBodyRatio);
+
+        return smallCandles >= IndecisionLookback - 1
+            || averageBodyRatio < MinAverageBodyRatio;
     }
 
     public IndicatorSignal GetVelocitySignal()
@@ -226,6 +251,89 @@ public sealed class CandleDynamicsAnalyzer
             _currentStreakDirection = direction;
             _currentStreakLength = 1;
         }
+    }
+
+    private IndicatorSignal BuildForecastSignal(double callProbability, double putProbability, int samples)
+    {
+        var direction = callProbability >= putProbability ? SignalDirection.Call : SignalDirection.Put;
+        double probability = Math.Max(callProbability, putProbability);
+        if (probability < ForecastProbabilityThreshold)
+            return NoSignal();
+
+        double strength = 0.35
+            + (probability - ForecastProbabilityThreshold) * 1.6
+            + Math.Min(samples, 8) * 0.02;
+
+        string label = direction == SignalDirection.Call ? "BULL" : "BEAR";
+        return new IndicatorSignal
+        {
+            Direction = direction,
+            Strength = Math.Clamp(strength, 0.35, 0.90),
+            Reason = $"Pattern forecast {ForecastPatternLength}c -> {label} ({probability:P0}, n={samples})",
+            Type = IndicatorType.CandleDynamics
+        };
+    }
+
+    private (int CallCount, int PutCount) CountFollowersOfLastDirection()
+    {
+        int callCount = 0;
+        int putCount = 0;
+        var lastDirection = _candles[^1].Direction;
+
+        for (int i = 1; i < _candles.Count; i++)
+        {
+            if (_candles[i - 1].Direction != lastDirection) continue;
+            if (_candles[i].Direction == SignalDirection.Call)
+                callCount++;
+            else if (_candles[i].Direction == SignalDirection.Put)
+                putCount++;
+        }
+
+        return (callCount, putCount);
+    }
+
+    private (double CallWeight, double PutWeight, int Samples) CountPatternFollowers()
+    {
+        double callWeight = 0;
+        double putWeight = 0;
+        int samples = 0;
+        int currentPatternStart = _candles.Count - ForecastPatternLength;
+        int lastCandidateStart = currentPatternStart - ForecastPatternLength;
+
+        for (int start = 0; start < lastCandidateStart; start++)
+        {
+            if (!MatchesCurrentPattern(start, currentPatternStart)) continue;
+            AddFollowerWeight(start, currentPatternStart, ref callWeight, ref putWeight);
+            samples++;
+        }
+
+        return (callWeight, putWeight, samples);
+    }
+
+    private void AddFollowerWeight(int patternStart, int currentPatternStart, ref double callWeight, ref double putWeight)
+    {
+        double recency = 1.0 + (double)patternStart / Math.Max(1, currentPatternStart) * 0.5;
+        var follower = _candles[patternStart + ForecastPatternLength].Direction;
+        if (follower == SignalDirection.Call)
+            callWeight += recency;
+        else if (follower == SignalDirection.Put)
+            putWeight += recency;
+    }
+
+    private bool MatchesCurrentPattern(int candidateStart, int currentPatternStart)
+    {
+        for (int offset = 0; offset < ForecastPatternLength; offset++)
+        {
+            if (_candles[candidateStart + offset].Direction != _candles[currentPatternStart + offset].Direction)
+                return false;
+        }
+
+        return true;
+    }
+
+    private static IndicatorSignal NoSignal()
+    {
+        return new IndicatorSignal { Direction = SignalDirection.None, Strength = 0 };
     }
 
     private void RecalculateVelocityPercentile()

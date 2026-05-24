@@ -14,6 +14,15 @@ public sealed class CandleSnapshot
     public List<CandleData> Candles { get; init; } = new();
     public ChartSnapshotType Type { get; init; }
     public int HighlightIndex { get; init; }
+
+    /// <summary>Preço de entrada (compra) para sobrepor no gráfico.</summary>
+    public decimal? EntryPrice { get; init; }
+
+    /// <summary>Preço de saída (venda) para sobrepor no gráfico.</summary>
+    public decimal? ExitPrice { get; init; }
+
+    public int? EntryIndex { get; init; }
+    public int? ExitIndex { get; init; }
 }
 
 public sealed class BalancePoint

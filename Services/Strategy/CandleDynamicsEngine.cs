@@ -6,14 +6,13 @@ namespace Excalibur5.Services.Strategy;
 public sealed class CandleDynamicsEngine
 {
     private const string Src = "CandleDynamics";
-    private const int TicksPerCandle = 10;
     private const int MaxTicks = 200;
     private const int MinCandlesRequired = 5;
 
     private readonly CandleDynamicsAnalyzer _analyzer = new();
     private readonly List<decimal> _ticks = new(MaxTicks);
-    private readonly List<decimal> _currentCandleTicks = new(TicksPerCandle);
-    private readonly List<CandleData> _tickCandles = new();
+    private readonly List<decimal> _currentCandleTicks = new();
+    private TickCandleManager _candleManager = null!;
     private int _cooldownTicks;
     private int _cooldownSetting = 10;
     private double _threshold = 0.55;
@@ -21,13 +20,14 @@ public sealed class CandleDynamicsEngine
     private int _minSignals = 2;
     private bool _isRunning;
     private int _consecutiveLosses;
-    private bool _firstHalfEmitted;
+    private int _ticksPerCandle = 10;
 
     public event EventHandler<TradeSignal>? SignalGenerated;
     public bool IsRunning => _isRunning;
 
-    public void Start(int cooldown, double threshold, int minStreak)
+    public void Start(int ticksPerCandle, int cooldown, double threshold, int minStreak)
     {
+        _ticksPerCandle = ticksPerCandle;
         _cooldownSetting = cooldown;
         _threshold = threshold;
         _minStreak = minStreak;
@@ -35,11 +35,16 @@ public sealed class CandleDynamicsEngine
         _consecutiveLosses = 0;
         _ticks.Clear();
         _currentCandleTicks.Clear();
-        _tickCandles.Clear();
         _analyzer.Reset();
-        _firstHalfEmitted = false;
         _isRunning = true;
-        AppLogger.Info(Src, $"Started — cooldown={cooldown}, threshold={threshold:P0}, minStreak={minStreak}");
+
+        if (_candleManager != null)
+            _candleManager.CandleDied -= OnCandleDied;
+
+        _candleManager = new TickCandleManager(ticksPerCandle);
+        _candleManager.CandleDied += OnCandleDied;
+
+        AppLogger.Info(Src, $"Started — ticksPerCandle={ticksPerCandle}, cooldown={cooldown}, threshold={threshold:P0}, minStreak={minStreak}");
     }
 
     public void Stop()
@@ -47,15 +52,10 @@ public sealed class CandleDynamicsEngine
         _isRunning = false;
         _ticks.Clear();
         _currentCandleTicks.Clear();
-        _tickCandles.Clear();
         _analyzer.Reset();
+        if (_candleManager != null)
+            _candleManager.CandleDied -= OnCandleDied;
         AppLogger.Info(Src, "Stopped");
-    }
-
-    public void FeedTickCandles(IList<CandleData> candles)
-    {
-        _tickCandles.Clear();
-        _tickCandles.AddRange(candles);
     }
 
     public void FeedTick(decimal price)
@@ -67,29 +67,35 @@ public sealed class CandleDynamicsEngine
             _ticks.RemoveAt(0);
 
         _currentCandleTicks.Add(price);
+        bool candleDied = _candleManager.FeedTick(price, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
 
-        if (_cooldownTicks > 0)
+        if (candleDied && _candleManager.TotalCandlesFormed > 0)
         {
-            _cooldownTicks--;
-            if (_currentCandleTicks.Count >= TicksPerCandle)
+            if (_cooldownTicks > 0)
             {
-                AppLogger.Info(Src, $"Candle formed during cooldown (remaining: {_cooldownTicks})");
-                FormCandle();
+                _cooldownTicks--;
+                AppLogger.Info(Src, $"Candle died during cooldown (remaining: {_cooldownTicks})");
+                return;
             }
-            return;
-        }
 
-        if (_currentCandleTicks.Count == 5 && !_firstHalfEmitted)
-        {
-            EvaluateFirstHalf();
-        }
-
-        if (_currentCandleTicks.Count >= TicksPerCandle)
-        {
-            AppLogger.Info(Src, $"Candle formed — evaluating (total candles: {_analyzer.CandleCount + 1})");
-            FormCandle();
+            AppLogger.Info(Src, $"Candle died — evaluating (total candles: {_candleManager.TotalCandlesFormed})");
             EvaluateSignals();
         }
+    }
+
+    private void OnCandleDied(object? sender, CandleDiedEventArgs e)
+    {
+        var candle = new CandleData
+        {
+            Epoch = e.BirthEpoch,
+            Open = e.Open,
+            High = e.High,
+            Low = e.Low,
+            Close = e.Close
+        };
+
+        _analyzer.UpdateWithCandle(candle, _currentCandleTicks);
+        _currentCandleTicks.Clear();
     }
 
     public void SetCooldown()
@@ -108,7 +114,7 @@ public sealed class CandleDynamicsEngine
             _consecutiveLosses++;
             int progressiveCooldown = _cooldownSetting * (1 << Math.Min(_consecutiveLosses, 4));
             _cooldownTicks = progressiveCooldown;
-            AppLogger.Info(Src, $"Progressive cooldown: {progressiveCooldown} ticks (losses: {_consecutiveLosses})");
+            AppLogger.Info(Src, $"Progressive cooldown: {progressiveCooldown} candles (losses: {_consecutiveLosses})");
         }
     }
 
@@ -119,69 +125,51 @@ public sealed class CandleDynamicsEngine
         for (int i = start; i < history.Count; i++)
             _ticks.Add(history[i]);
 
-        // Build candles from history
-        for (int i = 0; i <= _ticks.Count - TicksPerCandle; i += TicksPerCandle)
+        var candles = _candleManager.FeedHistory(history, null);
+        _analyzer.Reset();
+
+        for (int i = 0; i < candles.Count; i++)
         {
-            var chunk = _ticks.GetRange(i, TicksPerCandle);
-            var candle = BuildCandleFromTicks(chunk);
-            _analyzer.UpdateWithCandle(candle, chunk);
+            var chunk = history
+                .Skip(i * _ticksPerCandle)
+                .Take(_ticksPerCandle)
+                .ToList();
+            _analyzer.UpdateWithCandle(candles[i], chunk);
         }
 
-        AppLogger.Info(Src, $"History fed: {_ticks.Count} ticks, {_analyzer.CandleCount} candles analyzed");
+        RestoreCurrentCandleTicks(history, candles.Count);
+        AppLogger.Info(Src, $"History fed: {_ticks.Count} ticks, {candles.Count} candles analyzed");
     }
 
-    private void FormCandle()
+    private void RestoreCurrentCandleTicks(IReadOnlyList<decimal> history, int completedCandles)
     {
-        var candle = BuildCandleFromTicks(_currentCandleTicks);
-        _analyzer.UpdateWithCandle(candle, _currentCandleTicks);
         _currentCandleTicks.Clear();
-        _firstHalfEmitted = false;
-    }
-
-    private static CandleData BuildCandleFromTicks(IReadOnlyList<decimal> ticks)
-    {
-        decimal o = ticks[0];
-        decimal c = ticks[^1];
-        decimal h = ticks[0], l = ticks[0];
-        for (int i = 1; i < ticks.Count; i++)
-        {
-            if (ticks[i] > h) h = ticks[i];
-            if (ticks[i] < l) l = ticks[i];
-        }
-        return new CandleData { Open = o, High = h, Low = l, Close = c, Epoch = DateTimeOffset.UtcNow.ToUnixTimeSeconds() };
-    }
-
-    private void EvaluateFirstHalf()
-    {
-        var signal = _analyzer.GetFirstHalfSignal(_currentCandleTicks);
-        if (signal.Direction == SignalDirection.None || signal.Strength < _threshold)
-            return;
-
-        _firstHalfEmitted = true;
-        var tradeSignal = new TradeSignal
-        {
-            Direction = signal.Direction,
-            Confidence = signal.Strength,
-            Reason = signal.Reason,
-            Timestamp = DateTimeOffset.UtcNow,
-            ContributingIndicators = new List<IndicatorType> { IndicatorType.CandleDynamics }
-        };
-
-        AppLogger.Info(Src, $"First-half signal: {signal.Direction} (str: {signal.Strength:P0}) -- {signal.Reason}");
-        _cooldownTicks = _cooldownSetting;
-        SignalGenerated?.Invoke(this, tradeSignal);
+        int firstOpenTick = completedCandles * _ticksPerCandle;
+        for (int i = firstOpenTick; i < history.Count; i++)
+            _currentCandleTicks.Add(history[i]);
     }
 
     private void EvaluateSignals()
     {
-        if (_analyzer.CandleCount < MinCandlesRequired) return;
+        if (_analyzer.CandleCount < MinCandlesRequired)
+        {
+            AppLogger.Info(Src, $"Signal suppressed: need {MinCandlesRequired} candles, have {_analyzer.CandleCount}");
+            return;
+        }
+
+        if (_analyzer.IsRecentMarketIndecisive())
+        {
+            AppLogger.Info(Src, "Signal suppressed: recent candles are too small / indecisive");
+            return;
+        }
 
         var streakSignal = _analyzer.GetStreakSignal(_minStreak);
         var transitionSignal = _analyzer.GetTransitionSignal();
         var velocitySignal = _analyzer.GetVelocitySignal();
         var internalTickSignal = _analyzer.GetInternalTickSignal();
+        var patternForecastSignal = _analyzer.GetPatternForecastSignal();
 
-        var signals = new[] { streakSignal, transitionSignal, velocitySignal, internalTickSignal };
+        var signals = new[] { streakSignal, transitionSignal, velocitySignal, internalTickSignal, patternForecastSignal };
 
         double callScore = 0, putScore = 0;
         int callCount = 0, putCount = 0;
@@ -229,10 +217,15 @@ public sealed class CandleDynamicsEngine
         }
         else
         {
+            AppLogger.Info(Src, $"Signal suppressed: call({callScore:F2}/{callCount}) put({putScore:F2}/{putCount}) need {requiredSignals}");
             return;
         }
 
-        if (score < _threshold) return;
+        if (score < _threshold)
+        {
+            AppLogger.Info(Src, $"Signal suppressed: score {score:P0} below threshold {_threshold:P0}");
+            return;
+        }
 
         var tradeSignal = new TradeSignal
         {
@@ -243,7 +236,7 @@ public sealed class CandleDynamicsEngine
             ContributingIndicators = new List<IndicatorType> { IndicatorType.CandleDynamics }
         };
 
-        AppLogger.Info(Src, $"Signal: {direction} (score: {score:P0}, agree: {count}/4) -- {tradeSignal.Reason}");
+        AppLogger.Info(Src, $"Signal: {direction} (score: {score:P0}, agree: {count}/5) -- {tradeSignal.Reason}");
         _cooldownTicks = _cooldownSetting;
         SignalGenerated?.Invoke(this, tradeSignal);
     }
