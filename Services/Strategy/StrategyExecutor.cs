@@ -340,7 +340,9 @@ public sealed class StrategyExecutor : IDisposable
 
             if (result.ContractId > 0)
             {
-                var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                var now = result.StartTime > 0
+                    ? result.StartTime
+                    : DateTimeOffset.UtcNow.ToUnixTimeSeconds();
                 var tracked = new TrackedPosition
                 {
                     ContractId = result.ContractId,
@@ -397,6 +399,22 @@ public sealed class StrategyExecutor : IDisposable
             || _config.StrategyMode is "Tick Scalper" or "Candle Dynamics";
     }
 
+    private bool IsExpiryBoundContract()
+    {
+        return _config.DurationApiUnit == "t"
+            || _config.StrategyMode is "Tick Scalper" or "Candle Dynamics";
+    }
+
+    private static void SyncTrackedPosition(TrackedPosition tracked, OpenContractUpdate update)
+    {
+        if (update.DateStart > 0)
+            tracked.EntryEpoch = update.DateStart;
+        if (update.DateExpiry > 0)
+            tracked.ExpiryEpoch = update.DateExpiry;
+        if (update.EntrySpot > 0)
+            tracked.EntrySpot = update.EntrySpot;
+    }
+
     private async void OnOpenContractUpdated(object? sender, OpenContractUpdate update)
     {
         TrackedPosition? tracked;
@@ -409,6 +427,8 @@ public sealed class StrategyExecutor : IDisposable
         }
 
         if (!_active) return;
+
+        SyncTrackedPosition(tracked, update);
 
         if (update.IsExpired || update.IsSold || update.Status is "sold" or "won" or "lost")
         {
@@ -427,6 +447,7 @@ public sealed class StrategyExecutor : IDisposable
         }
 
         if (tracked.IsResolvedLocally) return;
+        if (IsExpiryBoundContract()) return;
 
         // Trailing stop logic
         if (_config.EnableTrailingStop && update.Profit > 0)
@@ -701,8 +722,8 @@ public sealed class StrategyExecutor : IDisposable
         public decimal BuyPrice { get; init; }
         public TradeSignal Signal { get; init; } = null!;
         public decimal DynamicStopLoss { get; set; }
-        public long EntryEpoch { get; init; }
-        public long ExpiryEpoch { get; init; }
+        public long EntryEpoch { get; set; }
+        public long ExpiryEpoch { get; set; }
         public bool IsSelling { get; set; }
         public decimal EntrySpot { get; set; }
         public bool IsResolvedLocally { get; set; }

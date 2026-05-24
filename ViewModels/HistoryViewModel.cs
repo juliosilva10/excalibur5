@@ -67,7 +67,7 @@ public partial class HistoryViewModel : ObservableObject
                 ContractId = item.ContractId
             };
 
-            TradeSettled?.Invoke(this, Trades[idx]);
+            NotifyTradeSettled(Trades[idx]);
 
             if (sellTime == null && update.ContractId > 0)
                 _ = FetchSellTimeAsync(update.ContractId);
@@ -242,7 +242,7 @@ public partial class HistoryViewModel : ObservableObject
                 ContractId = item.ContractId
             };
 
-            TradeSettled?.Invoke(this, Trades[idx]);
+            NotifyTradeSettled(Trades[idx]);
 
             if (resolvedSellTime == null && contractId > 0)
                 _ = FetchSellTimeAsync(contractId);
@@ -298,7 +298,7 @@ public partial class HistoryViewModel : ObservableObject
                         ContractId = item.ContractId
                     };
 
-                    TradeSettled?.Invoke(this, Trades[idx]);
+                    NotifyTradeSettled(Trades[idx]);
                 });
                 return;
             }
@@ -307,6 +307,23 @@ public partial class HistoryViewModel : ObservableObject
                 AppLogger.Warn(Src, $"FetchSellTime error for {contractId}: {ex.Message}");
             }
         }
+    }
+
+    private void NotifyTradeSettled(TradeHistoryItem trade)
+    {
+        AppLogger.Info(Src, $"Trade settled: contract={trade.ContractId}, entry={FormatTime(trade.PurchaseTime)}, exit={FormatTime(trade.SellTime)}, candleSeconds={GetTradeSeconds(trade)}");
+        TradeSettled?.Invoke(this, trade);
+    }
+
+    private static string FormatTime(DateTime? time)
+    {
+        return time?.ToString("HH:mm:ss", CultureInfo.InvariantCulture) ?? "-";
+    }
+
+    private static int GetTradeSeconds(TradeHistoryItem trade)
+    {
+        if (trade.SellTime == null) return 0;
+        return Math.Max(0, (int)Math.Round((trade.SellTime.Value - trade.PurchaseTime).TotalSeconds));
     }
 
 }

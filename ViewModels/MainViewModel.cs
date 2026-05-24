@@ -357,9 +357,14 @@ public partial class MainViewModel : ObservableObject, IDisposable
         IsRefreshingBalance = false;
     }
 
-    private async void OnConnected(object? sender, EventArgs e)
+    private void OnConnected(object? sender, EventArgs e)
     {
-        var isManual = await Application.Current.Dispatcher.InvokeAsync(() => IsConnecting);
+        _ = HandleConnectedAsync();
+    }
+
+    private async Task HandleConnectedAsync()
+    {
+        var isManual = Application.Current.Dispatcher.Invoke(() => IsConnecting);
         if (isManual) return;
 
         AppLogger.Info(Src, "OnConnected (reconexão automática) — re-autorizando…");

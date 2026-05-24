@@ -1,6 +1,8 @@
 # Build output
 bin/
 obj/
+.nuget/
+local-nuget/
 
 # Visual Studio
 .vs/
