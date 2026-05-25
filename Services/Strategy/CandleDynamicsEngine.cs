@@ -112,7 +112,7 @@ public sealed class CandleDynamicsEngine
         else
         {
             _consecutiveLosses++;
-            int progressiveCooldown = _cooldownSetting * (1 << Math.Min(_consecutiveLosses, 4));
+            int progressiveCooldown = Math.Min(_cooldownSetting * (1 << Math.Min(_consecutiveLosses, 2)), _cooldownSetting * 4);
             _cooldownTicks = progressiveCooldown;
             AppLogger.Info(Src, $"Progressive cooldown: {progressiveCooldown} candles (losses: {_consecutiveLosses})");
         }
@@ -168,8 +168,9 @@ public sealed class CandleDynamicsEngine
         var velocitySignal = _analyzer.GetVelocitySignal();
         var internalTickSignal = _analyzer.GetInternalTickSignal();
         var patternForecastSignal = _analyzer.GetPatternForecastSignal();
+        var candleForceSignal = _analyzer.GetCandleForceSignal();
 
-        var signals = new[] { streakSignal, transitionSignal, velocitySignal, internalTickSignal, patternForecastSignal };
+        var signals = new[] { streakSignal, transitionSignal, velocitySignal, internalTickSignal, patternForecastSignal, candleForceSignal };
 
         double callScore = 0, putScore = 0;
         int callCount = 0, putCount = 0;
@@ -197,18 +198,17 @@ public sealed class CandleDynamicsEngine
         int count;
         List<string> reasons;
 
-        // Strong streak (strength >= 0.55, i.e. 4+ candles) can trigger alone
-        bool hasStrongStreak = streakSignal.Strength >= 0.55;
-        int requiredSignals = hasStrongStreak ? 1 : _minSignals;
+        int callRequiredSignals = IsDecisiveForce(candleForceSignal, SignalDirection.Call) ? 1 : _minSignals;
+        int putRequiredSignals = IsDecisiveForce(candleForceSignal, SignalDirection.Put) ? 1 : _minSignals;
 
-        if (callScore >= putScore && callCount >= requiredSignals)
+        if (callScore >= putScore && callCount >= callRequiredSignals)
         {
             direction = SignalDirection.Call;
             score = callScore / callCount;
             count = callCount;
             reasons = callReasons;
         }
-        else if (putScore > callScore && putCount >= requiredSignals)
+        else if (putScore > callScore && putCount >= putRequiredSignals)
         {
             direction = SignalDirection.Put;
             score = putScore / putCount;
@@ -217,13 +217,19 @@ public sealed class CandleDynamicsEngine
         }
         else
         {
-            AppLogger.Info(Src, $"Signal suppressed: call({callScore:F2}/{callCount}) put({putScore:F2}/{putCount}) need {requiredSignals}");
+            AppLogger.Info(Src, $"Signal suppressed: call({callScore:F2}/{callCount}) put({putScore:F2}/{putCount}) need {Math.Min(callRequiredSignals, putRequiredSignals)}");
             return;
         }
 
         if (score < _threshold)
         {
             AppLogger.Info(Src, $"Signal suppressed: score {score:P0} below threshold {_threshold:P0}");
+            return;
+        }
+
+        if (!_analyzer.IsDirectionSupportedByCandleForce(direction))
+        {
+            AppLogger.Info(Src, $"Signal suppressed: candle force does not support {direction}");
             return;
         }
 
@@ -236,8 +242,13 @@ public sealed class CandleDynamicsEngine
             ContributingIndicators = new List<IndicatorType> { IndicatorType.CandleDynamics }
         };
 
-        AppLogger.Info(Src, $"Signal: {direction} (score: {score:P0}, agree: {count}/5) -- {tradeSignal.Reason}");
+        AppLogger.Info(Src, $"Signal: {direction} (score: {score:P0}, agree: {count}/6) -- {tradeSignal.Reason}");
         _cooldownTicks = _cooldownSetting;
         SignalGenerated?.Invoke(this, tradeSignal);
+    }
+
+    private static bool IsDecisiveForce(IndicatorSignal signal, SignalDirection direction)
+    {
+        return signal.Direction == direction && signal.Strength >= 0.72;
     }
 }

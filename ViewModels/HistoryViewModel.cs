@@ -12,6 +12,7 @@ public partial class HistoryViewModel : ObservableObject
 {
     private const string Src = "History";
     private readonly IContractService _contractService;
+    private readonly Dictionary<long, string> _settledNotifications = new();
 
     [ObservableProperty] private bool _isHistoryVisible;
     [ObservableProperty] private bool _isLoading;
@@ -311,8 +312,22 @@ public partial class HistoryViewModel : ObservableObject
 
     private void NotifyTradeSettled(TradeHistoryItem trade)
     {
+        if (AlreadyNotified(trade)) return;
+
         AppLogger.Info(Src, $"Trade settled: contract={trade.ContractId}, entry={FormatTime(trade.PurchaseTime)}, exit={FormatTime(trade.SellTime)}, candleSeconds={GetTradeSeconds(trade)}");
         TradeSettled?.Invoke(this, trade);
+    }
+
+    private bool AlreadyNotified(TradeHistoryItem trade)
+    {
+        if (trade.ContractId <= 0) return false;
+
+        var signature = $"{trade.SellTime?.Ticks ?? 0}|{trade.ProfitLoss}|{trade.ExitSpot}";
+        if (_settledNotifications.TryGetValue(trade.ContractId, out var previous) && previous == signature)
+            return true;
+
+        _settledNotifications[trade.ContractId] = signature;
+        return false;
     }
 
     private static string FormatTime(DateTime? time)
