@@ -104,6 +104,7 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
     public event EventHandler? CandleUpdated;
     public event EventHandler<long>? TimeCandleBorn;
     public event EventHandler? TickCandleUpdated;
+    public event EventHandler? TickCandleBorn;
     public event EventHandler<TickData>? TickReceived;
 
     public MarketTabViewModel(MarketInfo market, ITickStreamService tickService, IContractService contractService)
@@ -327,6 +328,7 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
                 Close = tick.Quote
             });
             _currentTickCount = 1;
+            TickCandleBorn?.Invoke(this, EventArgs.Empty);
         }
         else
         {

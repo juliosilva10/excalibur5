@@ -28,6 +28,7 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
     private EventHandler? _candleHandler;
     private EventHandler<TickData>? _tickHandler;
     private EventHandler? _tickCandleHandler;
+    private EventHandler? _tickCandleBornHandler;
     private EventHandler<long>? _timeCandleBornHandler;
     private MarketTabViewModel? _activeMarketTab;
     private bool _restoringState;
@@ -311,6 +312,10 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
             // Subscribe to tick candle updates
             _tickCandleHandler = (_, _) => OnTickCandleUpdated();
             _activeMarketTab.TickCandleUpdated += _tickCandleHandler;
+
+            // Subscribe to tick candle birth for synchronized entry
+            _tickCandleBornHandler = (_, _) => OnTickCandleBorn();
+            _activeMarketTab.TickCandleBorn += _tickCandleBornHandler;
         }
         else if (IsCandleDynamicsMode)
         {
@@ -330,6 +335,9 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
 
             _tickCandleHandler = (_, _) => OnTickCandleUpdated();
             _activeMarketTab.TickCandleUpdated += _tickCandleHandler;
+
+            _tickCandleBornHandler = (_, _) => OnTickCandleBorn();
+            _activeMarketTab.TickCandleBorn += _tickCandleBornHandler;
         }
         else if (!IsTrendMode)
         {
@@ -416,6 +424,12 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
         {
             _activeMarketTab.TickCandleUpdated -= _tickCandleHandler;
             _tickCandleHandler = null;
+        }
+
+        if (_activeMarketTab != null && _tickCandleBornHandler != null)
+        {
+            _activeMarketTab.TickCandleBorn -= _tickCandleBornHandler;
+            _tickCandleBornHandler = null;
         }
 
         _activeMarketTab?.ContractPanel.UnlockBarrier();
@@ -539,6 +553,12 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
     {
         if (!IsRunning || IsPaused) return;
         _executor?.OnTimeCandleBirth();
+    }
+
+    private void OnTickCandleBorn()
+    {
+        if (!IsRunning || IsPaused) return;
+        _executor?.OnTickCandleBirth();
     }
 
     private void OnSignalGenerated(object? sender, TradeSignal signal)

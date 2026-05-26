@@ -300,7 +300,7 @@ public sealed class StrategyExecutor : IDisposable
 
             AppLogger.Info(Src, $"Active positions: {activeCount}/{_config.MaxConcurrentContracts}");
 
-            if (RequiresTimeSynchronizedEntry() && !_executingPendingSignal)
+            if ((RequiresTimeSynchronizedEntry() || RequiresTickSynchronizedEntry()) && !_executingPendingSignal)
             {
                 _pendingSignal = signal;
                 _pendingSignalTime = DateTimeOffset.UtcNow;
@@ -427,6 +427,13 @@ public sealed class StrategyExecutor : IDisposable
             && _config.StrategyMode is not ("Tick Scalper" or "Candle Dynamics");
     }
 
+    private bool RequiresTickSynchronizedEntry()
+    {
+        return _config.SyncEntryToCandleBoundary
+            && (_config.DurationApiUnit == "t"
+                || _config.StrategyMode is "Tick Scalper" or "Candle Dynamics");
+    }
+
     public void OnTimeCandleBirth()
     {
         if (_pendingSignal == null) return;
@@ -443,6 +450,17 @@ public sealed class StrategyExecutor : IDisposable
         _pendingSignal = null;
         _executingPendingSignal = true;
         AppLogger.Info(Src, $"Candle birth — executing queued {signal.Direction} signal");
+        _ = HandleSignalAsync(signal).ContinueWith(_ => _executingPendingSignal = false, TaskContinuationOptions.ExecuteSynchronously);
+    }
+
+    public void OnTickCandleBirth()
+    {
+        if (_pendingSignal == null) return;
+
+        var signal = _pendingSignal;
+        _pendingSignal = null;
+        _executingPendingSignal = true;
+        AppLogger.Info(Src, $"Tick candle birth — executing queued {signal.Direction} signal");
         _ = HandleSignalAsync(signal).ContinueWith(_ => _executingPendingSignal = false, TaskContinuationOptions.ExecuteSynchronously);
     }
 
