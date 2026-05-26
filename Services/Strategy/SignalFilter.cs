@@ -60,7 +60,11 @@ public sealed class SignalFilter
     private static double CalculateAtrFromOffset(IReadOnlyList<CandleData> candles, int period, int offset)
     {
         if (candles.Count < offset + period) return 0;
-        var slice = candles.Skip(candles.Count - offset - period).Take(period + 1).ToList();
+        int start = candles.Count - offset - period;
+        int count = period + 1;
+        var slice = new List<CandleData>(count);
+        for (int i = start; i < start + count && i < candles.Count; i++)
+            slice.Add(candles[i]);
         return AtrIndicator.CalculateAtr(slice, period);
     }
 

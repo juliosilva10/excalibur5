@@ -105,11 +105,11 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
     public void LockBarrier() => _barrierLocked = true;
     public void UnlockBarrier() => _barrierLocked = false;
 
-    public async void SuspendProposals()
+    public void SuspendProposals()
     {
         _proposalsSuspended = true;
         _proposalCts?.Cancel();
-        await _contractService.UnsubscribeAllProposalsAsync();
+        _ = _contractService.UnsubscribeAllProposalsAsync();
     }
 
     public void ResumeProposals()
@@ -561,7 +561,7 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
             var response = await _contractService.SubscribeProposalAsync(
                 Symbol, contractType, stake, duration, unitStr, dateExpiry, barrier);
 
-            await Application.Current.Dispatcher.InvokeAsync(() =>
+            await (Application.Current?.Dispatcher?.InvokeAsync(() =>
             {
                 if (contractType == ContractTypeCall)
                 {
@@ -577,7 +577,7 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
                     PutPayout = response.Payout;
                     PutPayoutPerPoint = response.PayoutPerPoint;
                 }
-            });
+            })?.Task ?? Task.CompletedTask);
         }
         catch (Exception ex)
         {
@@ -891,7 +891,7 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
             var response = await _contractService.GetContractsForAsync(symbol);
             if (response.Available.Count == 0) return;
 
-            await Application.Current.Dispatcher.InvokeAsync(() =>
+            await (Application.Current?.Dispatcher?.InvokeAsync(() =>
             {
                 StrikePrice = response.Spot;
 
@@ -925,7 +925,7 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
                 }
 
                 ContractsLoaded = true;
-            });
+            })?.Task ?? Task.CompletedTask);
 
             RequestProposalDebounced();
         }
@@ -957,7 +957,7 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
             AppLogger.Warn(Src, $"Deactivate unsubscribe error: {ex.Message}");
         }
 
-        await Application.Current.Dispatcher.InvokeAsync(() =>
+        await (Application.Current?.Dispatcher?.InvokeAsync(() =>
         {
             _callProposalId = string.Empty;
             _putProposalId = string.Empty;
@@ -979,7 +979,7 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
             _spotForBarriers = 0;
             SelectedBarrierDisplay = string.Empty;
             SelectedBarrier = 0;
-        });
+        })?.Task ?? Task.CompletedTask);
     }
 
     private int GetDurationValue()
@@ -1067,7 +1067,7 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
         return GetDateExpiryUnix() != null;
     }
 
-    private async void RequestProposalDebounced()
+    private void RequestProposalDebounced()
     {
         if (!_active || !ContractsLoaded || _proposalsSuspended) return;
 
@@ -1075,6 +1075,11 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
         _proposalCts = new CancellationTokenSource();
         var ct = _proposalCts.Token;
 
+        _ = RequestProposalDebouncedAsync(ct);
+    }
+
+    private async Task RequestProposalDebouncedAsync(CancellationToken ct)
+    {
         try
         {
             await Task.Delay(300, ct);
@@ -1088,10 +1093,10 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
             var barriers = ParseBarriersFromError(ex.Message);
             if (barriers.Count > 0)
             {
-                await Application.Current.Dispatcher.InvokeAsync(() =>
+                await (Application.Current?.Dispatcher?.InvokeAsync(() =>
                 {
                     UpdateBarriersFromApi(barriers);
-                });
+                })?.Task ?? Task.CompletedTask);
 
                 try
                 {
@@ -1136,7 +1141,7 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
         var putResponse = await _contractService.SubscribeProposalAsync(
             Symbol, ContractTypePut, stake, duration, unitStr, dateExpiry, barrier, ct: ct);
 
-        await Application.Current.Dispatcher.InvokeAsync(() =>
+        await (Application.Current?.Dispatcher?.InvokeAsync(() =>
         {
             _callProposalId = callResponse.ProposalId;
             CallAskPrice = callResponse.AskPrice;
@@ -1167,7 +1172,7 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
                 _barriersFromApi = true;
 
             AppLogger.Info(Src, $"Proposals ready: CALL id={_callProposalId} ask={CallAskPrice} ppp={CallPayoutPerPoint}, PUT id={_putProposalId} ask={PutAskPrice} ppp={PutPayoutPerPoint}");
-        });
+        })?.Task ?? Task.CompletedTask);
     }
 
     private static List<string> ParseBarriersFromError(string message)

@@ -33,6 +33,11 @@ public sealed class StrategyExecutor : IDisposable
     private bool _proposalsReady;
     private decimal _proposalStake;
 
+    // Candle-aligned entry state
+    private TradeSignal? _pendingSignal;
+    private DateTimeOffset _pendingSignalTime;
+    private bool _executingPendingSignal;
+
     public StrategyStats Stats { get; } = new();
     public int ActivePositionCount => _positions.Count;
 
@@ -69,6 +74,8 @@ public sealed class StrategyExecutor : IDisposable
     {
         _active = false;
         _proposalsReady = false;
+        _pendingSignal = null;
+        _executingPendingSignal = false;
         _ = UnsubscribeBotProposalsAsync().ContinueWith(
             t => AppLogger.Warn(Src, $"Proposal unsubscribe error: {t.Exception?.InnerException?.Message}"),
             TaskContinuationOptions.OnlyOnFaulted);
@@ -265,7 +272,12 @@ public sealed class StrategyExecutor : IDisposable
         }
     }
 
-    private async void OnSignalGenerated(object? sender, TradeSignal signal)
+    private void OnSignalGenerated(object? sender, TradeSignal signal)
+    {
+        _ = HandleSignalAsync(signal);
+    }
+
+    private async Task HandleSignalAsync(TradeSignal signal)
     {
         if (!_active) return;
 
@@ -287,6 +299,15 @@ public sealed class StrategyExecutor : IDisposable
             }
 
             AppLogger.Info(Src, $"Active positions: {activeCount}/{_config.MaxConcurrentContracts}");
+
+            if (RequiresTimeSynchronizedEntry() && !_executingPendingSignal)
+            {
+                _pendingSignal = signal;
+                _pendingSignalTime = DateTimeOffset.UtcNow;
+                AppLogger.Info(Src, $"Signal queued — waiting for next candle birth ({signal.Direction})");
+                TradeExecuted?.Invoke(this, "Sinal detectado — aguardando início do próximo candle");
+                return;
+            }
 
             string contractType = signal.Direction == SignalDirection.Call
                 ? _config.CallContractType
@@ -399,6 +420,32 @@ public sealed class StrategyExecutor : IDisposable
             || _config.StrategyMode is "Tick Scalper" or "Candle Dynamics";
     }
 
+    private bool RequiresTimeSynchronizedEntry()
+    {
+        return _config.SyncEntryToCandleBoundary
+            && _config.DurationApiUnit != "t"
+            && _config.StrategyMode is not ("Tick Scalper" or "Candle Dynamics");
+    }
+
+    public void OnTimeCandleBirth()
+    {
+        if (_pendingSignal == null) return;
+
+        var elapsed = DateTimeOffset.UtcNow - _pendingSignalTime;
+        if (elapsed.TotalSeconds > _config.DurationSeconds * 2)
+        {
+            AppLogger.Warn(Src, $"Pending signal expired ({elapsed.TotalSeconds:F0}s old) — discarding");
+            _pendingSignal = null;
+            return;
+        }
+
+        var signal = _pendingSignal;
+        _pendingSignal = null;
+        _executingPendingSignal = true;
+        AppLogger.Info(Src, $"Candle birth — executing queued {signal.Direction} signal");
+        _ = HandleSignalAsync(signal).ContinueWith(_ => _executingPendingSignal = false, TaskContinuationOptions.ExecuteSynchronously);
+    }
+
     private bool IsExpiryBoundContract()
     {
         return _config.DurationApiUnit == "t"
@@ -415,7 +462,12 @@ public sealed class StrategyExecutor : IDisposable
             tracked.EntrySpot = update.EntrySpot;
     }
 
-    private async void OnOpenContractUpdated(object? sender, OpenContractUpdate update)
+    private void OnOpenContractUpdated(object? sender, OpenContractUpdate update)
+    {
+        _ = HandleOpenContractUpdatedAsync(update);
+    }
+
+    private async Task HandleOpenContractUpdatedAsync(OpenContractUpdate update)
     {
         TrackedPosition? tracked;
         lock (_positions)
@@ -521,11 +573,13 @@ public sealed class StrategyExecutor : IDisposable
             }
             else
             {
+                tracked.IsSelling = false;
                 AppLogger.Warn(Src, $"Sell failed for {contractId}: {result.Error}");
             }
         }
         catch (Exception ex)
         {
+            tracked.IsSelling = false;
             AppLogger.Warn(Src, $"Sell error for {contractId}: {ex.Message}");
         }
     }
@@ -545,16 +599,6 @@ public sealed class StrategyExecutor : IDisposable
 
         if (_active && GetCurrentStake() != previousStake)
             _ = ResubscribeProposalsOnlyAsync();
-    }
-
-    private async Task ResubscribeAndReEvaluateAsync()
-    {
-        await SubscribeBotProposalsAsync();
-        if (_active && _proposalsReady)
-        {
-            _engine.ResetCooldown();
-            _engine.ReEvaluate();
-        }
     }
 
     private async Task ResubscribeProposalsOnlyAsync()
@@ -622,33 +666,6 @@ public sealed class StrategyExecutor : IDisposable
 
         AppLogger.Info(Src, $"Resolving {expired.Count} expired position(s) before new buy");
         foreach (var pos in expired)
-            await ResolveStalePositionAsync(pos);
-    }
-
-    private async Task ResolveStaleExpiredPositionsAsync()
-    {
-        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        List<TrackedPosition>? stale = null;
-        lock (_positions)
-        {
-            foreach (var kvp in _positions)
-            {
-                if (kvp.Value.ExpiryEpoch + 3 <= now && !kvp.Value.IsSelling)
-                {
-                    stale ??= new List<TrackedPosition>();
-                    stale.Add(kvp.Value);
-                }
-            }
-            if (stale != null)
-            {
-                foreach (var pos in stale)
-                    _positions.Remove(pos.ContractId);
-            }
-        }
-
-        if (stale == null) return;
-
-        foreach (var pos in stale)
             await ResolveStalePositionAsync(pos);
     }
 

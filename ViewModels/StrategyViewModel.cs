@@ -28,6 +28,7 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
     private EventHandler? _candleHandler;
     private EventHandler<TickData>? _tickHandler;
     private EventHandler? _tickCandleHandler;
+    private EventHandler<long>? _timeCandleBornHandler;
     private MarketTabViewModel? _activeMarketTab;
     private bool _restoringState;
     private RecoverViewModel? _recoverVm;
@@ -354,6 +355,9 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
         {
             _candleHandler = (_, _) => OnCandleUpdated();
             _activeMarketTab.CandleUpdated += _candleHandler;
+
+            _timeCandleBornHandler = (_, epoch) => OnTimeCandleBorn(epoch);
+            _activeMarketTab.TimeCandleBorn += _timeCandleBornHandler;
         }
 
         IsRunning = true;
@@ -394,6 +398,12 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
         {
             _activeMarketTab.CandleUpdated -= _candleHandler;
             _candleHandler = null;
+        }
+
+        if (_activeMarketTab != null && _timeCandleBornHandler != null)
+        {
+            _activeMarketTab.TimeCandleBorn -= _timeCandleBornHandler;
+            _timeCandleBornHandler = null;
         }
 
         if (_activeMarketTab != null && _tickHandler != null)
@@ -523,6 +533,12 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
         {
             _engine.FeedCandle(candles[^1]);
         }
+    }
+
+    private void OnTimeCandleBorn(long epoch)
+    {
+        if (!IsRunning || IsPaused) return;
+        _executor?.OnTimeCandleBirth();
     }
 
     private void OnSignalGenerated(object? sender, TradeSignal signal)
@@ -765,6 +781,7 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
             _activeMarketTab.ContractPanel.PropertyChanged -= OnContractPanelSync;
         _engine.SignalGenerated -= OnSignalGenerated;
         _tickScalperEngine.SignalGenerated -= OnTickScalperSignal;
+        _candleDynamicsEngine.SignalGenerated -= OnCandleDynamicsSignal;
         _executor?.Dispose();
     }
 }

@@ -52,13 +52,13 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
         try
         {
             var candles = await _tickService.GetCandleHistoryAsync(Symbol, _candleGranularity, 500);
-            await Application.Current.Dispatcher.InvokeAsync(() =>
+            await (Application.Current?.Dispatcher?.InvokeAsync(() =>
             {
                 CandleValues.Clear();
                 CandleValues.AddRange(candles);
                 _candlesLoaded = true;
                 OnPropertyChanged(nameof(CandleValues));
-            });
+            })?.Task ?? Task.CompletedTask);
         }
         catch (Exception ex)
         {
@@ -102,6 +102,7 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool _isTickCandlesEnabled;
 
     public event EventHandler? CandleUpdated;
+    public event EventHandler<long>? TimeCandleBorn;
     public event EventHandler? TickCandleUpdated;
     public event EventHandler<TickData>? TickReceived;
 
@@ -263,6 +264,8 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
                 Low = tick.Quote,
                 Close = tick.Quote
             });
+
+            TimeCandleBorn?.Invoke(this, newEpoch);
         }
 
         CandleUpdated?.Invoke(this, EventArgs.Empty);
@@ -346,7 +349,7 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
 
         try
         {
-            await Application.Current.Dispatcher.InvokeAsync(() =>
+            await (Application.Current?.Dispatcher?.InvokeAsync(() =>
             {
                 RecentTicks.Clear();
                 ChartValues.Clear();
@@ -356,14 +359,14 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
                 TickCandleValues.Clear();
                 _candlesLoaded = false;
                 _currentTickCount = 0;
-            });
+            })?.Task ?? Task.CompletedTask);
 
             // Load history — non-fatal if it fails (chart will be empty but contracts still load)
             try
             {
                 var history = await _tickService.GetHistoryAsync(Symbol);
 
-                await Application.Current.Dispatcher.InvokeAsync(() =>
+                await (Application.Current?.Dispatcher?.InvokeAsync(() =>
                 {
                     foreach (var tick in history)
                     {
@@ -392,12 +395,12 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
                     }
 
                     IsChartReady = true;
-                });
+                })?.Task ?? Task.CompletedTask);
             }
             catch (Exception ex)
             {
                 AppLogger.Warn("MarketTab", $"History load failed for {Symbol}: {ex.Message}");
-                await Application.Current.Dispatcher.InvokeAsync(() => IsChartReady = true);
+                await (Application.Current?.Dispatcher?.InvokeAsync(() => IsChartReady = true)?.Task ?? Task.CompletedTask);
             }
 
             // Subscribe to tick stream — non-fatal if it fails
@@ -527,7 +530,12 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
         IsSubscribed = false;
     }
 
-    private async void OnWatchdogTick(object? sender, EventArgs e)
+    private void OnWatchdogTick(object? sender, EventArgs e)
+    {
+        _ = HandleWatchdogTickAsync();
+    }
+
+    private async Task HandleWatchdogTickAsync()
     {
         if (!_isActive || _isResubscribing) return;
 

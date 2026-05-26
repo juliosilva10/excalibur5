@@ -43,4 +43,7 @@ public sealed class StrategyConfig
     public int CandleDynamicsCooldown { get; set; } = 10;
     public double CandleDynamicsThreshold { get; set; } = 0.55;
     public int CandleDynamicsMinStreak { get; set; } = 3;
+
+    // Candle-aligned entry
+    public bool SyncEntryToCandleBoundary { get; set; } = true;
 }

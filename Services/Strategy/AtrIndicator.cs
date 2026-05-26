@@ -29,8 +29,8 @@ public sealed class AtrIndicator : IIndicator
         // Return None direction but store the ATR value for SignalFilter to use.
         // However, extreme ATR spikes can indicate reversal opportunities.
 
-        double prevAtr = CalculateAtr(candles.Take(candles.Count - 1).ToList(), Period);
-        double atrChange = (atr - prevAtr) / prevAtr;
+        double prevAtr = CalculateAtrExcludingLast(candles, Period);
+        double atrChange = prevAtr > 0 ? (atr - prevAtr) / prevAtr : 0;
 
         // Sudden volatility spike after calm period — potential reversal
         if (atrChange > 0.5 && normalizedAtr > LowVolThreshold * 3)
@@ -52,10 +52,20 @@ public sealed class AtrIndicator : IIndicator
 
     public static double CalculateAtr(IReadOnlyList<CandleData> candles, int period)
     {
-        if (candles.Count < period + 1) return 0;
+        return CalculateAtrRange(candles, period, candles.Count);
+    }
+
+    private static double CalculateAtrExcludingLast(IReadOnlyList<CandleData> candles, int period)
+    {
+        return CalculateAtrRange(candles, period, candles.Count - 1);
+    }
+
+    private static double CalculateAtrRange(IReadOnlyList<CandleData> candles, int period, int endIndex)
+    {
+        if (endIndex < period + 1) return 0;
 
         double atr = 0;
-        int start = candles.Count - period - 1;
+        int start = endIndex - period - 1;
 
         for (int i = start + 1; i <= start + period; i++)
         {
@@ -64,7 +74,7 @@ public sealed class AtrIndicator : IIndicator
         }
         atr /= period;
 
-        for (int i = start + period + 1; i < candles.Count; i++)
+        for (int i = start + period + 1; i < endIndex; i++)
         {
             double tr = TrueRange(candles[i], candles[i - 1]);
             atr = (atr * (period - 1) + tr) / period;

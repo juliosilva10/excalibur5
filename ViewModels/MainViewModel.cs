@@ -317,7 +317,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     private void OnAuthorized(object? sender, AuthorizeResponse e)
     {
-        Application.Current.Dispatcher.InvokeAsync(() =>
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher == null) return;
+
+        dispatcher.InvokeAsync(() =>
         {
             LoginId     = e.LoginId;
             AccountType = e.IsVirtual ? "virtual" : "real";
@@ -333,7 +336,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     private void OnBalanceUpdated(object? sender, BalanceResponse e)
     {
-        Application.Current.Dispatcher.InvokeAsync(() =>
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher == null) return;
+
+        dispatcher.InvokeAsync(() =>
         {
             Balance  = e.Balance;
             Currency = e.Currency;
@@ -364,7 +370,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     private async Task HandleConnectedAsync()
     {
-        var isManual = Application.Current.Dispatcher.Invoke(() => IsConnecting);
+        var app = Application.Current;
+        if (app == null) return;
+
+        var isManual = app.Dispatcher.Invoke(() => IsConnecting);
         if (isManual) return;
 
         AppLogger.Info(Src, "OnConnected (reconexão automática) — re-autorizando…");
@@ -377,7 +386,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             var timeTask = _api.GetServerTimeAsync();
             await Task.WhenAll(pingTask, timeTask);
 
-            await Application.Current.Dispatcher.InvokeAsync(() =>
+            await app.Dispatcher.InvokeAsync(() =>
             {
                 PingMs        = pingTask.Result;
                 ServerUtc     = timeTask.Result.ToString("HH:mm:ss") + " UTC";
@@ -396,26 +405,29 @@ public partial class MainViewModel : ObservableObject, IDisposable
         catch (Exception ex)
         {
             AppLogger.Error(Src, "Re-autorização falhou", ex);
-            await Application.Current.Dispatcher.InvokeAsync(() =>
+            _ = app.Dispatcher.InvokeAsync(() =>
                 StatusMessage = "Reconectando...");
         }
     }
 
     private void OnDisconnected(object? sender, EventArgs e)
     {
-        Application.Current.Dispatcher.InvokeAsync(() =>
+        Application.Current?.Dispatcher?.InvokeAsync(() =>
         {
             if (!IsConnecting)
             {
                 StatusMessage = "Reconectando...";
                 AppLogger.Warn(Src, "OnDisconnected (unexpected) — showing reconnect status");
             }
-        }).Task.ContinueWith(t =>
-            AppLogger.Error(Src, "OnDisconnected dispatcher error", t.Exception?.InnerException),
-            TaskContinuationOptions.OnlyOnFaulted);
+        });
     }
 
-    private async void OnTimerTick(object? sender, EventArgs e)
+    private void OnTimerTick(object? sender, EventArgs e)
+    {
+        _ = HandleTimerTickAsync();
+    }
+
+    private async Task HandleTimerTickAsync()
     {
         if (!IsConnected || Interlocked.CompareExchange(ref _timerBusy, 1, 0) != 0) return;
         try
@@ -554,8 +566,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
         Markets.Dispose();
         Strategy.Dispose();
         Recover.Dispose();
+        History.Dispose();
         Log.Dispose();
         (_tickStream as IDisposable)?.Dispose();
+        (_contractService as IDisposable)?.Dispose();
         (_api as IDisposable)?.Dispose();
         AppLogger.Info(Src, "MainViewModel disposed");
     }

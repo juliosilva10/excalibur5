@@ -98,11 +98,11 @@ public partial class OpenPositionsViewModel : ObservableObject, IDisposable
             dateExpiry,
             durationSeconds);
 
-        await Application.Current.Dispatcher.InvokeAsync(() =>
+        await (Application.Current?.Dispatcher?.InvokeAsync(() =>
         {
             Positions.Add(item);
             HasPositions = Positions.Count > 0;
-        });
+        })?.Task ?? Task.CompletedTask);
 
         try
         {

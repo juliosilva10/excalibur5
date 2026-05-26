@@ -111,6 +111,11 @@ public sealed class TickStreamService : ITickStreamService, IDisposable
 
     public async Task<string> SubscribeAsync(string symbol, CancellationToken ct = default)
     {
+        return await SubscribeInternalAsync(symbol, retried: false, ct);
+    }
+
+    private async Task<string> SubscribeInternalAsync(string symbol, bool retried, CancellationToken ct)
+    {
         if (_subscriptions.ContainsKey(symbol))
         {
             AppLogger.Info(Src, $"Already subscribed to {symbol}");
@@ -130,12 +135,12 @@ public sealed class TickStreamService : ITickStreamService, IDisposable
             {
                 var msg = err.TryGetProperty("message", out var m) ? m.GetString() : "unknown";
 
-                if (msg != null && msg.Contains("already subscribed", StringComparison.OrdinalIgnoreCase))
+                if (!retried && msg != null && msg.Contains("already subscribed", StringComparison.OrdinalIgnoreCase))
                 {
                     AppLogger.Warn(Src, $"Server says already subscribed to {symbol} — forget_all and retry");
                     _subscriptions.TryRemove(symbol, out _);
                     await ForgetAllTicksAsync(ct);
-                    return await SubscribeAsync(symbol, ct);
+                    return await SubscribeInternalAsync(symbol, retried: true, ct);
                 }
 
                 _subscriptions.TryRemove(symbol, out _);

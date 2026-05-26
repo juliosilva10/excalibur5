@@ -8,7 +8,7 @@ using Excalibur5.Services;
 
 namespace Excalibur5.ViewModels;
 
-public partial class HistoryViewModel : ObservableObject
+public partial class HistoryViewModel : ObservableObject, IDisposable
 {
     private const string Src = "History";
     private readonly IContractService _contractService;
@@ -31,7 +31,7 @@ public partial class HistoryViewModel : ObservableObject
     {
         if (!update.IsExpired && !update.IsSold && update.Status is not ("sold" or "won" or "lost")) return;
 
-        Application.Current.Dispatcher.Invoke(() =>
+        Application.Current?.Dispatcher?.InvokeAsync(() =>
         {
             var item = Trades.FirstOrDefault(t => t.ContractId == update.ContractId);
             if (item == null) return;
@@ -97,7 +97,7 @@ public partial class HistoryViewModel : ObservableObject
         try
         {
             var entries = await _contractService.GetProfitTableAsync(100);
-            Application.Current.Dispatcher.Invoke(() =>
+            Application.Current?.Dispatcher?.Invoke(() =>
             {
                 Trades.Clear();
                 foreach (var e in entries)
@@ -143,7 +143,7 @@ public partial class HistoryViewModel : ObservableObject
                 var status = await _contractService.GetContractStatusAsync(item.ContractId);
                 if (status == null) continue;
 
-                Application.Current.Dispatcher.Invoke(() =>
+                Application.Current?.Dispatcher?.Invoke(() =>
                 {
                     var idx = Trades.IndexOf(item);
                     if (idx < 0) return;
@@ -178,7 +178,7 @@ public partial class HistoryViewModel : ObservableObject
 
     public void AddBotTrade(BuyResponse buy, string contractType, string strategyName, string market)
     {
-        Application.Current.Dispatcher.Invoke(() =>
+        Application.Current?.Dispatcher?.Invoke(() =>
         {
             Trades.Insert(0, new TradeHistoryItem
             {
@@ -196,7 +196,7 @@ public partial class HistoryViewModel : ObservableObject
 
     public void AddManualTrade(BuyResponse buy, string contractType, string market)
     {
-        Application.Current.Dispatcher.Invoke(() =>
+        Application.Current?.Dispatcher?.Invoke(() =>
         {
             Trades.Insert(0, new TradeHistoryItem
             {
@@ -214,7 +214,7 @@ public partial class HistoryViewModel : ObservableObject
 
     public void UpdateTradeResult(long contractId, decimal profit, long sellTime = 0)
     {
-        Application.Current.Dispatcher.Invoke(() =>
+        Application.Current?.Dispatcher?.Invoke(() =>
         {
             var item = Trades.FirstOrDefault(t => t.ContractId == contractId);
             if (item == null) return;
@@ -259,16 +259,16 @@ public partial class HistoryViewModel : ObservableObject
             {
                 await Task.Delay(delay);
 
-                var alreadyFilled = Application.Current.Dispatcher.Invoke(() =>
+                var alreadyFilled = Application.Current?.Dispatcher?.Invoke(() =>
                     Trades.FirstOrDefault(t => t.ContractId == contractId)?.SellTime != null);
-                if (alreadyFilled) return;
+                if (alreadyFilled == true) return;
 
                 var status = await _contractService.GetContractStatusAsync(contractId);
                 if (status == null || status.SellTime <= 0) continue;
 
                 var sellTime = DateTimeOffset.FromUnixTimeSeconds(status.SellTime).LocalDateTime;
 
-                Application.Current.Dispatcher.Invoke(() =>
+                Application.Current?.Dispatcher?.Invoke(() =>
                 {
                     var item = Trades.FirstOrDefault(t => t.ContractId == contractId);
                     if (item == null) return;
@@ -339,6 +339,11 @@ public partial class HistoryViewModel : ObservableObject
     {
         if (trade.SellTime == null) return 0;
         return Math.Max(0, (int)Math.Round((trade.SellTime.Value - trade.PurchaseTime).TotalSeconds));
+    }
+
+    public void Dispose()
+    {
+        _contractService.OpenContractUpdated -= OnOpenContractUpdated;
     }
 
 }

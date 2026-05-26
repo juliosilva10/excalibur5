@@ -42,29 +42,34 @@ public sealed class ContractService : IContractService, IDisposable
                 tcs.TrySetResult(root.Clone());
             }
 
-            if (root.TryGetProperty("msg_type", out var mt) && mt.GetString() == "proposal" &&
-                root.TryGetProperty("proposal", out var propEl))
+            if (root.TryGetProperty("msg_type", out var mt))
             {
-                var proposal = ParseProposal(root, propEl);
-                if (proposal != null)
-                {
-                    var withType = proposal;
-                    if (string.IsNullOrEmpty(proposal.ContractType) &&
-                        !string.IsNullOrEmpty(proposal.SubscriptionId) &&
-                        _subIdToContractType.TryGetValue(proposal.SubscriptionId, out var ct))
-                    {
-                        withType = proposal with { ContractType = ct };
-                    }
-                    ProposalUpdated?.Invoke(this, withType);
-                }
-            }
+                var msgType = mt.GetString();
 
-            if (root.TryGetProperty("msg_type", out var mt2) && mt2.GetString() == "proposal_open_contract" &&
-                root.TryGetProperty("proposal_open_contract", out var pocEl))
-            {
-                var update = ParseOpenContractUpdate(root, pocEl);
-                if (update != null)
-                    OpenContractUpdated?.Invoke(this, update);
+                if (msgType == "proposal" &&
+                    root.TryGetProperty("proposal", out var propEl))
+                {
+                    var proposal = ParseProposal(root, propEl);
+                    if (proposal != null)
+                    {
+                        var withType = proposal;
+                        if (string.IsNullOrEmpty(proposal.ContractType) &&
+                            !string.IsNullOrEmpty(proposal.SubscriptionId) &&
+                            _subIdToContractType.TryGetValue(proposal.SubscriptionId, out var ct))
+                        {
+                            withType = proposal with { ContractType = ct };
+                        }
+                        ProposalUpdated?.Invoke(this, withType);
+                    }
+                }
+
+                if (msgType == "proposal_open_contract" &&
+                    root.TryGetProperty("proposal_open_contract", out var pocEl))
+                {
+                    var update = ParseOpenContractUpdate(root, pocEl);
+                    if (update != null)
+                        OpenContractUpdated?.Invoke(this, update);
+                }
             }
         }
     }

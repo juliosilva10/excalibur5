@@ -41,10 +41,17 @@ public partial class MainWindow : Window
 
     private async void MarketTab_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is Button btn && btn.Tag is MarketTabViewModel tab &&
-            DataContext is MainViewModel vm)
+        try
         {
-            await vm.Markets.SelectTabAsync(tab);
+            if (sender is Button btn && btn.Tag is MarketTabViewModel tab &&
+                DataContext is MainViewModel vm)
+            {
+                await vm.Markets.SelectTabAsync(tab);
+            }
+        }
+        catch (Exception ex)
+        {
+            Excalibur5.Services.AppLogger.Warn("MainWindow", $"MarketTab_Click error: {ex.Message}");
         }
     }
 
