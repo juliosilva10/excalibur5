@@ -67,8 +67,8 @@ public partial class MarketsViewModel : ObservableObject, IDisposable
         await _tickService.UnsubscribeAllAsync();
         foreach (var tab in Tabs)
         {
-            tab.IsSubscribed = false;
-            tab.IsSelected   = false;
+            tab.StopWatchdogExternal();
+            tab.IsSelected = false;
         }
         SelectedTab = null;
     }

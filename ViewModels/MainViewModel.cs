@@ -96,7 +96,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             }
             if (e.PropertyName == nameof(Markets.IsMarketsVisible) || e.PropertyName == nameof(Markets.SelectedTab))
             {
-                if (!_restoringState)
+                if (!_restoringState && !_disconnecting)
                     SaveUiState();
                 WatchContractPanelChanges();
                 Strategy.SetActiveMarketTab(Markets.SelectedTab);
@@ -113,7 +113,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 Performance.IsPerformanceVisible = false;
             }
             if (e.PropertyName == nameof(Log.IsLogVisible))
-                SaveUiState();
+            {
+                if (!_disconnecting)
+                    SaveUiState();
+            }
         };
         Strategy.PropertyChanged += (_, e) =>
         {
@@ -288,6 +291,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     private async Task DisconnectAsync()
     {
+        _disconnecting = true;
         _timer.Stop();
         ToggleConnectionCommand.NotifyCanExecuteChanged();
         AppLogger.Info(Src, "DisconnectAsync called");
@@ -310,6 +314,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             Uptime        = "00:00:00";
             _uptimeTimer.Stop();
             _uptimeWatch.Reset();
+            _disconnecting = false;
             ToggleConnectionCommand.NotifyCanExecuteChanged();
             AppLogger.Info(Src, "Disconnected — UI state cleared");
         }
@@ -452,6 +457,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     private ContractPanelViewModel? _watchedPanel;
     private bool _restoringState;
+    private bool _disconnecting;
 
     private void WatchContractPanelChanges()
     {
@@ -485,7 +491,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     private void OnContractPanelChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (_restoringState) return;
+        if (_restoringState || _disconnecting) return;
         if (e.PropertyName is nameof(ContractPanelViewModel.DurationText)
             or nameof(ContractPanelViewModel.DurationUnit)
             or nameof(ContractPanelViewModel.StakeText)
