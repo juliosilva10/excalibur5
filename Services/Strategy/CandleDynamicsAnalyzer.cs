@@ -215,6 +215,21 @@ public sealed class CandleDynamicsAnalyzer
             || averageBodyRatio < MinAverageBodyRatio;
     }
 
+    public bool AreRecentCandlesStrong(int lookback = 3)
+    {
+        if (_candles.Count < lookback + 1)
+            return false;
+
+        int start = _candles.Count - 1 - lookback;
+        for (int i = start; i < _candles.Count - 1; i++)
+        {
+            if (_candles[i].BodyRatio < MinForceBodyRatio)
+                return false;
+        }
+
+        return true;
+    }
+
     public IndicatorSignal GetVelocitySignal()
     {
         if (_candles.Count < MinCandlesForAnalysis || _velocityP75 <= 0)

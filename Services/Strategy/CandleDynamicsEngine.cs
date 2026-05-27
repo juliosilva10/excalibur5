@@ -163,6 +163,12 @@ public sealed class CandleDynamicsEngine
             return;
         }
 
+        if (!_analyzer.AreRecentCandlesStrong())
+        {
+            AppLogger.Info(Src, "Signal suppressed: previous candles lack strength");
+            return;
+        }
+
         var streakSignal = _analyzer.GetStreakSignal(_minStreak);
         var transitionSignal = _analyzer.GetTransitionSignal();
         var velocitySignal = _analyzer.GetVelocitySignal();
