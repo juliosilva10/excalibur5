@@ -176,7 +176,7 @@ public partial class PerformanceViewModel : ObservableObject
 
     private void UpdateLargestStake(TradeHistoryItem trade)
     {
-        if (LargestStake == null || trade.Stake > LargestStake.Trade.Stake || trade.ContractId == LargestStake.Trade.ContractId)
+        if (LargestStake == null || trade.Stake > LargestStake.Trade.Stake)
         {
             _tickSnapshots.TryGetValue(trade.ContractId, out var snapshot);
             _candleSnapshots.TryGetValue(trade.ContractId, out var candleSnap);
@@ -199,28 +199,46 @@ public partial class PerformanceViewModel : ObservableObject
         {
             _currentLossStreak.Add(trade.Stake);
         }
-
-        if (!lost || _currentLossStreak.Count > (LongestLossStreak?.Length ?? 0))
+        else
         {
-            if (_currentLossStreak.Count > (LongestLossStreak?.Length ?? 0))
+            // Se acabou uma streak, salva se for a maior
+            if (_currentLossStreak.Count > 0)
             {
-                _tickSnapshots.TryGetValue(trade.ContractId, out var tickSnap);
-                _candleSnapshots.TryGetValue(trade.ContractId, out var candleSnap);
-                var candleWithPrices = AddTradeMarkers(candleSnap, trade);
-                LongestLossStreak = new LossStreakInfo
+                if (_currentLossStreak.Count > (LongestLossStreak?.Length ?? 0))
                 {
-                    Length = _currentLossStreak.Count,
-                    Stakes = new List<decimal>(_currentLossStreak),
-                    TotalLost = _currentLossStreak.Sum(),
-                    TickSnapshot = tickSnap,
-                    CandleSnapshot = candleWithPrices
-                };
-                _longestLossStreakContractId = trade.ContractId;
+                    _tickSnapshots.TryGetValue(trade.ContractId, out var tickSnap);
+                    _candleSnapshots.TryGetValue(trade.ContractId, out var candleSnap);
+                    var candleWithPrices = AddTradeMarkers(candleSnap, trade);
+                    LongestLossStreak = new LossStreakInfo
+                    {
+                        Length = _currentLossStreak.Count,
+                        Stakes = new List<decimal>(_currentLossStreak),
+                        TotalLost = _currentLossStreak.Sum(),
+                        TickSnapshot = tickSnap,
+                        CandleSnapshot = candleWithPrices
+                    };
+                    _longestLossStreakContractId = trade.ContractId;
+                }
+                _currentLossStreak.Clear();
             }
         }
 
-        if (!lost)
-            _currentLossStreak.Clear();
+        // Atualiza a streak atual mesmo se não for a maior
+        if (lost && _currentLossStreak.Count > (LongestLossStreak?.Length ?? 0))
+        {
+            _tickSnapshots.TryGetValue(trade.ContractId, out var tickSnap);
+            _candleSnapshots.TryGetValue(trade.ContractId, out var candleSnap);
+            var candleWithPrices = AddTradeMarkers(candleSnap, trade);
+            LongestLossStreak = new LossStreakInfo
+            {
+                Length = _currentLossStreak.Count,
+                Stakes = new List<decimal>(_currentLossStreak),
+                TotalLost = _currentLossStreak.Sum(),
+                TickSnapshot = tickSnap,
+                CandleSnapshot = candleWithPrices
+            };
+            _longestLossStreakContractId = trade.ContractId;
+        }
     }
 
     private void RefreshLossStreakSnapshot(TradeHistoryItem trade)

@@ -99,11 +99,74 @@ public partial class PerformancePanelView : UserControl
         if (candleSnapshot != null && candleSnapshot.Candles.Count >= 2)
         {
             DrawCandles(canvas, candleSnapshot);
+            DrawLegend(canvas);
             return;
         }
 
         if (tickSnapshot != null && tickSnapshot.Values.Count >= 2)
+        {
             DrawPolyline(canvas, tickSnapshot);
+            DrawLegend(canvas);
+        }
+    }
+
+    private static void DrawLegend(Canvas canvas)
+    {
+        // ── Legenda ──
+        var legendPanel = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(0, 2, 2, 0)
+        };
+
+        // Entrada (bolinha azul)
+        var entryLegend = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 10, 0) };
+        var entryCircle = new Ellipse
+        {
+            Width = 6,
+            Height = 6,
+            Fill = new SolidColorBrush(Color.FromRgb(0x00, 0x50, 0xFF)),
+            Stroke = Brushes.White,
+            StrokeThickness = 0.5
+        };
+        var entryText = new TextBlock
+        {
+            Text = "Entrada",
+            Foreground = new SolidColorBrush(Color.FromRgb(0xe0, 0xee, 0xf8)),
+            FontSize = 9,
+            Margin = new Thickness(4, 0, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        entryLegend.Children.Add(entryCircle);
+        entryLegend.Children.Add(entryText);
+
+        // Saída (bolinha amarela)
+        var exitLegend = new StackPanel { Orientation = Orientation.Horizontal };
+        var exitCircle = new Ellipse
+        {
+            Width = 6,
+            Height = 6,
+            Fill = new SolidColorBrush(Color.FromRgb(0xFF, 0xD7, 0x00)),
+            Stroke = Brushes.White,
+            StrokeThickness = 0.5
+        };
+        var exitText = new TextBlock
+        {
+            Text = "Saída",
+            Foreground = new SolidColorBrush(Color.FromRgb(0xe0, 0xee, 0xf8)),
+            FontSize = 9,
+            Margin = new Thickness(4, 0, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        exitLegend.Children.Add(exitCircle);
+        exitLegend.Children.Add(exitText);
+
+        legendPanel.Children.Add(entryLegend);
+        legendPanel.Children.Add(exitLegend);
+
+        canvas.Children.Add(legendPanel);
     }
 
     private static void DrawCandles(Canvas canvas, CandleSnapshot snapshot)
@@ -241,35 +304,32 @@ public partial class PerformancePanelView : UserControl
         if (!snapshot.EntryPrice.HasValue && !snapshot.ExitPrice.HasValue)
             return;
 
-        // ── Indicador de ENTRADA (compra) — triângulo verde apontando pra cima ──
+        // ── Indicador de ENTRADA (compra) — bolinha azul ──
         if (snapshot.EntryPrice.HasValue)
         {
             double entryPrice = (double)snapshot.EntryPrice.Value;
             double entryY = padding + drawHeight - ((entryPrice - min) / range) * drawHeight;
             double entryX = GetMarkerX(snapshot.EntryIndex, snapshot.HighlightIndex, candleCount, padding, drawWidth);
 
-            // Pequeno triângulo ▲
-            var entryTriangle = new Polygon
+            // Bolinha azul
+            var entryCircle = new Ellipse
             {
-                Points = new PointCollection
-                {
-                    new(entryX, entryY - 5),
-                    new(entryX - 4, entryY + 3),
-                    new(entryX + 4, entryY + 3)
-                },
-                Fill = new SolidColorBrush(Color.FromRgb(0x34, 0xC7, 0x59)), // verde
+                Width = 8,
+                Height = 8,
+                Fill = new SolidColorBrush(Color.FromRgb(0x00, 0x50, 0xFF)), // azul
                 Stroke = Brushes.White,
-                StrokeThickness = 0.5,
-                ToolTip = $"Entrada: {snapshot.EntryPrice.Value}"
+                StrokeThickness = 1
             };
-            canvas.Children.Add(entryTriangle);
+            Canvas.SetLeft(entryCircle, entryX - 4);
+            Canvas.SetTop(entryCircle, entryY - 4);
+            canvas.Children.Add(entryCircle);
 
             // Linha tracejada horizontal no preço de entrada
             var entryLine = new Line
             {
                 X1 = padding, X2 = padding + drawWidth,
                 Y1 = entryY, Y2 = entryY,
-                Stroke = new SolidColorBrush(Color.FromArgb(0x88, 0x34, 0xC7, 0x59)),
+                Stroke = new SolidColorBrush(Color.FromArgb(0x88, 0x00, 0x50, 0xFF)),
                 StrokeThickness = 0.8,
                 StrokeDashArray = new DoubleCollection { 3, 3 }
             };
@@ -277,35 +337,32 @@ public partial class PerformancePanelView : UserControl
             canvas.Children.Add(CreateVerticalMarkerLine(padding, drawHeight, entryX, entryLine.Stroke));
         }
 
-        // ── Indicador de SAÍDA (venda) — triângulo vermelho apontando pra baixo ──
+        // ── Indicador de SAÍDA (venda) — bolinha amarela ──
         if (snapshot.ExitPrice.HasValue)
         {
             double exitPrice = (double)snapshot.ExitPrice.Value;
             double exitY = padding + drawHeight - ((exitPrice - min) / range) * drawHeight;
             double exitX = GetMarkerX(snapshot.ExitIndex, snapshot.HighlightIndex, candleCount, padding, drawWidth);
 
-            // Pequeno triângulo ▼
-            var exitTriangle = new Polygon
+            // Bolinha amarela
+            var exitCircle = new Ellipse
             {
-                Points = new PointCollection
-                {
-                    new(exitX, exitY + 5),
-                    new(exitX - 4, exitY - 3),
-                    new(exitX + 4, exitY - 3)
-                },
-                Fill = new SolidColorBrush(Color.FromRgb(0xFF, 0x6B, 0x6B)), // vermelho
+                Width = 8,
+                Height = 8,
+                Fill = new SolidColorBrush(Color.FromRgb(0xFF, 0xD7, 0x00)), // amarelo
                 Stroke = Brushes.White,
-                StrokeThickness = 0.5,
-                ToolTip = $"Saída: {snapshot.ExitPrice.Value}"
+                StrokeThickness = 1
             };
-            canvas.Children.Add(exitTriangle);
+            Canvas.SetLeft(exitCircle, exitX - 4);
+            Canvas.SetTop(exitCircle, exitY - 4);
+            canvas.Children.Add(exitCircle);
 
             // Linha tracejada horizontal no preço de saída
             var exitLine = new Line
             {
                 X1 = padding, X2 = padding + drawWidth,
                 Y1 = exitY, Y2 = exitY,
-                Stroke = new SolidColorBrush(Color.FromArgb(0x88, 0xFF, 0x6B, 0x6B)),
+                Stroke = new SolidColorBrush(Color.FromArgb(0x88, 0xFF, 0xD7, 0x00)),
                 StrokeThickness = 0.8,
                 StrokeDashArray = new DoubleCollection { 3, 3 }
             };
