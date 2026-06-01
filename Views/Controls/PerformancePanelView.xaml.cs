@@ -10,12 +10,22 @@ namespace Excalibur5.Views.Controls;
 
 public partial class PerformancePanelView : UserControl
 {
+    private const double ChartPadding = 6;
+    private const double EntryExitLineThickness = 1.1;
+    private const double EntryExitDashLength = 4;
+    private const double EntryExitDashGap = 3;
+    private const double EntryArrowLength = 18;
+    private const double EntryArrowHeadSize = 5;
+
     private static readonly SolidColorBrush TickBullish = new(Color.FromRgb(0x00, 0xBC, 0xD4));
     private static readonly SolidColorBrush TickBearish = new(Color.FromRgb(0xFF, 0x98, 0x00));
     private static readonly SolidColorBrush CandleBullish = new(Color.FromRgb(0x34, 0xC7, 0x59));
     private static readonly SolidColorBrush CandleBearish = new(Color.FromRgb(0xFF, 0x6B, 0x6B));
     private static readonly SolidColorBrush HighlightBrush = new(Color.FromRgb(0xF0, 0xC0, 0x00));
     private static readonly SolidColorBrush CyanBrush = new(Color.FromRgb(0x00, 0xF0, 0xFF));
+    private static readonly SolidColorBrush EntryGuideBrush = new(Color.FromArgb(0xA8, 0x00, 0x58, 0xFF));
+    private static readonly SolidColorBrush ExitGuideBrush = new(Color.FromArgb(0xA8, 0xFF, 0xD7, 0x00));
+    private static readonly SolidColorBrush EntryArrowBrush = new(Color.FromRgb(0xFF, 0xD7, 0x00));
 
     public PerformancePanelView()
     {
@@ -99,74 +109,11 @@ public partial class PerformancePanelView : UserControl
         if (candleSnapshot != null && candleSnapshot.Candles.Count >= 2)
         {
             DrawCandles(canvas, candleSnapshot);
-            DrawLegend(canvas);
             return;
         }
 
         if (tickSnapshot != null && tickSnapshot.Values.Count >= 2)
-        {
             DrawPolyline(canvas, tickSnapshot);
-            DrawLegend(canvas);
-        }
-    }
-
-    private static void DrawLegend(Canvas canvas)
-    {
-        // ── Legenda ──
-        var legendPanel = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            HorizontalAlignment = HorizontalAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Top,
-            Margin = new Thickness(0, 2, 2, 0)
-        };
-
-        // Entrada (bolinha azul)
-        var entryLegend = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 10, 0) };
-        var entryCircle = new Ellipse
-        {
-            Width = 6,
-            Height = 6,
-            Fill = new SolidColorBrush(Color.FromRgb(0x00, 0x50, 0xFF)),
-            Stroke = Brushes.White,
-            StrokeThickness = 0.5
-        };
-        var entryText = new TextBlock
-        {
-            Text = "Entrada",
-            Foreground = new SolidColorBrush(Color.FromRgb(0xe0, 0xee, 0xf8)),
-            FontSize = 9,
-            Margin = new Thickness(4, 0, 0, 0),
-            VerticalAlignment = VerticalAlignment.Center
-        };
-        entryLegend.Children.Add(entryCircle);
-        entryLegend.Children.Add(entryText);
-
-        // Saída (bolinha amarela)
-        var exitLegend = new StackPanel { Orientation = Orientation.Horizontal };
-        var exitCircle = new Ellipse
-        {
-            Width = 6,
-            Height = 6,
-            Fill = new SolidColorBrush(Color.FromRgb(0xFF, 0xD7, 0x00)),
-            Stroke = Brushes.White,
-            StrokeThickness = 0.5
-        };
-        var exitText = new TextBlock
-        {
-            Text = "Saída",
-            Foreground = new SolidColorBrush(Color.FromRgb(0xe0, 0xee, 0xf8)),
-            FontSize = 9,
-            Margin = new Thickness(4, 0, 0, 0),
-            VerticalAlignment = VerticalAlignment.Center
-        };
-        exitLegend.Children.Add(exitCircle);
-        exitLegend.Children.Add(exitText);
-
-        legendPanel.Children.Add(entryLegend);
-        legendPanel.Children.Add(exitLegend);
-
-        canvas.Children.Add(legendPanel);
     }
 
     private static void DrawCandles(Canvas canvas, CandleSnapshot snapshot)
@@ -174,7 +121,7 @@ public partial class PerformancePanelView : UserControl
         var candles = snapshot.Candles;
         double width = canvas.ActualWidth > 0 ? canvas.ActualWidth : 200;
         double height = canvas.ActualHeight > 0 ? canvas.ActualHeight : 86;
-        double padding = 4;
+        double padding = ChartPadding;
 
         double drawWidth = width - padding * 2;
         double drawHeight = height - padding * 2;
@@ -294,9 +241,6 @@ public partial class PerformancePanelView : UserControl
         canvas.Children.Insert(0, fillPolygon);
     }
 
-    /// <summary>
-    /// Desenha marcadores visuais de entrada (compra) e saída (venda) sobre o gráfico de candles.
-    /// </summary>
     private static void DrawEntryExitMarkers(Canvas canvas, CandleSnapshot snapshot,
         double padding, double drawWidth, double drawHeight,
         double min, double range, int candleCount)
@@ -304,89 +248,90 @@ public partial class PerformancePanelView : UserControl
         if (!snapshot.EntryPrice.HasValue && !snapshot.ExitPrice.HasValue)
             return;
 
-        // ── Indicador de ENTRADA (compra) — bolinha azul ──
         if (snapshot.EntryPrice.HasValue)
         {
-            double entryPrice = (double)snapshot.EntryPrice.Value;
-            double entryY = padding + drawHeight - ((entryPrice - min) / range) * drawHeight;
-            double entryX = GetMarkerX(snapshot.EntryIndex, snapshot.HighlightIndex, candleCount, padding, drawWidth);
-
-            // Bolinha azul
-            var entryCircle = new Ellipse
-            {
-                Width = 8,
-                Height = 8,
-                Fill = new SolidColorBrush(Color.FromRgb(0x00, 0x50, 0xFF)), // azul
-                Stroke = Brushes.White,
-                StrokeThickness = 1
-            };
-            Canvas.SetLeft(entryCircle, entryX - 4);
-            Canvas.SetTop(entryCircle, entryY - 4);
-            canvas.Children.Add(entryCircle);
-
-            // Linha tracejada horizontal no preço de entrada
-            var entryLine = new Line
-            {
-                X1 = padding, X2 = padding + drawWidth,
-                Y1 = entryY, Y2 = entryY,
-                Stroke = new SolidColorBrush(Color.FromArgb(0x88, 0x00, 0x50, 0xFF)),
-                StrokeThickness = 0.8,
-                StrokeDashArray = new DoubleCollection { 3, 3 }
-            };
-            canvas.Children.Add(entryLine);
-            canvas.Children.Add(CreateVerticalMarkerLine(padding, drawHeight, entryX, entryLine.Stroke));
+            DrawPriceRegionLine(canvas, snapshot.EntryPrice.Value, padding, drawWidth, drawHeight, min, range, EntryGuideBrush);
+            DrawEntryArrow(canvas, snapshot, padding, drawWidth, drawHeight, min, range, candleCount);
         }
 
-        // ── Indicador de SAÍDA (venda) — bolinha amarela ──
         if (snapshot.ExitPrice.HasValue)
-        {
-            double exitPrice = (double)snapshot.ExitPrice.Value;
-            double exitY = padding + drawHeight - ((exitPrice - min) / range) * drawHeight;
-            double exitX = GetMarkerX(snapshot.ExitIndex, snapshot.HighlightIndex, candleCount, padding, drawWidth);
-
-            // Bolinha amarela
-            var exitCircle = new Ellipse
-            {
-                Width = 8,
-                Height = 8,
-                Fill = new SolidColorBrush(Color.FromRgb(0xFF, 0xD7, 0x00)), // amarelo
-                Stroke = Brushes.White,
-                StrokeThickness = 1
-            };
-            Canvas.SetLeft(exitCircle, exitX - 4);
-            Canvas.SetTop(exitCircle, exitY - 4);
-            canvas.Children.Add(exitCircle);
-
-            // Linha tracejada horizontal no preço de saída
-            var exitLine = new Line
-            {
-                X1 = padding, X2 = padding + drawWidth,
-                Y1 = exitY, Y2 = exitY,
-                Stroke = new SolidColorBrush(Color.FromArgb(0x88, 0xFF, 0xD7, 0x00)),
-                StrokeThickness = 0.8,
-                StrokeDashArray = new DoubleCollection { 3, 3 }
-            };
-            canvas.Children.Add(exitLine);
-            canvas.Children.Add(CreateVerticalMarkerLine(padding, drawHeight, exitX, exitLine.Stroke));
-        }
+            DrawPriceRegionLine(canvas, snapshot.ExitPrice.Value, padding, drawWidth, drawHeight, min, range, ExitGuideBrush);
     }
 
-    private static double GetMarkerX(int? index, int fallbackIndex, int count, double padding, double drawWidth)
+    private static double GetPriceY(decimal price, double padding, double drawHeight, double min, double range)
     {
-        int markerIndex = Math.Clamp(index ?? fallbackIndex, 0, Math.Max(0, count - 1));
-        double gap = drawWidth / count;
-        return padding + markerIndex * gap + gap / 2;
+        return padding + drawHeight - (((double)price - min) / range) * drawHeight;
     }
 
-    private static Line CreateVerticalMarkerLine(double padding, double drawHeight, double x, Brush brush)
+    private static void DrawPriceRegionLine(Canvas canvas, decimal price,
+        double padding, double drawWidth, double drawHeight,
+        double min, double range, Brush brush)
+    {
+        double y = GetPriceY(price, padding, drawHeight, min, range);
+        canvas.Children.Add(new Line
+        {
+            X1 = padding,
+            X2 = padding + drawWidth,
+            Y1 = y,
+            Y2 = y,
+            Stroke = brush,
+            StrokeThickness = EntryExitLineThickness,
+            StrokeDashArray = new DoubleCollection { EntryExitDashLength, EntryExitDashGap },
+            StrokeStartLineCap = PenLineCap.Round,
+            StrokeEndLineCap = PenLineCap.Round
+        });
+    }
+
+    private static void DrawEntryArrow(Canvas canvas, CandleSnapshot snapshot,
+        double padding, double drawWidth, double drawHeight,
+        double min, double range, int candleCount)
+    {
+        int index = GetMarkerIndex(snapshot.EntryIndex, snapshot.HighlightIndex, candleCount);
+        double x = GetMarkerX(index, candleCount, padding, drawWidth);
+        double yHigh = GetPriceY(snapshot.Candles[index].High, padding, drawHeight, min, range);
+        double tipY = Math.Max(padding + EntryArrowLength, yHigh - EntryArrowHeadSize);
+        double startY = Math.Max(padding, tipY - EntryArrowLength);
+
+        canvas.Children.Add(CreateEntryArrowShaft(x, startY, tipY));
+        canvas.Children.Add(CreateEntryArrowHead(x, tipY));
+    }
+
+    private static int GetMarkerIndex(int? index, int fallbackIndex, int count)
+    {
+        return Math.Clamp(index ?? fallbackIndex, 0, Math.Max(0, count - 1));
+    }
+
+    private static double GetMarkerX(int index, int count, double padding, double drawWidth)
+    {
+        double gap = drawWidth / count;
+        return padding + index * gap + gap / 2;
+    }
+
+    private static Line CreateEntryArrowShaft(double x, double startY, double tipY)
     {
         return new Line
         {
-            X1 = x, X2 = x,
-            Y1 = padding, Y2 = padding + drawHeight,
-            Stroke = brush,
-            StrokeThickness = 0.8,
-            StrokeDashArray = new DoubleCollection { 2, 3 }
+            X1 = x,
+            X2 = x,
+            Y1 = startY,
+            Y2 = tipY,
+            Stroke = EntryArrowBrush,
+            StrokeThickness = 1.4,
+            StrokeStartLineCap = PenLineCap.Round
+        };
+    }
+
+    private static Polygon CreateEntryArrowHead(double x, double tipY)
+    {
+        return new Polygon
+        {
+            Fill = EntryArrowBrush,
+            Points = new PointCollection
+            {
+                new(x - EntryArrowHeadSize, tipY - EntryArrowHeadSize),
+                new(x + EntryArrowHeadSize, tipY - EntryArrowHeadSize),
+                new(x, tipY)
+            }
         };
     }
 }

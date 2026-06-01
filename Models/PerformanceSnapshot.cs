@@ -23,6 +23,7 @@ public sealed class CandleSnapshot
 
     public int? EntryIndex { get; init; }
     public int? ExitIndex { get; init; }
+    public bool IsEntryAnchored { get; init; }
 }
 
 public sealed class BalancePoint

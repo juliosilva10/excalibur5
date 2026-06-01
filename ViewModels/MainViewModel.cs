@@ -171,7 +171,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
             History.AddBotTrade(e.BuyResult, e.ContractType, Strategy.StrategyMode, market);
             if (tab != null)
             {
-                Performance.OnTradeOpened(e.BuyResult.ContractId, market,
+                Performance.OnTradeOpened(e.BuyResult.ContractId, market, e.BuyResult.StartTime,
+                    e.EntryCandleIndex, e.EntryCandleType,
                     tab.ChartValues, tab.ChartEpochs, tab.ChartDirections,
                     tab.ChartType, tab.TickCandleValues, tab.CandleValues);
             }
@@ -483,7 +484,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         History.AddManualTrade(e.BuyResult, e.ContractType, market);
         if (tab != null)
         {
-            Performance.OnTradeOpened(e.BuyResult.ContractId, market,
+            Performance.OnTradeOpened(e.BuyResult.ContractId, market, e.BuyResult.StartTime, null, null,
                 tab.ChartValues, tab.ChartEpochs, tab.ChartDirections,
                 tab.ChartType, tab.TickCandleValues, tab.CandleValues);
         }

@@ -552,13 +552,29 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
     private void OnTimeCandleBorn(long epoch)
     {
         if (!IsRunning || IsPaused) return;
-        _executor?.OnTimeCandleBirth();
+        _executor?.OnTimeCandleBirth(GetCurrentTimeCandleIndex());
     }
 
     private void OnTickCandleBorn()
     {
         if (!IsRunning || IsPaused) return;
-        _executor?.OnTickCandleBirth();
+        _executor?.OnTickCandleBirth(GetCurrentTickCandleIndex());
+    }
+
+    private int? GetCurrentTimeCandleIndex()
+    {
+        if (_activeMarketTab == null || _activeMarketTab.CandleValues.Count == 0)
+            return null;
+
+        return _activeMarketTab.CandleValues.Count - 1;
+    }
+
+    private int? GetCurrentTickCandleIndex()
+    {
+        if (_activeMarketTab == null || _activeMarketTab.TickCandleValues.Count == 0)
+            return null;
+
+        return _activeMarketTab.TickCandleValues.Count - 1;
     }
 
     private void OnSignalGenerated(object? sender, TradeSignal signal)

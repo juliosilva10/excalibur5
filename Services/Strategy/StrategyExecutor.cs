@@ -37,6 +37,8 @@ public sealed class StrategyExecutor : IDisposable
     private TradeSignal? _pendingSignal;
     private DateTimeOffset _pendingSignalTime;
     private bool _executingPendingSignal;
+    private int? _executingEntryCandleIndex;
+    private ChartSnapshotType? _executingEntryCandleType;
 
     public StrategyStats Stats { get; } = new();
     public int ActivePositionCount => _positions.Count;
@@ -76,6 +78,8 @@ public sealed class StrategyExecutor : IDisposable
         _proposalsReady = false;
         _pendingSignal = null;
         _executingPendingSignal = false;
+        _executingEntryCandleIndex = null;
+        _executingEntryCandleType = null;
         _ = UnsubscribeBotProposalsAsync().ContinueWith(
             t => AppLogger.Warn(Src, $"Proposal unsubscribe error: {t.Exception?.InnerException?.Message}"),
             TaskContinuationOptions.OnlyOnFaulted);
@@ -373,7 +377,9 @@ public sealed class StrategyExecutor : IDisposable
                     DynamicStopLoss = -GetEffectiveStopLoss(),
                     EntryEpoch = now,
                     ExpiryEpoch = now + _config.DurationSeconds + 5,
-                    EntrySpot = _currentSpot
+                    EntrySpot = _currentSpot,
+                    EntryCandleIndex = _executingEntryCandleIndex,
+                    EntryCandleType = _executingEntryCandleType
                 };
                 lock (_positions)
                     _positions[result.ContractId] = tracked;
@@ -383,7 +389,8 @@ public sealed class StrategyExecutor : IDisposable
                 var dirLabel = signal.Direction == SignalDirection.Call ? "CALL" : "PUT";
                 TradeExecuted?.Invoke(this, $"Comprou {dirLabel} — {signal.Reason}");
                 AppLogger.Info(Src, $"Bought {dirLabel} contract {result.ContractId}, stake={stake}, entrySpot={_currentSpot}");
-                PositionOpened?.Invoke(this, new BotPositionOpened(result, contractType));
+                PositionOpened?.Invoke(this,
+                    new BotPositionOpened(result, contractType, _executingEntryCandleIndex, _executingEntryCandleType));
             }
             else
             {
@@ -434,7 +441,7 @@ public sealed class StrategyExecutor : IDisposable
                 || _config.StrategyMode is "Tick Scalper" or "Candle Dynamics");
     }
 
-    public void OnTimeCandleBirth()
+    public void OnTimeCandleBirth(int? entryCandleIndex)
     {
         if (_pendingSignal == null) return;
 
@@ -449,19 +456,30 @@ public sealed class StrategyExecutor : IDisposable
         var signal = _pendingSignal;
         _pendingSignal = null;
         _executingPendingSignal = true;
+        _executingEntryCandleIndex = entryCandleIndex;
+        _executingEntryCandleType = ChartSnapshotType.Candles;
         AppLogger.Info(Src, $"Candle birth — executing queued {signal.Direction} signal");
-        _ = HandleSignalAsync(signal).ContinueWith(_ => _executingPendingSignal = false, TaskContinuationOptions.ExecuteSynchronously);
+        _ = HandleSignalAsync(signal).ContinueWith(_ => ClearExecutingSignal(), TaskContinuationOptions.ExecuteSynchronously);
     }
 
-    public void OnTickCandleBirth()
+    public void OnTickCandleBirth(int? entryCandleIndex)
     {
         if (_pendingSignal == null) return;
 
         var signal = _pendingSignal;
         _pendingSignal = null;
         _executingPendingSignal = true;
+        _executingEntryCandleIndex = entryCandleIndex;
+        _executingEntryCandleType = ChartSnapshotType.TickCandles;
         AppLogger.Info(Src, $"Tick candle birth — executing queued {signal.Direction} signal");
-        _ = HandleSignalAsync(signal).ContinueWith(_ => _executingPendingSignal = false, TaskContinuationOptions.ExecuteSynchronously);
+        _ = HandleSignalAsync(signal).ContinueWith(_ => ClearExecutingSignal(), TaskContinuationOptions.ExecuteSynchronously);
+    }
+
+    private void ClearExecutingSignal()
+    {
+        _executingPendingSignal = false;
+        _executingEntryCandleIndex = null;
+        _executingEntryCandleType = null;
     }
 
     private bool IsExpiryBoundContract()
@@ -761,9 +779,15 @@ public sealed class StrategyExecutor : IDisposable
         public long ExpiryEpoch { get; set; }
         public bool IsSelling { get; set; }
         public decimal EntrySpot { get; set; }
+        public int? EntryCandleIndex { get; set; }
+        public ChartSnapshotType? EntryCandleType { get; set; }
         public bool IsResolvedLocally { get; set; }
     }
 }
 
-public sealed record BotPositionOpened(BuyResponse BuyResult, string ContractType);
+public sealed record BotPositionOpened(
+    BuyResponse BuyResult,
+    string ContractType,
+    int? EntryCandleIndex,
+    ChartSnapshotType? EntryCandleType);
 public sealed record TradeCompleted(long ContractId, decimal Profit, bool Won, long SellTime = 0);
