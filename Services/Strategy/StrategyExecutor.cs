@@ -10,10 +10,13 @@ public sealed class StrategyExecutor : IDisposable
     private const string Src = "StrategyExecutor";
     private const string BotCallKey = "BOT_CALL";
     private const string BotPutKey = "BOT_PUT";
+    private const int UnconfirmedBuyLookbackSeconds = 30;
+    private static readonly int[] UnconfirmedBuyRecoveryDelays = [1000, 3000, 7000, 15000, 30000];
 
     private readonly IContractService _contractService;
     private readonly IStrategyEngine _engine;
     private readonly Dictionary<long, TrackedPosition> _positions = new();
+    private readonly HashSet<long> _recoveredUnconfirmedContracts = new();
     private readonly SemaphoreSlim _proposalLock = new(1, 1);
     private readonly SemaphoreSlim _signalLock = new(1, 1);
     private CancellationTokenSource _proposalCts = new();
@@ -291,6 +294,10 @@ public sealed class StrategyExecutor : IDisposable
             return;
         }
 
+        string contractType = string.Empty;
+        decimal stake = 0m;
+        long buyRequestedAt = 0;
+
         try
         {
             await ResolveExpiredPositionsBeforeBuyAsync();
@@ -313,11 +320,12 @@ public sealed class StrategyExecutor : IDisposable
                 return;
             }
 
-            string contractType = signal.Direction == SignalDirection.Call
+            contractType = signal.Direction == SignalDirection.Call
                 ? _config.CallContractType
                 : _config.PutContractType;
 
-            var stake = GetCurrentStake();
+            stake = GetCurrentStake();
+            buyRequestedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             BuyResponse result;
 
             if (CanUseSubscribedProposal(signal.Direction, stake))
@@ -400,6 +408,9 @@ public sealed class StrategyExecutor : IDisposable
         }
         catch (Exception ex)
         {
+            if (await TryRecoverUnconfirmedBuyAsync(signal, contractType, stake, buyRequestedAt))
+                return;
+
             AppLogger.Warn(Src, $"Buy failed: {ex.Message}");
             TradeExecuted?.Invoke(this, $"Erro: {ex.Message}");
         }
@@ -407,6 +418,121 @@ public sealed class StrategyExecutor : IDisposable
         {
             _signalLock.Release();
         }
+    }
+
+    private async Task<bool> TryRecoverUnconfirmedBuyAsync(
+        TradeSignal signal,
+        string contractType,
+        decimal stake,
+        long requestedAt)
+    {
+        if (stake <= 0 || string.IsNullOrWhiteSpace(contractType) || requestedAt <= 0)
+            return false;
+
+        AppLogger.Warn(Src, $"Buy response failed after order send; reconciling stake={stake}");
+        foreach (var delay in UnconfirmedBuyRecoveryDelays)
+        {
+            await Task.Delay(delay);
+            var entry = await FindUnconfirmedBuyAsync(contractType, stake, requestedAt);
+            if (entry == null) continue;
+
+            RecoverSettledBuy(entry, signal, contractType, stake);
+            return true;
+        }
+
+        return false;
+    }
+
+    private async Task<ProfitTableEntry?> FindUnconfirmedBuyAsync(
+        string contractType,
+        decimal stake,
+        long requestedAt)
+    {
+        var entries = await _contractService.GetProfitTableAsync(limit: 20);
+        var match = entries
+            .Where(entry => IsUnconfirmedBuyMatch(entry, contractType, stake, requestedAt))
+            .OrderByDescending(entry => entry.PurchaseTime)
+            .FirstOrDefault();
+
+        return match != null && MarkRecoveredUnconfirmedContract(match.ContractId)
+            ? match
+            : null;
+    }
+
+    private bool IsUnconfirmedBuyMatch(
+        ProfitTableEntry entry,
+        string contractType,
+        decimal stake,
+        long requestedAt)
+    {
+        return entry.ContractId > 0
+            && entry.PurchaseTime >= requestedAt - UnconfirmedBuyLookbackSeconds
+            && IsSameContractType(entry.ContractType, contractType)
+            && IsSameStake(entry.BuyPrice, stake);
+    }
+
+    private bool MarkRecoveredUnconfirmedContract(long contractId)
+    {
+        lock (_positions)
+        {
+            if (_positions.ContainsKey(contractId)) return false;
+            return _recoveredUnconfirmedContracts.Add(contractId);
+        }
+    }
+
+    private void RecoverSettledBuy(
+        ProfitTableEntry entry,
+        TradeSignal signal,
+        string contractType,
+        decimal fallbackStake)
+    {
+        var buy = CreateRecoveredBuyResponse(entry, fallbackStake);
+        var recovered = CreateRecoveredPosition(entry, signal, buy.BuyPrice);
+        bool won = entry.ProfitLoss >= 0;
+
+        PositionOpened?.Invoke(this, new BotPositionOpened(buy, contractType, null, null));
+        _engine.RecordTradeResult(signal.ContributingIndicators, won);
+        RecordResult(recovered, entry.ProfitLoss);
+        TradeCompleted?.Invoke(this, new TradeCompleted(entry.ContractId, entry.ProfitLoss, won, entry.SellTime));
+        AppLogger.Warn(Src, $"Recovered unconfirmed buy {entry.ContractId}: profit={entry.ProfitLoss:F2}");
+    }
+
+    private static BuyResponse CreateRecoveredBuyResponse(ProfitTableEntry entry, decimal fallbackStake)
+    {
+        return new BuyResponse
+        {
+            ContractId = entry.ContractId,
+            BuyPrice = entry.BuyPrice > 0 ? entry.BuyPrice : fallbackStake,
+            StartTime = entry.PurchaseTime
+        };
+    }
+
+    private static TrackedPosition CreateRecoveredPosition(
+        ProfitTableEntry entry,
+        TradeSignal signal,
+        decimal stake)
+    {
+        return new TrackedPosition
+        {
+            ContractId = entry.ContractId,
+            Direction = signal.Direction,
+            BuyPrice = stake,
+            Signal = signal,
+            EntryEpoch = entry.PurchaseTime,
+            ExpiryEpoch = entry.SellTime,
+        };
+    }
+
+    private static bool IsSameStake(decimal actual, decimal expected)
+    {
+        return Math.Abs(actual - expected) <= 0.01m;
+    }
+
+    private static bool IsSameContractType(string actual, string expected)
+    {
+        return actual.Equals(expected, StringComparison.OrdinalIgnoreCase)
+            || ContractTypeFormatter.ToDisplayLabel(actual)
+                .Equals(ContractTypeFormatter.ToDisplayLabel(expected), StringComparison.OrdinalIgnoreCase);
     }
 
     private bool CanUseSubscribedProposal(SignalDirection direction, decimal stake)
