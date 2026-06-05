@@ -20,9 +20,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private readonly DispatcherTimer         _timer;
     private readonly DispatcherTimer         _uptimeTimer;
     private readonly System.Diagnostics.Stopwatch _uptimeWatch = new();
+    private readonly HashSet<long> _currentSessionContracts = new();
     private volatile string _token = string.Empty;
     private int _timerBusy; // 0 = idle, 1 = busy — use Interlocked for atomic check-and-set
     private TimeSpan _serverOffset; // difference between server UTC and local UTC
+    private bool _isBotSessionActive;
 
     [ObservableProperty] private bool    _isConnected;
     [ObservableProperty] private bool    _isConnecting;
@@ -120,8 +122,17 @@ public partial class MainViewModel : ObservableObject, IDisposable
         };
         Strategy.PropertyChanged += (_, e) =>
         {
+            if (e.PropertyName == nameof(Strategy.IsRunning))
+            {
+                if (Strategy.IsRunning)
+                    StartBotSession();
+                else
+                    _isBotSessionActive = false;
+            }
+
             if (e.PropertyName == nameof(Strategy.IsBotVisible) && Strategy.IsBotVisible)
             {
+                Markets.IsMarketsVisible = false;
                 Log.IsLogVisible = false;
                 Recover.IsRecoverVisible = false;
                 History.IsHistoryVisible = false;
@@ -132,6 +143,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             if (e.PropertyName == nameof(Recover.IsRecoverVisible) && Recover.IsRecoverVisible)
             {
+                Markets.IsMarketsVisible = false;
                 Log.IsLogVisible = false;
                 Strategy.IsBotVisible = false;
                 History.IsHistoryVisible = false;
@@ -142,6 +154,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             if (e.PropertyName == nameof(History.IsHistoryVisible) && History.IsHistoryVisible)
             {
+                Markets.IsMarketsVisible = false;
                 Log.IsLogVisible = false;
                 Strategy.IsBotVisible = false;
                 Recover.IsRecoverVisible = false;
@@ -152,6 +165,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             if (e.PropertyName == nameof(Performance.IsPerformanceVisible) && Performance.IsPerformanceVisible)
             {
+                Markets.IsMarketsVisible = false;
                 Log.IsLogVisible = false;
                 Strategy.IsBotVisible = false;
                 Recover.IsRecoverVisible = false;
@@ -168,6 +182,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             var tab = Markets.SelectedTab;
             var market = tab?.DisplayName ?? "";
+            _currentSessionContracts.Add(e.BuyResult.ContractId);
             History.AddBotTrade(e.BuyResult, e.ContractType, Strategy.StrategyMode, market);
             if (tab != null)
             {
@@ -180,6 +195,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
         Strategy.BotTradeCompleted += (_, e) =>
         {
+            if (!_currentSessionContracts.Contains(e.ContractId)) return;
+
             var tab = Markets.SelectedTab;
             if (tab != null)
                 Performance.OnTradeClosed(e.ContractId, tab.ChartType, tab.TickCandleValues, tab.CandleValues);
@@ -207,6 +224,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     private void OnTradeSettledForPerformance(object? sender, TradeHistoryItem trade)
     {
+        if (!_currentSessionContracts.Contains(trade.ContractId)) return;
+
         var tab = Markets.SelectedTab;
         if (tab != null && IsTradeFromSelectedMarket(trade, tab))
             Performance.OnTradeClosed(trade.ContractId, tab.ChartType, tab.TickCandleValues, tab.CandleValues);
@@ -349,6 +368,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             Balance  = e.Balance;
             Currency = e.Currency;
+            if (!_isBotSessionActive) return;
 
             var tab = Markets.SelectedTab;
             if (tab != null)
@@ -479,8 +499,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     private void OnManualTradeOpened(object? sender, ManualTradeOpened e)
     {
+        if (!_isBotSessionActive) return;
+
         var tab = Markets.SelectedTab;
         var market = tab?.DisplayName ?? "";
+        _currentSessionContracts.Add(e.BuyResult.ContractId);
         History.AddManualTrade(e.BuyResult, e.ContractType, market);
         if (tab != null)
         {
@@ -488,6 +511,15 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 tab.ChartValues, tab.ChartEpochs, tab.ChartDirections,
                 tab.ChartType, tab.TickCandleValues, tab.CandleValues);
         }
+    }
+
+    private void StartBotSession()
+    {
+        _isBotSessionActive = true;
+        _currentSessionContracts.Clear();
+        History.ResetSession();
+        Performance.ResetSession(Balance);
+        AppLogger.Info(Src, "Bot session metrics reset");
     }
 
     private void OnContractPanelChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)

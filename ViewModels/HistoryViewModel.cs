@@ -78,102 +78,20 @@ public partial class HistoryViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void ToggleHistory()
     {
-        IsHistoryVisible = !IsHistoryVisible;
-        if (IsHistoryVisible && Trades.Count == 0)
-            _ = LoadFromApiAsync();
+        IsHistoryVisible = true;
     }
 
     [RelayCommand]
-    private async Task Refresh()
+    private void Refresh()
     {
-        await LoadFromApiAsync();
+        AppLogger.Info(Src, "History refresh ignored: showing current bot session only");
     }
 
-    public async Task LoadFromApiAsync()
+    public void ResetSession()
     {
-        if (IsLoading) return;
-        IsLoading = true;
-
-        try
-        {
-            var entries = await _contractService.GetProfitTableAsync(100);
-            Application.Current?.Dispatcher?.Invoke(() =>
-            {
-                Trades.Clear();
-                foreach (var e in entries)
-                {
-                    Trades.Add(new TradeHistoryItem
-                    {
-                        Operacao = "Manual",
-                        Estrategia = "",
-                        Tipo = ContractTypeFormatter.ToDisplayLabel(e.ContractType),
-                        ReferenceNumber = e.ContractId.ToString(),
-                        PurchaseTime = DateTimeOffset.FromUnixTimeSeconds(e.PurchaseTime).LocalDateTime,
-                        Stake = e.BuyPrice,
-                        SellTime = e.SellTime > 0 ? DateTimeOffset.FromUnixTimeSeconds(e.SellTime).LocalDateTime : null,
-                        EntrySpot = e.EntrySpot,
-                        ExitSpot = e.ExitSpot,
-                        ContractValue = e.SellPrice > 0 ? e.SellPrice : null,
-                        ProfitLoss = e.ProfitLoss,
-                        ContractId = e.ContractId
-                    });
-                }
-            });
-            AppLogger.Info(Src, $"Loaded {entries.Count} trades from API");
-
-            _ = FetchSpotsAsync();
-        }
-        catch (Exception ex)
-        {
-            AppLogger.Error(Src, $"Failed to load profit table: {ex.Message}");
-        }
-        finally
-        {
-            IsLoading = false;
-        }
-    }
-
-    private async Task FetchSpotsAsync()
-    {
-        var items = Trades.Where(t => t.ContractId > 0).ToList();
-        foreach (var item in items)
-        {
-            try
-            {
-                var status = await _contractService.GetContractStatusAsync(item.ContractId);
-                if (status == null) continue;
-
-                Application.Current?.Dispatcher?.Invoke(() =>
-                {
-                    var idx = Trades.IndexOf(item);
-                    if (idx < 0) return;
-
-                    var entryTime = status.EntryTickTime > 0
-                        ? DateTimeOffset.FromUnixTimeSeconds(status.EntryTickTime).LocalDateTime
-                        : item.PurchaseTime;
-
-                    Trades[idx] = new TradeHistoryItem
-                    {
-                        Operacao = item.Operacao,
-                        Estrategia = item.Estrategia,
-                        Market = item.Market,
-                        Tipo = item.Tipo,
-                        ReferenceNumber = item.ReferenceNumber,
-                        PurchaseTime = entryTime,
-                        Stake = item.Stake,
-                        SellTime = status.SellTime > 0
-                            ? DateTimeOffset.FromUnixTimeSeconds(status.SellTime).LocalDateTime
-                            : item.SellTime,
-                        EntrySpot = !string.IsNullOrEmpty(status.EntrySpotRaw) ? status.EntrySpotRaw : item.EntrySpot,
-                        ExitSpot = !string.IsNullOrEmpty(status.ExitSpotRaw) ? status.ExitSpotRaw : item.ExitSpot,
-                        ContractValue = item.ContractValue,
-                        ProfitLoss = item.ProfitLoss,
-                        ContractId = item.ContractId
-                    };
-                });
-            }
-            catch { }
-        }
+        IsLoading = false;
+        _settledNotifications.Clear();
+        Trades.Clear();
     }
 
     public void AddBotTrade(BuyResponse buy, string contractType, string strategyName, string market)

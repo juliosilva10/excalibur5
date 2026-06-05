@@ -33,10 +33,20 @@ public partial class PerformanceViewModel : ObservableObject
     [RelayCommand]
     private void TogglePerformance()
     {
-        IsPerformanceVisible = !IsPerformanceVisible;
+        IsPerformanceVisible = true;
     }
 
     private sealed record CandleEntryAnchor(int Index, ChartSnapshotType Type);
+
+    public void ResetSession(decimal startingBalance)
+    {
+        TotalOperations = 0;
+        LargestStake = null;
+        MaxDrawdown = null;
+        LongestLossStreak = null;
+        StrategyStats.Clear();
+        ClearSessionState(startingBalance);
+    }
 
     public void OnTradeOpened(long contractId, string market, long entryEpoch,
                               int? entryCandleIndex, ChartSnapshotType? entryCandleType, IList<decimal> chartValues,
@@ -153,6 +163,23 @@ public partial class PerformanceViewModel : ObservableObject
         return index.HasValue && type.HasValue
             ? new CandleEntryAnchor(index.Value, type.Value)
             : null;
+    }
+
+    private void ClearSessionState(decimal startingBalance)
+    {
+        _balanceHistory.Clear();
+        _tickSnapshots.Clear();
+        _candleSnapshots.Clear();
+        _entryCandleAnchors.Clear();
+        _settledTrades.Clear();
+        _currentLossStreak.Clear();
+        _peakBalance = startingBalance;
+        _maxDrawdownValue = 0;
+        _lastTickSnapshot = null;
+        _lastCandleSnapshot = null;
+        _lastCompletedTrade = null;
+        _longestLossStreakContractId = 0;
+        _balanceHistory.Add(new BalancePoint { Time = DateTime.Now, Balance = startingBalance });
     }
 
     private static CandleSnapshot? CaptureCandleSnapshot(

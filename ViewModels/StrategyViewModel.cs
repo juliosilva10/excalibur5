@@ -263,7 +263,7 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void ToggleBot()
     {
-        IsBotVisible = !IsBotVisible;
+        IsBotVisible = true;
     }
 
     [RelayCommand]

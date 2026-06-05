@@ -46,7 +46,7 @@ public partial class RecoverViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void ToggleRecover()
     {
-        IsRecoverVisible = !IsRecoverVisible;
+        IsRecoverVisible = true;
     }
 
     public decimal CalculateStake(int currentLevel)

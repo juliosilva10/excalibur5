@@ -31,7 +31,7 @@
             <!-- Markets button -->
             <Button Grid.Row="0"
                     Command="{Binding Markets.ToggleMarketsCommand}"
-                    ToolTip="Markets"
+                    ToolTip="Mercados Disponíveis"
                     Margin="8,12,8,0"
                     Width="40" Height="40"
                     Cursor="Hand"
@@ -145,7 +145,7 @@
 
                 <!-- Recover button -->
                 <Button Command="{Binding Recover.ToggleRecoverCommand}"
-                        ToolTip="Recover (Martingale)"
+                        ToolTip="Gerenciamento de Recuperação"
                         Margin="8,0,8,0"
                         Width="40" Height="40"
                         Cursor="Hand"
@@ -246,7 +246,7 @@
 
                 <!-- Bot button -->
                 <Button Command="{Binding Strategy.ToggleBotCommand}"
-                        ToolTip="Bot (Estratégia Automatizada)"
+                        ToolTip="Estratégia Automatizada"
                         Margin="8,0,8,0"
                         Width="40" Height="40"
                         Cursor="Hand"
@@ -457,7 +457,7 @@
 
                 <!-- Performance button -->
                 <Button Command="{Binding Performance.TogglePerformanceCommand}"
-                        ToolTip="Performance"
+                        ToolTip="Performance de Operações"
                         Margin="8,0,8,0"
                         Width="40" Height="40"
                         Cursor="Hand"
