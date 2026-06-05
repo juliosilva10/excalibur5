@@ -136,7 +136,26 @@ public sealed class ContractService : IContractService, IDisposable
         if (el.ValueKind == JsonValueKind.Number)
             return el.GetDecimal();
         var raw = el.GetString();
-        return string.IsNullOrEmpty(raw) ? 0m : decimal.Parse(raw, CultureInfo.InvariantCulture);
+        return decimal.TryParse(raw, NumberStyles.Number, CultureInfo.InvariantCulture, out var value)
+            ? value
+            : 0m;
+    }
+
+    private static long ParseLong(JsonElement el)
+    {
+        if (el.ValueKind == JsonValueKind.Number && el.TryGetInt64(out var value))
+            return value;
+
+        return long.TryParse(el.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out value)
+            ? value
+            : 0;
+    }
+
+    private static bool ParseFlag(JsonElement el)
+    {
+        return el.ValueKind == JsonValueKind.True
+            || (el.ValueKind == JsonValueKind.Number && el.TryGetInt32(out var value) && value == 1)
+            || (el.ValueKind == JsonValueKind.String && el.GetString() == "1");
     }
 
     public async Task<ContractsForResponse> GetContractsForAsync(string symbol, string currency = "USD", CancellationToken ct = default)
@@ -571,30 +590,40 @@ public sealed class ContractService : IContractService, IDisposable
             sub.TryGetProperty("id", out var idEl))
             subId = idEl.GetString() ?? "";
 
-        var exitSpotRaw = pocEl.TryGetProperty("exit_tick_display_value", out var etd) ? etd.GetString() ?? ""
-                        : pocEl.TryGetProperty("exit_tick", out var et) ? et.GetRawText().Trim('"') : "";
+        var entrySpotRaw = ParseSpotField(
+            pocEl,
+            "entry_spot_display_value",
+            "entry_tick_display_value",
+            "entry_spot",
+            "entry_tick");
+        var exitSpotRaw = ParseSpotField(
+            pocEl,
+            "exit_tick_display_value",
+            "sell_spot_display_value",
+            "exit_tick",
+            "sell_spot");
 
         return new OpenContractUpdate
         {
-            ContractId = pocEl.TryGetProperty("contract_id", out var cid) ? cid.GetInt64() : 0,
+            ContractId = pocEl.TryGetProperty("contract_id", out var cid) ? ParseLong(cid) : 0,
             Symbol = pocEl.TryGetProperty("underlying", out var sym) ? sym.GetString() ?? "" : "",
             ContractType = pocEl.TryGetProperty("contract_type", out var ct) ? ct.GetString() ?? "" : "",
             BuyPrice = pocEl.TryGetProperty("buy_price", out var bp) ? ParseDecimal(bp) : 0m,
             BidPrice = pocEl.TryGetProperty("bid_price", out var bid) ? ParseDecimal(bid) : 0m,
             CurrentSpot = pocEl.TryGetProperty("current_spot", out var cs) ? ParseDecimal(cs) : 0m,
-            EntrySpot = pocEl.TryGetProperty("entry_spot", out var es) ? ParseDecimal(es) : 0m,
-            EntrySpotRaw = pocEl.TryGetProperty("entry_spot_display_value", out var esd) ? esd.GetString() ?? ""
-                         : pocEl.TryGetProperty("entry_spot", out var esRaw) ? esRaw.GetRawText().Trim('"') : "",
+            EntrySpot = pocEl.TryGetProperty("entry_spot", out var es) ? ParseDecimal(es)
+                      : pocEl.TryGetProperty("entry_tick", out var et) ? ParseDecimal(et) : 0m,
+            EntrySpotRaw = entrySpotRaw,
             ExitSpotRaw = exitSpotRaw,
             Profit = pocEl.TryGetProperty("profit", out var pf) ? ParseDecimal(pf) : 0m,
-            DateStart = pocEl.TryGetProperty("date_start", out var ds) ? ds.GetInt64() : 0,
-            DateExpiry = pocEl.TryGetProperty("date_expiry", out var de) ? de.GetInt64() : 0,
-            EntryTickTime = pocEl.TryGetProperty("entry_tick_time", out var ett) ? ett.GetInt64() : 0,
-            IsExpired = pocEl.TryGetProperty("is_expired", out var ie) && (ie.ValueKind == JsonValueKind.True || (ie.ValueKind == JsonValueKind.Number && ie.GetInt32() == 1)),
-            IsSold = pocEl.TryGetProperty("is_sold", out var isl) && (isl.ValueKind == JsonValueKind.True || (isl.ValueKind == JsonValueKind.Number && isl.GetInt32() == 1)),
-            IsValidToSell = pocEl.TryGetProperty("is_valid_to_sell", out var ivs) && (ivs.ValueKind == JsonValueKind.True || (ivs.ValueKind == JsonValueKind.Number && ivs.GetInt32() == 1)),
-            SellTime = pocEl.TryGetProperty("sell_time", out var stm) && stm.GetInt64() > 0 ? stm.GetInt64()
-                     : pocEl.TryGetProperty("exit_tick_time", out var ett2) ? ett2.GetInt64() : 0,
+            DateStart = pocEl.TryGetProperty("date_start", out var ds) ? ParseLong(ds) : 0,
+            DateExpiry = pocEl.TryGetProperty("date_expiry", out var de) ? ParseLong(de) : 0,
+            EntryTickTime = pocEl.TryGetProperty("entry_tick_time", out var ett) ? ParseLong(ett) : 0,
+            IsExpired = pocEl.TryGetProperty("is_expired", out var ie) && ParseFlag(ie),
+            IsSold = pocEl.TryGetProperty("is_sold", out var isl) && ParseFlag(isl),
+            IsValidToSell = pocEl.TryGetProperty("is_valid_to_sell", out var ivs) && ParseFlag(ivs),
+            SellTime = pocEl.TryGetProperty("sell_time", out var stm) && ParseLong(stm) > 0 ? ParseLong(stm)
+                     : pocEl.TryGetProperty("exit_tick_time", out var ett2) ? ParseLong(ett2) : 0,
             Status = pocEl.TryGetProperty("status", out var st) ? st.GetString() ?? "" : "",
             SubscriptionId = subId
         };

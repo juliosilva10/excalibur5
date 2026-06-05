@@ -11,6 +11,10 @@ namespace Excalibur5.ViewModels;
 public partial class HistoryViewModel : ObservableObject, IDisposable
 {
     private const string Src = "History";
+    private const int SettlementRefreshAttempts = 90;
+    private const int SettlementRefreshDelayMs = 2000;
+    private static readonly int[] InitialStatusRefreshDelays = [250, 1000, 2500, 5000];
+
     private readonly IContractService _contractService;
     private readonly Dictionary<long, string> _settledNotifications = new();
 
@@ -29,50 +33,11 @@ public partial class HistoryViewModel : ObservableObject, IDisposable
 
     private void OnOpenContractUpdated(object? sender, OpenContractUpdate update)
     {
-        if (!update.IsExpired && !update.IsSold && update.Status is not ("sold" or "won" or "lost")) return;
+        if (!IsSettled(update)) return;
 
-        Application.Current?.Dispatcher?.InvokeAsync(() =>
-        {
-            var item = Trades.FirstOrDefault(t => t.ContractId == update.ContractId);
-            if (item == null) return;
-
-            var idx = Trades.IndexOf(item);
-            if (idx < 0) return;
-
-            var exitSpot = !string.IsNullOrEmpty(update.ExitSpotRaw) ? update.ExitSpotRaw
-                         : update.CurrentSpot > 0 ? update.CurrentSpot.ToString(CultureInfo.InvariantCulture)
-                         : item.ExitSpot;
-
-            DateTime? sellTime = update.SellTime > 0
-                ? DateTimeOffset.FromUnixTimeSeconds(update.SellTime).LocalDateTime
-                : null;
-
-            var purchaseTime = update.EntryTickTime > 0
-                ? DateTimeOffset.FromUnixTimeSeconds(update.EntryTickTime).LocalDateTime
-                : item.PurchaseTime;
-
-            Trades[idx] = new TradeHistoryItem
-            {
-                Operacao = item.Operacao,
-                Estrategia = item.Estrategia,
-                Market = item.Market,
-                Tipo = item.Tipo,
-                ReferenceNumber = item.ReferenceNumber,
-                PurchaseTime = purchaseTime,
-                Stake = item.Stake,
-                SellTime = sellTime,
-                EntrySpot = update.EntrySpotRaw.Length > 0 ? update.EntrySpotRaw : item.EntrySpot,
-                ExitSpot = exitSpot,
-                ContractValue = update.BidPrice,
-                ProfitLoss = update.Profit,
-                ContractId = item.ContractId
-            };
-
-            NotifyTradeSettled(Trades[idx]);
-
-            if (sellTime == null && update.ContractId > 0)
-                _ = FetchSellTimeAsync(update.ContractId);
-        });
+        _ = ApplyContractStatusAsync(update, notifySettled: true);
+        if (update.ContractId > 0)
+            _ = RefreshContractStatusAsync(update.ContractId, requireSettlement: true);
     }
 
     [RelayCommand]
@@ -110,6 +75,8 @@ public partial class HistoryViewModel : ObservableObject, IDisposable
                 ContractId = buy.ContractId
             });
         });
+
+        _ = RefreshContractStatusAsync(buy.ContractId, requireSettlement: true);
     }
 
     public void AddManualTrade(BuyResponse buy, string contractType, string market)
@@ -128,6 +95,8 @@ public partial class HistoryViewModel : ObservableObject, IDisposable
                 ContractId = buy.ContractId
             });
         });
+
+        _ = RefreshContractStatusAsync(buy.ContractId, requireSettlement: true);
     }
 
     public void UpdateTradeResult(long contractId, decimal profit, long sellTime = 0)
@@ -163,69 +132,161 @@ public partial class HistoryViewModel : ObservableObject, IDisposable
 
             NotifyTradeSettled(Trades[idx]);
 
-            if (resolvedSellTime == null && contractId > 0)
-                _ = FetchSellTimeAsync(contractId);
+            if (contractId > 0)
+                _ = RefreshContractStatusAsync(contractId, requireSettlement: true);
         });
     }
 
-    private async Task FetchSellTimeAsync(long contractId)
+    private async Task RefreshContractStatusAsync(long contractId, bool requireSettlement)
     {
-        int[] delays = [500, 1500, 3000];
-        foreach (var delay in delays)
+        if (contractId <= 0) return;
+
+        foreach (var delay in GetStatusRefreshDelays(requireSettlement))
         {
             try
             {
                 await Task.Delay(delay);
 
-                var alreadyFilled = Application.Current?.Dispatcher?.Invoke(() =>
-                    Trades.FirstOrDefault(t => t.ContractId == contractId)?.SellTime != null);
-                if (alreadyFilled == true) return;
+                if (IsTradeComplete(contractId, requireSettlement)) return;
 
                 var status = await _contractService.GetContractStatusAsync(contractId);
-                if (status == null || status.SellTime <= 0) continue;
+                if (status == null) continue;
 
-                var sellTime = DateTimeOffset.FromUnixTimeSeconds(status.SellTime).LocalDateTime;
-
-                Application.Current?.Dispatcher?.Invoke(() =>
-                {
-                    var item = Trades.FirstOrDefault(t => t.ContractId == contractId);
-                    if (item == null) return;
-
-                    var idx = Trades.IndexOf(item);
-                    if (idx < 0) return;
-
-                    if (item.SellTime != null) return;
-
-                    var entryTime = status.EntryTickTime > 0
-                        ? DateTimeOffset.FromUnixTimeSeconds(status.EntryTickTime).LocalDateTime
-                        : item.PurchaseTime;
-
-                    Trades[idx] = new TradeHistoryItem
-                    {
-                        Operacao = item.Operacao,
-                        Estrategia = item.Estrategia,
-                        Market = item.Market,
-                        Tipo = item.Tipo,
-                        ReferenceNumber = item.ReferenceNumber,
-                        PurchaseTime = entryTime,
-                        Stake = item.Stake,
-                        SellTime = sellTime,
-                        EntrySpot = !string.IsNullOrEmpty(status.EntrySpotRaw) ? status.EntrySpotRaw : item.EntrySpot,
-                        ExitSpot = !string.IsNullOrEmpty(status.ExitSpotRaw) ? status.ExitSpotRaw : item.ExitSpot,
-                        ContractValue = item.ContractValue,
-                        ProfitLoss = item.ProfitLoss,
-                        ContractId = item.ContractId
-                    };
-
-                    NotifyTradeSettled(Trades[idx]);
-                });
-                return;
+                var settled = IsSettled(status);
+                await ApplyContractStatusAsync(status, notifySettled: requireSettlement && settled);
+                if (IsTradeComplete(contractId, requireSettlement)) return;
             }
             catch (Exception ex)
             {
-                AppLogger.Warn(Src, $"FetchSellTime error for {contractId}: {ex.Message}");
+                AppLogger.Warn(Src, $"RefreshContractStatus error for {contractId}: {ex.Message}");
             }
         }
+    }
+
+    private static IEnumerable<int> GetStatusRefreshDelays(bool requireSettlement)
+    {
+        foreach (var delay in InitialStatusRefreshDelays)
+            yield return delay;
+
+        if (!requireSettlement) yield break;
+
+        for (var i = 0; i < SettlementRefreshAttempts; i++)
+            yield return SettlementRefreshDelayMs;
+    }
+
+    private Task ApplyContractStatusAsync(OpenContractUpdate status, bool notifySettled)
+    {
+        return Application.Current?.Dispatcher?.InvokeAsync(() =>
+        {
+            var item = Trades.FirstOrDefault(t => t.ContractId == status.ContractId);
+            if (item == null) return;
+
+            var idx = Trades.IndexOf(item);
+            if (idx < 0) return;
+
+            var updated = MergeContractStatus(item, status);
+            Trades[idx] = updated;
+
+            if (notifySettled && IsSettled(status))
+                NotifyTradeSettled(updated);
+        }).Task ?? Task.CompletedTask;
+    }
+
+    private bool IsTradeComplete(long contractId, bool requireSettlement)
+    {
+        return Application.Current?.Dispatcher?.Invoke(() =>
+        {
+            var trade = Trades.FirstOrDefault(t => t.ContractId == contractId);
+            return trade == null || !NeedsStatusRefresh(trade, requireSettlement);
+        }) == true;
+    }
+
+    private static TradeHistoryItem MergeContractStatus(TradeHistoryItem item, OpenContractUpdate status)
+    {
+        var settled = IsSettled(status);
+        return new TradeHistoryItem
+        {
+            Operacao = item.Operacao,
+            Estrategia = item.Estrategia,
+            Market = item.Market,
+            Tipo = item.Tipo,
+            ReferenceNumber = item.ReferenceNumber,
+            PurchaseTime = ResolvePurchaseTime(item, status),
+            Stake = item.Stake,
+            SellTime = ToLocalTime(status.SellTime) ?? item.SellTime,
+            EntrySpot = FirstText(status.EntrySpotRaw, FormatSpot(status.EntrySpot), item.EntrySpot),
+            ExitSpot = ResolveExitSpot(item, status, settled),
+            ContractValue = ResolveContractValue(item, status, settled),
+            ProfitLoss = settled ? status.Profit : item.ProfitLoss,
+            ContractId = item.ContractId
+        };
+    }
+
+    private static DateTime ResolvePurchaseTime(TradeHistoryItem item, OpenContractUpdate status)
+    {
+        return ToLocalTime(status.EntryTickTime)
+            ?? ToLocalTime(status.DateStart)
+            ?? item.PurchaseTime;
+    }
+
+    private static string ResolveExitSpot(TradeHistoryItem item, OpenContractUpdate status, bool settled)
+    {
+        if (!settled) return item.ExitSpot;
+
+        return FirstText(
+            status.ExitSpotRaw,
+            FormatSpot(status.CurrentSpot),
+            item.ExitSpot);
+    }
+
+    private static decimal? ResolveContractValue(
+        TradeHistoryItem item,
+        OpenContractUpdate status,
+        bool settled)
+    {
+        if (status.BidPrice > 0)
+            return status.BidPrice;
+
+        if (settled)
+            return Math.Max(0m, GetBuyPrice(item, status) + status.Profit);
+
+        return item.ContractValue;
+    }
+
+    private static decimal GetBuyPrice(TradeHistoryItem item, OpenContractUpdate status)
+    {
+        return status.BuyPrice > 0 ? status.BuyPrice : item.Stake;
+    }
+
+    private static bool NeedsStatusRefresh(TradeHistoryItem trade, bool requireSettlement)
+    {
+        if (string.IsNullOrWhiteSpace(trade.EntrySpot)) return true;
+        if (!requireSettlement) return false;
+
+        return trade.SellTime == null
+            || string.IsNullOrWhiteSpace(trade.ExitSpot)
+            || !trade.ContractValue.HasValue
+            || !trade.ProfitLoss.HasValue;
+    }
+
+    private static bool IsSettled(OpenContractUpdate update)
+    {
+        return update.IsExpired || update.IsSold || update.Status is "sold" or "won" or "lost";
+    }
+
+    private static DateTime? ToLocalTime(long epoch)
+    {
+        return epoch > 0 ? DateTimeOffset.FromUnixTimeSeconds(epoch).LocalDateTime : null;
+    }
+
+    private static string FormatSpot(decimal spot)
+    {
+        return spot > 0 ? spot.ToString(CultureInfo.InvariantCulture) : string.Empty;
+    }
+
+    private static string FirstText(params string[] values)
+    {
+        return values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? string.Empty;
     }
 
     private void NotifyTradeSettled(TradeHistoryItem trade)
