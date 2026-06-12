@@ -5,8 +5,8 @@ public sealed class VanillaContractStrategy : IContractTypeStrategy
     public string DisplayName => "Vanilla Call/Put";
     public string CallContractType => "VANILLALONGCALL";
     public string PutContractType => "VANILLALONGPUT";
-    public string CallButtonLabel => "Comprar Call";
-    public string PutButtonLabel => "Comprar Put";
+    public string CallButtonLabel => "▲ Comprar Call";
+    public string PutButtonLabel => "▼ Comprar Put";
     public bool RequiresBarrier => true;
     public ContractCategory Category => ContractCategory.Vanillas;
 

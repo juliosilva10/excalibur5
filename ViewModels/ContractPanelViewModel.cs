@@ -115,6 +115,8 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
     {
         _proposalsSuspended = true;
         _proposalCts?.Cancel();
+        _proposalCts?.Dispose();
+        _proposalCts = null;
         _ = _contractService.UnsubscribeAllProposalsAsync();
     }
 
@@ -1094,8 +1096,10 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
         _active = false;
         CancelManualVirtualTrade();
         _proposalCts?.Cancel();
+        _proposalCts?.Dispose();
         _proposalCts = null;
         _barrierRefreshCts?.Cancel();
+        _barrierRefreshCts?.Dispose();
         _barrierRefreshCts = null;
         _barriersFromApi = false;
 
@@ -1223,6 +1227,7 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
         if (!_active || !ContractsLoaded || _proposalsSuspended) return;
 
         _proposalCts?.Cancel();
+        _proposalCts?.Dispose();
         _proposalCts = new CancellationTokenSource();
         var ct = _proposalCts.Token;
 

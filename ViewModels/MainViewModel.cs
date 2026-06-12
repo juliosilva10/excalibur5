@@ -26,8 +26,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private volatile string _token = string.Empty;
     private int _timerBusy; // 0 = idle, 1 = busy — use Interlocked for atomic check-and-set
     private TimeSpan _serverOffset; // difference between server UTC and local UTC
-    private bool _isBotSessionActive;
-    private bool _initialBalanceSet;
+    private volatile bool _isBotSessionActive;
+    private volatile bool _initialBalanceSet;
 
     [ObservableProperty] private bool    _isConnected;
     [ObservableProperty] private bool    _isConnecting;
@@ -522,8 +522,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
     }
 
     private ContractPanelViewModel? _watchedPanel;
-    private bool _restoringState;
-    private bool _disconnecting;
+    private volatile bool _restoringState;
+    private volatile bool _disconnecting;
 
     private void WatchContractPanelChanges()
     {

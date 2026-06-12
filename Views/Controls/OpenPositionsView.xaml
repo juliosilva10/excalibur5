@@ -195,13 +195,11 @@
             </ItemsControl>
 
             <!-- Empty state -->
-            <TextBlock Grid.Row="2"
-                       Text="Nenhuma posição aberta"
-                       Foreground="#4a6a7a" FontSize="10"
-                       HorizontalAlignment="Center"
-                       VerticalAlignment="Center">
-                <TextBlock.Style>
-                    <Style TargetType="TextBlock">
+            <StackPanel Grid.Row="2"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center">
+                <StackPanel.Style>
+                    <Style TargetType="StackPanel">
                         <Setter Property="Visibility" Value="Collapsed"/>
                         <Style.Triggers>
                             <DataTrigger Binding="{Binding HasPositions}" Value="False">
@@ -209,8 +207,14 @@
                             </DataTrigger>
                         </Style.Triggers>
                     </Style>
-                </TextBlock.Style>
-            </TextBlock>
+                </StackPanel.Style>
+                <TextBlock Text="&#xE7C3;" FontFamily="Segoe MDL2 Assets"
+                           FontSize="20" Foreground="#6f93a8"
+                           HorizontalAlignment="Center" Margin="0,0,0,4"/>
+                <TextBlock Text="Nenhuma posição aberta"
+                           Foreground="{StaticResource SubtleBrush}" FontSize="12"
+                           HorizontalAlignment="Center"/>
+            </StackPanel>
         </Grid>
     </Border>
 </UserControl>

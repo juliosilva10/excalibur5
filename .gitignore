@@ -25,4 +25,4 @@ Thumbs.db
 .DS_Store
 desktop.ini
 
-# NOTE: App ID (82663) is NOT secret and is intentionally tracked in AppConfig.cs
+# NOTE: The public Deriv App ID (33we3QV2jfoLet2b2EFxB, in DerivRestClient.cs) is NOT secret and is intentionally tracked

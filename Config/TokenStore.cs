@@ -35,7 +35,7 @@ public static class TokenStore
             var plain     = ProtectedData.Unprotect(encrypted, null, DataProtectionScope.CurrentUser);
             return Encoding.UTF8.GetString(plain);
         }
-        catch
+        catch (Exception ex) when (ex is CryptographicException or IOException or UnauthorizedAccessException)
         {
             return string.Empty;
         }

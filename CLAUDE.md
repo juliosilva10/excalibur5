@@ -21,22 +21,23 @@ Aplicação desktop WPF (.NET 9) para trading de opções binárias via Deriv AP
 ├── Services/         # Serviços (WebSocket, API Deriv, contratos, logging)
 ├── ViewModels/       # ViewModels (MVVM)
 ├── Views/            # Views XAML e controls
-├── DERIV_API_Documentation/  # Documentação completa da Deriv API
-├── skills/code/      # Skill de código — SEMPRE consultar antes de implementar
-└── referencia/       # Referência auxiliar (deriv_api_docs.md)
+├── DERIV_API_Documentation/  # Documentação da Deriv API (fonte única)
+└── skills/code/      # Skill de código — SEMPRE consultar antes de implementar
 ```
 
 ## Documentação de Referência
 
-- **Deriv API completa:** `DERIV_API_Documentation/` — documentação técnica extraída de developers.deriv.com
-- **Referência auxiliar:** `referencia/deriv_api_docs.md`
-- **Geração dos docs:** Usar o script em `C:\Users\Júlio César\Downloads\deriv-docs\scrape_deriv_docs.py`
+- **Deriv API:** `DERIV_API_Documentation/deriv_api_docs.md` — fonte única (https://developers.deriv.com/docs/)
+- **Geração dos docs:** script em `C:\Users\Júlio César\Downloads\deriv-docs\scrape_deriv_docs.py`
 
 ## Skill Obrigatória
 
 **Antes de escrever qualquer código**, ler e seguir: `skills/code/SKILL.md`
 
-A pasta `skills/` contém as skills do projeto. Consultar sempre antes de implementar.
+A pasta `skills/` contém as skills do projeto. Consultar sempre antes de implementar:
+- **`skills/code/SKILL.md`** — regras de código (SOLID, limpeza, performance, segurança, checklist).
+- **`skills/arquitetura/SKILL.md`** — mapa do projeto (serviços, ViewModels, build/teste). Consultar para localizar código sem reexplorar.
+- **`skills/deriv-api/SKILL.md`** — fluxo de auth e payloads WebSocket reais. Consultar para qualquer mudança em conexão/trading.
 
 Resumo dos pontos-chave:
 1. Analisar e decompor o requisito antes de implementar
@@ -58,8 +59,20 @@ Resumo dos pontos-chave:
 
 ## Fluxo Principal
 
-1. Autenticação via token Deriv (WebSocket `authorize`)
-2. Subscrição de ticks de mercado
-3. Consulta de contratos disponíveis (`contracts_for`)
-4. Proposta e compra de contratos (`proposal` → `buy`)
-5. Monitoramento de contratos abertos (`proposal_open_contract`)
+1. **Autenticação (REST OTP — plataforma Options nova):**
+   - `GET /trading/v1/options/accounts` (header `Deriv-App-ID` + `Authorization: Bearer {PAT}`) → descobre `account_id` e `account_type`
+   - `POST /trading/v1/options/accounts/{id}/otp` → URL WebSocket já autenticada por OTP
+   - Conecta o WebSocket nessa URL (**sem** enviar `authorize`)
+   - Implementado em `DerivRestClient` + `DerivApiService.ConnectAndAuthorizeAsync`
+2. Subscrição de ticks (`TickStreamService`)
+3. Consulta de contratos (`contracts_for`) e proposta/compra (`proposal` → `buy`) em `ContractService`
+4. Monitoramento de contratos abertos (`proposal_open_contract`)
+
+## Mapa de Código (pontos de entrada)
+
+- **Conexão/auth:** `Services/DerivRestClient.cs`, `Services/DerivApiService.cs`, `Services/DerivWebSocketService.cs`
+- **Trading:** `Services/ContractService.cs` (proposal/buy/sell/POC/profit_table)
+- **Estratégia/bot:** `Services/Strategy/StrategyExecutor.cs`, `ViewModels/StrategyViewModel.cs`
+- **UI raiz:** `Views/MainWindow.xaml`, `ViewModels/MainViewModel.cs`
+- **Estilos globais:** `App.xaml` (recursos compartilhados: cores, brushes, estilos de botão/input)
+- **Config/segredos:** `Config/AppConfig.cs` (constantes), `Config/TokenStore.cs` (DPAPI)
