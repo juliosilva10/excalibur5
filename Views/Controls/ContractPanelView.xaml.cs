@@ -3,15 +3,26 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using Excalibur5.Services;
 using Excalibur5.ViewModels;
 
 namespace Excalibur5.Views.Controls;
 
 public partial class ContractPanelView : UserControl
 {
+    private static readonly TimeSpan DeleteHoldDuration = TimeSpan.FromMilliseconds(500);
+    private readonly System.Windows.Threading.DispatcherTimer _deleteHoldTimer;
+    private bool _deleteHoldCandidate;
+    private bool _deleteClearedByHold;
+
     public ContractPanelView()
     {
         InitializeComponent();
+        _deleteHoldTimer = new System.Windows.Threading.DispatcherTimer
+        {
+            Interval = DeleteHoldDuration
+        };
+        _deleteHoldTimer.Tick += DeleteHoldTimer_Tick;
     }
 
     private ContractPanelViewModel? Vm => DataContext as ContractPanelViewModel;
@@ -245,6 +256,99 @@ public partial class ContractPanelView : UserControl
         }
     }
 
+    private void ToleranceInput_PreviewTextInput(object sender, TextCompositionEventArgs e)
+    {
+        if (sender is not TextBox textBox)
+        {
+            e.Handled = true;
+            return;
+        }
+
+        var future = BuildFutureText(textBox, e.Text);
+        e.Handled = !IsValidTolerance(future);
+    }
+
+    private void ToleranceInput_Pasting(object sender, DataObjectPastingEventArgs e)
+    {
+        if (sender is not TextBox textBox ||
+            !e.DataObject.GetDataPresent(typeof(string)))
+        {
+            e.CancelCommand();
+            return;
+        }
+
+        var pastedText = (string)e.DataObject.GetData(typeof(string))!;
+        if (!IsValidTolerance(BuildFutureText(textBox, pastedText)))
+            e.CancelCommand();
+    }
+
+    private void DeleteSequence_PreviewMouseLeftButtonDown(
+        object sender,
+        MouseButtonEventArgs e)
+    {
+        if (e.ClickCount != 2) return;
+
+        AppLogger.Info(nameof(ContractPanelView), "DeleteSequence double-click detected, starting hold timer");
+
+        _deleteHoldCandidate = true;
+        _deleteClearedByHold = false;
+        _deleteHoldTimer.Stop();
+        _deleteHoldTimer.Start();
+    }
+
+    private void DeleteSequence_PreviewMouseLeftButtonUp(
+        object sender,
+        MouseButtonEventArgs e)
+    {
+        _deleteHoldTimer.Stop();
+    }
+
+    private void DeleteSequence_MouseLeave(object sender, MouseEventArgs e)
+    {
+        if (_deleteHoldCandidate)
+            AppLogger.Info(nameof(ContractPanelView), "DeleteSequence MouseLeave, canceling hold");
+        _deleteHoldTimer.Stop();
+        _deleteHoldCandidate = false;
+    }
+
+    private void DeleteHoldTimer_Tick(object? sender, EventArgs e)
+    {
+        _deleteHoldTimer.Stop();
+        if (!_deleteHoldCandidate) return;
+
+        AppLogger.Info(nameof(ContractPanelView), "DeleteSequence hold detected, clearing configuration");
+
+        FindVirtualVm()?.ClearConfigurationCommand.Execute(null);
+        _deleteClearedByHold = true;
+        _deleteHoldCandidate = false;
+    }
+
+    private void DeleteSequence_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_deleteClearedByHold)
+        {
+            AppLogger.Info(nameof(ContractPanelView), "DeleteSequence single click, removing last entry");
+            FindVirtualVm()?.DeleteLastEntryCommand.Execute(null);
+        }
+
+        _deleteHoldTimer.Stop();
+        _deleteHoldCandidate = false;
+        _deleteClearedByHold = false;
+    }
+
+    private static string BuildFutureText(TextBox textBox, string insertedText)
+    {
+        return textBox.Text
+            .Remove(textBox.SelectionStart, textBox.SelectionLength)
+            .Insert(textBox.SelectionStart, insertedText);
+    }
+
+    private static bool IsValidTolerance(string value)
+    {
+        return value.Length == 0 ||
+            int.TryParse(value, out var tolerance) && tolerance > 0;
+    }
+
     private void BotDurationUnit_Click(object sender, RoutedEventArgs e)
     {
         if (sender is RadioButton rb && rb.Tag is string unit)
@@ -284,5 +388,11 @@ public partial class ContractPanelView : UserControl
     {
         var mainVm = Window.GetWindow(this)?.DataContext as MainViewModel;
         return mainVm?.Strategy;
+    }
+
+    private VirtualViewModel? FindVirtualVm()
+    {
+        var mainVm = Window.GetWindow(this)?.DataContext as MainViewModel;
+        return mainVm?.Virtual;
     }
 }

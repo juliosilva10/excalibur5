@@ -23,7 +23,7 @@
             </LinearGradientBrush>
         </Border.Background>
 
-        <Grid Margin="8,6">
+        <Grid Margin="12,8">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
@@ -36,77 +36,93 @@
                        FontWeight="SemiBold" Margin="0,0,0,6"/>
 
             <!-- Column headers -->
-            <Grid Grid.Row="1" Margin="0,0,0,4">
+            <Grid Grid.Row="1" Margin="0,2,0,6">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="70"/>
-                    <ColumnDefinition Width="42"/>
-                    <ColumnDefinition Width="55"/>
-                    <ColumnDefinition Width="60"/>
-                    <ColumnDefinition Width="60"/>
-                    <ColumnDefinition Width="65"/>
-                    <ColumnDefinition Width="70"/>
-                    <ColumnDefinition Width="50"/>
+                    <ColumnDefinition Width="0.95*"/>
+                    <ColumnDefinition Width="1.3*"/>
+                    <ColumnDefinition Width="0.95*"/>
+                    <ColumnDefinition Width="0.95*"/>
+                    <ColumnDefinition Width="0.95*"/>
+                    <ColumnDefinition Width="0.95*"/>
+                    <ColumnDefinition Width="0.95*"/>
+                    <ColumnDefinition Width="58"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" Text="Mercado" Foreground="#6090a8" FontSize="11"/>
-                <TextBlock Grid.Column="1" Text="Tipo" Foreground="#6090a8" FontSize="11"/>
-                <TextBlock Grid.Column="2" Text="Tempo" Foreground="#6090a8" FontSize="11"/>
-                <TextBlock Grid.Column="3" Text="Entrada" Foreground="#6090a8" FontSize="11"/>
-                <TextBlock Grid.Column="4" Text="Valor" Foreground="#6090a8" FontSize="11"/>
-                <TextBlock Grid.Column="5" Text="Abertura" Foreground="#6090a8" FontSize="11"/>
-                <TextBlock Grid.Column="6" Text="Lucro/Perda" Foreground="#6090a8" FontSize="11"/>
-                <TextBlock Grid.Column="7" Text="" Foreground="#6090a8" FontSize="11"/>
+                <TextBlock Grid.Column="0" Text="Mercado" Foreground="#6090a8" FontSize="11" Margin="0,0,12,0"/>
+                <TextBlock Grid.Column="1" Text="Tipo" Foreground="#6090a8" FontSize="11" Margin="0,0,12,0"/>
+                <TextBlock Grid.Column="2" Text="Tempo" Foreground="#6090a8" FontSize="11" HorizontalAlignment="Center"/>
+                <TextBlock Grid.Column="3" Text="Entrada" Foreground="#6090a8" FontSize="11" HorizontalAlignment="Center"/>
+                <TextBlock Grid.Column="4" Text="Valor" Foreground="#6090a8" FontSize="11" HorizontalAlignment="Center"/>
+                <TextBlock Grid.Column="5" Text="Abertura" Foreground="#6090a8" FontSize="11" HorizontalAlignment="Center"/>
+                <TextBlock Grid.Column="6" Text="Lucro/Perda" Foreground="#6090a8" FontSize="11" HorizontalAlignment="Center"/>
             </Grid>
 
             <!-- Positions list -->
-            <ItemsControl Grid.Row="2" ItemsSource="{Binding Positions}">
+            <ItemsControl Grid.Row="2"
+                          ItemsSource="{Binding Positions}"
+                          HorizontalContentAlignment="Stretch">
                 <ItemsControl.Template>
                     <ControlTemplate TargetType="ItemsControl">
                         <ScrollViewer VerticalScrollBarVisibility="Auto"
-                                      HorizontalScrollBarVisibility="Auto">
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      HorizontalContentAlignment="Stretch">
                             <ItemsPresenter/>
                         </ScrollViewer>
                     </ControlTemplate>
                 </ItemsControl.Template>
+                <ItemsControl.ItemContainerStyle>
+                    <Style TargetType="ContentPresenter">
+                        <Setter Property="HorizontalAlignment" Value="Stretch"/>
+                    </Style>
+                </ItemsControl.ItemContainerStyle>
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
-                        <Grid Margin="0,2">
+                        <Grid Margin="0,3" MinHeight="28">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="70"/>
-                                <ColumnDefinition Width="42"/>
-                                <ColumnDefinition Width="55"/>
-                                <ColumnDefinition Width="60"/>
-                                <ColumnDefinition Width="60"/>
-                                <ColumnDefinition Width="65"/>
-                                <ColumnDefinition Width="70"/>
-                                <ColumnDefinition Width="50"/>
+                                <ColumnDefinition Width="0.95*"/>
+                                <ColumnDefinition Width="1.3*"/>
+                                <ColumnDefinition Width="0.95*"/>
+                                <ColumnDefinition Width="0.95*"/>
+                                <ColumnDefinition Width="0.95*"/>
+                                <ColumnDefinition Width="0.95*"/>
+                                <ColumnDefinition Width="0.95*"/>
+                                <ColumnDefinition Width="58"/>
                             </Grid.ColumnDefinitions>
 
                             <!-- Mercado -->
                             <TextBlock Grid.Column="0"
                                        Text="{Binding DisplayName}"
-                                       Foreground="#e0eef8" FontSize="12"
+                                       Foreground="#e0eef8" FontSize="11"
                                        FontFamily="Consolas"
                                        VerticalAlignment="Center"
-                                       TextTrimming="CharacterEllipsis"/>
+                                       TextTrimming="CharacterEllipsis"
+                                       Margin="0,0,12,0"
+                                       ToolTip="{Binding PositionModeLabel}"/>
 
                             <!-- Tipo -->
                             <TextBlock Grid.Column="1"
                                        Text="{Binding ContractTypeLabel}"
-                                       FontSize="12" FontFamily="Consolas"
+                                       FontSize="11" FontFamily="Consolas"
                                        Foreground="{Binding ContractTypeLabel, Converter={StaticResource ProfitToBrush}, ConverterParameter=type}"
-                                       VerticalAlignment="Center"/>
+                                       VerticalAlignment="Center"
+                                       TextWrapping="Wrap"
+                                       Margin="0,0,6,0"
+                                       ToolTip="{Binding ContractTypeLabel}"/>
 
                             <!-- Barra de tempo -->
-                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="0,0,6,0">
+                            <StackPanel Grid.Column="2"
+                                        VerticalAlignment="Center"
+                                        HorizontalAlignment="Center"
+                                        Width="56">
                                 <TextBlock Text="{Binding RemainingTimeDisplay}"
                                            Foreground="#6090a8" FontSize="10"
                                            FontFamily="Consolas"
+                                           HorizontalAlignment="Center"
                                            Margin="0,0,0,2"/>
                                 <Grid Height="3">
                                     <Border Background="#1a2e3d" CornerRadius="1.5"/>
                                     <Border CornerRadius="1.5"
                                             HorizontalAlignment="Left"
-                                            Width="{Binding TimeProgress, Converter={StaticResource ProgressWidth}, ConverterParameter=49}">
+                                            Width="{Binding TimeProgress, Converter={StaticResource ProgressWidth}, ConverterParameter=56}">
                                         <Border.Style>
                                             <Style TargetType="Border">
                                                 <Setter Property="Background" Value="{Binding TimeProgress, Converter={StaticResource TimeToBrush}}"/>
@@ -124,34 +140,42 @@
                             <!-- Entrada -->
                             <TextBlock Grid.Column="3"
                                        Text="{Binding BuyPrice, StringFormat=F2}"
-                                       Foreground="#e0eef8" FontSize="12"
+                                       Foreground="#e0eef8" FontSize="11"
                                        FontFamily="Consolas"
-                                       VerticalAlignment="Center"/>
+                                       VerticalAlignment="Center"
+                                       HorizontalAlignment="Center"/>
 
                             <!-- Valor atual -->
                             <TextBlock Grid.Column="4"
                                        Text="{Binding CurrentValue, StringFormat=F2}"
-                                       Foreground="#e0eef8" FontSize="12"
+                                       Foreground="#e0eef8" FontSize="11"
                                        FontFamily="Consolas"
-                                       VerticalAlignment="Center"/>
+                                       VerticalAlignment="Center"
+                                       HorizontalAlignment="Center"/>
 
                             <!-- Preço abertura -->
                             <TextBlock Grid.Column="5"
                                        Text="{Binding EntrySpotDisplay}"
-                                       Foreground="#a3b8cc" FontSize="12"
+                                       Foreground="#a3b8cc" FontSize="11"
                                        FontFamily="Consolas"
-                                       VerticalAlignment="Center"/>
+                                       VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis"
+                                       HorizontalAlignment="Center"
+                                       ToolTip="{Binding EntrySpotDisplay}"/>
 
                             <!-- Lucro/Perda -->
                             <TextBlock Grid.Column="6"
                                        Text="{Binding Profit, StringFormat=F2}"
                                        Foreground="{Binding Profit, Converter={StaticResource ProfitToBrush}}"
-                                       FontSize="12" FontFamily="Consolas"
+                                       FontSize="11" FontFamily="Consolas"
                                        FontWeight="Bold"
-                                       VerticalAlignment="Center"/>
+                                       VerticalAlignment="Center"
+                                       HorizontalAlignment="Center"/>
 
                             <!-- Botão Vender -->
-                            <Grid Grid.Column="7">
+                            <Grid Grid.Column="7"
+                                  Margin="6,0,0,0"
+                                  Visibility="{Binding IsRealPosition, Converter={StaticResource BoolToVis}}">
                                 <Button Content="Vender"
                                         Style="{StaticResource DerivSellProfitButtonStyle}"
                                         Command="{Binding DataContext.SellCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"

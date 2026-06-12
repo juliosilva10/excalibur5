@@ -10,6 +10,10 @@ public partial class OpenPositionItem : ObservableObject
     public string DisplayName { get; }
     public string ContractTypeLabel { get; }
     public decimal BuyPrice { get; }
+    public bool IsVirtual { get; }
+    public bool IsRealPosition => !IsVirtual;
+    public bool IsCallDirection { get; }
+    public string PositionModeLabel => IsVirtual ? "Virtual" : "Real";
 
     [ObservableProperty] private decimal _currentValue;
     [ObservableProperty] private decimal _entrySpot;
@@ -28,18 +32,31 @@ public partial class OpenPositionItem : ObservableObject
     public int DurationSeconds { get; }
     public long CreatedAtLocal { get; }
 
-    public OpenPositionItem(long contractId, string symbol, string displayName, string contractType, decimal buyPrice, long dateStart, long dateExpiry, int durationSeconds)
+    public OpenPositionItem(
+        long contractId,
+        string symbol,
+        string displayName,
+        string contractType,
+        decimal buyPrice,
+        long dateStart,
+        long dateExpiry,
+        int durationSeconds,
+        bool isVirtual = false)
     {
         ContractId = contractId;
         Symbol = symbol;
         DisplayName = displayName;
-        ContractTypeLabel = ContractTypeFormatter.ToDisplayLabel(contractType);
+        IsVirtual = isVirtual;
+        IsCallDirection = contractType.Contains("CALL", StringComparison.OrdinalIgnoreCase);
+        ContractTypeLabel = isVirtual
+            ? $"Virtual {ContractTypeFormatter.ToDisplayLabel(contractType)}"
+            : ContractTypeFormatter.ToDisplayLabel(contractType);
         BuyPrice = buyPrice;
         DateStart = dateStart;
         DateExpiry = dateExpiry;
         DurationSeconds = durationSeconds;
         CreatedAtLocal = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        IsValidToSell = true;
+        IsValidToSell = !isVirtual;
         UpdateTimeProgress();
     }
 

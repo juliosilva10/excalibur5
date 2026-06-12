@@ -35,8 +35,11 @@ public partial class MainWindow : Window
 
     private void TokenBox_PasswordChanged(object sender, RoutedEventArgs e)
     {
+        if (sender is not PasswordBox passwordBox) return;
+
+        passwordBox.Tag = new string('\u2022', passwordBox.Password.Length);
         if (DataContext is MainViewModel vm)
-            vm.SetToken(((PasswordBox)sender).Password);
+            vm.SetToken(passwordBox.Password);
     }
 
     private async void MarketTab_Click(object sender, RoutedEventArgs e)

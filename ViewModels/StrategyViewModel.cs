@@ -8,6 +8,7 @@ using Excalibur5.Models;
 using Excalibur5.Models.Strategy;
 using Excalibur5.Services;
 using Excalibur5.Services.Strategy;
+using Excalibur5.Services.Strategy.Virtual;
 
 namespace Excalibur5.ViewModels;
 
@@ -19,6 +20,7 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
     public event EventHandler<TradeCompleted>? BotTradeCompleted;
 
     private readonly IContractService _contractService;
+    private readonly IVirtualEntryModeController _virtualEntryModeController;
     private readonly StrategyEngine _engine = new();
     private readonly TrendEngine _trendEngine = new();
     private readonly TickScalperEngine _tickScalperEngine = new();
@@ -94,9 +96,12 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string _statsText = "0 ops (0W/0L) 0.00 USD";
     [ObservableProperty] private string _lastTradeText = string.Empty;
 
-    public StrategyViewModel(IContractService contractService)
+    public StrategyViewModel(
+        IContractService contractService,
+        IVirtualEntryModeController virtualEntryModeController)
     {
         _contractService = contractService;
+        _virtualEntryModeController = virtualEntryModeController;
         _engine.SignalGenerated += OnSignalGenerated;
         _tickScalperEngine.SignalGenerated += OnTickScalperSignal;
         _candleDynamicsEngine.SignalGenerated += OnCandleDynamicsSignal;
@@ -284,11 +289,18 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
         await Task.Delay(200);
 
         _executor?.Dispose();
-        _executor = new StrategyExecutor(_contractService, _engine);
+        _executor = new StrategyExecutor(
+            _contractService,
+            _engine,
+            _virtualEntryModeController,
+            new VirtualTradeSimulator());
         _executor.StatsUpdated += OnStatsUpdated;
         _executor.TradeExecuted += OnTradeExecuted;
         _executor.PositionOpened += OnBotPositionOpened;
         _executor.TradeCompleted += OnBotTradeCompleted;
+        _executor.VirtualTradeCompleted += OnVirtualTradeCompleted;
+        _executor.VirtualPositionOpened += OnVirtualPositionOpened;
+        _executor.VirtualPositionUpdated += OnVirtualPositionUpdated;
 
         if (IsTickScalperMode)
         {
@@ -359,6 +371,12 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
                 ? _activeMarketTab.CandleValues[^1].Epoch : 0;
         }
 
+        if (config.DurationApiUnit == "t" && _tickHandler == null)
+        {
+            _tickHandler = (_, tick) => OnTickReceived(tick);
+            _activeMarketTab.TickReceived += _tickHandler;
+        }
+
         if (!IsTickScalperMode && !IsCandleDynamicsMode)
         {
             _candleHandler = (_, _) => OnCandleUpdated();
@@ -381,13 +399,13 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
         IsPaused = !IsPaused;
         if (IsPaused)
         {
-            _executor?.Stop();
+            _executor?.Pause();
             CurrentSignalText = "Pausado";
         }
         else
         {
             var config = BuildConfig();
-            _executor?.Start(config, _activeSymbol);
+            _executor?.Resume(config, _activeSymbol);
             CurrentSignalText = "Analisando...";
         }
     }
@@ -616,19 +634,58 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
 
     private void OnBotTradeCompleted(object? sender, TradeCompleted e)
     {
+        ReportStrategyResult(e.Won);
+        BotTradeCompleted?.Invoke(this, e);
+    }
+
+    private void OnVirtualTradeCompleted(object? sender, VirtualTradeResult e)
+    {
+        ReportStrategyResult(e.Won);
+        Application.Current?.Dispatcher?.InvokeAsync(() =>
+        {
+            _activeMarketTab?.ContractPanel.OpenPositions.CompleteVirtualPosition(e.TradeId);
+            var outcome = e.Won
+                ? "Entrada virtual finalizada: W"
+                : "Entrada virtual finalizada: L";
+            LastTradeText = e.RealModeActivated
+                ? $"{outcome} — próxima entrada será real"
+                : outcome;
+        });
+    }
+
+    private void OnVirtualPositionOpened(object? sender, VirtualPositionOpened e)
+    {
+        if (_activeMarketTab == null) return;
+
+        _ = _activeMarketTab.ContractPanel.OpenPositions.AddVirtualPositionAsync(
+            e.TradeId,
+            e.Symbol,
+            _activeMarketTab.DisplayName,
+            e.ContractType,
+            e.Stake,
+            e.EntrySpot,
+            e.DurationSeconds);
+    }
+
+    private void OnVirtualPositionUpdated(object? sender, VirtualPositionUpdated e)
+    {
+        _activeMarketTab?.ContractPanel.OpenPositions.UpdateVirtualPosition(
+            e.TradeId,
+            e.CurrentSpot);
+    }
+
+    private void ReportStrategyResult(bool won)
+    {
         if (IsTickScalperMode)
         {
-            _tickScalperEngine.ReportTradeResult(e.Won);
-            if (e.Won)
-                _tickScalperEngine.SetCooldown();
+            _tickScalperEngine.ReportTradeResult(won);
+            if (won) _tickScalperEngine.SetCooldown();
         }
         else if (IsCandleDynamicsMode)
         {
-            _candleDynamicsEngine.ReportTradeResult(e.Won);
-            if (e.Won)
-                _candleDynamicsEngine.SetCooldown();
+            _candleDynamicsEngine.ReportTradeResult(won);
+            if (won) _candleDynamicsEngine.SetCooldown();
         }
-        BotTradeCompleted?.Invoke(this, e);
     }
 
     private void OnTickReceived(TickData tick)

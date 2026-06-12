@@ -8,10 +8,11 @@ namespace Excalibur5.Services;
 public sealed class DerivWebSocketService : IDerivWebSocketService
 {
     private const string Src = "WebSocket";
-    private static readonly Uri ServerUri = new(AppConfig.WebSocketUrl);
+    private static readonly Uri DefaultUri = new(AppConfig.WebSocketUrl);
 
-    private ClientWebSocket?         _ws;
-    private CancellationTokenSource  _appCts = new();
+    private Uri                       _serverUri = DefaultUri;
+    private ClientWebSocket?          _ws;
+    private CancellationTokenSource   _appCts = new();
     private SemaphoreSlim             _sendLock = new(1, 1);
     private int  _reconnecting;
     private volatile bool _intentionalDisconnect;
@@ -29,7 +30,19 @@ public sealed class DerivWebSocketService : IDerivWebSocketService
         _reconnectDelay        = AppConfig.ReconnectBaseDelayMs;
         Interlocked.Exchange(ref _reconnecting, 0);
 
-        AppLogger.Info(Src, $"ConnectAsync called → {AppConfig.WebSocketUrl}");
+        _serverUri = DefaultUri;
+        AppLogger.Info(Src, $"ConnectAsync called → {DefaultUri}");
+        await ConnectInternalAsync(ct);
+    }
+
+    public async Task ConnectAsync(Uri url, CancellationToken ct = default)
+    {
+        _intentionalDisconnect = false;
+        _reconnectDelay = AppConfig.ReconnectBaseDelayMs;
+        Interlocked.Exchange(ref _reconnecting, 0);
+
+        _serverUri = url;
+        AppLogger.Info(Src, $"ConnectAsync (custom URL) called → {url}");
         await ConnectInternalAsync(ct);
     }
 
@@ -58,7 +71,7 @@ public sealed class DerivWebSocketService : IDerivWebSocketService
         oldLock.Dispose();
 
         AppLogger.Info(Src, "Connecting…");
-        await _ws.ConnectAsync(ServerUri, ct);
+        await _ws.ConnectAsync(_serverUri, ct);
         AppLogger.Info(Src, "Connected — state: Open");
 
         Connected?.Invoke(this, EventArgs.Empty);

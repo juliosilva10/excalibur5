@@ -165,8 +165,6 @@ public sealed class ContractService : IContractService, IDisposable
         var dict = new Dictionary<string, object>
         {
             ["contracts_for"] = symbol,
-            ["currency"] = currency,
-            ["product_type"] = "basic",
             ["req_id"] = reqId
         };
 
@@ -206,7 +204,8 @@ public sealed class ContractService : IContractService, IDisposable
         {
             var contractType = item.TryGetProperty("contract_type", out var ct) ? ct.GetString() ?? "" : "";
             if (contractType != "VANILLALONGCALL" && contractType != "VANILLALONGPUT"
-                && contractType != "CALL" && contractType != "PUT")
+                && contractType != "CALL" && contractType != "PUT"
+                && contractType != "CALLE" && contractType != "PUTE")
                 continue;
 
             list.Add(new ContractInfo
@@ -312,7 +311,7 @@ public sealed class ContractService : IContractService, IDisposable
             ["basis"] = "stake",
             ["contract_type"] = contractType,
             ["currency"] = currency,
-            ["symbol"] = symbol,
+            ["underlying_symbol"] = symbol,
             ["req_id"] = reqId
         };
 
@@ -351,7 +350,7 @@ public sealed class ContractService : IContractService, IDisposable
         var propEl = root.GetProperty("proposal");
         var response = ParseProposal(root, propEl) ?? new ProposalResponse();
         response = response with { ContractType = contractType };
-        AppLogger.Info(Src, $"Proposal subscribed: {key} {symbol} dateExpiry={dateExpiry} dur={duration}{durationUnit} barrier={barrier} ask={response.AskPrice}");
+        AppLogger.Info(Src, $"Proposal subscribed: {key} {symbol} dateExpiry={dateExpiry} dur={duration}{durationUnit} barrier={barrier} ask={response.AskPrice} payout={response.Payout} ppp={response.PayoutPerPoint}");
         return response;
     }
 
@@ -458,7 +457,7 @@ public sealed class ContractService : IContractService, IDisposable
             ["basis"] = "stake",
             ["contract_type"] = contractType,
             ["currency"] = "USD",
-            ["symbol"] = symbol,
+            ["underlying_symbol"] = symbol,
             ["duration"] = duration,
             ["duration_unit"] = durationUnit,
             ["req_id"] = reqId

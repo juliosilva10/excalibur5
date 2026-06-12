@@ -24,6 +24,7 @@
             <Setter Property="Padding"      Value="8,2,8,2"/>
             <Setter Property="FontSize"     Value="10"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
             <Setter Property="CaretBrush"   Value="White"/>
             <Setter Property="Template">
                 <Setter.Value>
@@ -56,9 +57,21 @@
                                         <GradientStop Color="#153342" Offset="1.0"/>
                                     </LinearGradientBrush>
                                 </Border.Background>
-                                <ScrollViewer x:Name="PART_ContentHost"
-                                              Margin="{TemplateBinding Padding}"
-                                              VerticalAlignment="Center"/>
+                                <Grid>
+                                    <ScrollViewer x:Name="PART_ContentHost"
+                                                  Margin="{TemplateBinding Padding}"
+                                                  Opacity="0"/>
+                                    <Viewbox Margin="{TemplateBinding Padding}"
+                                             Stretch="Uniform"
+                                             StretchDirection="DownOnly"
+                                             IsHitTestVisible="False">
+                                        <TextBlock Text="{TemplateBinding Tag}"
+                                                   Foreground="{TemplateBinding Foreground}"
+                                                   FontSize="{TemplateBinding FontSize}"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"/>
+                                    </Viewbox>
+                                </Grid>
                             </Border>
                         </Grid>
                         <ControlTemplate.Triggers>
@@ -354,7 +367,7 @@
                 <Grid>
                 <Grid.ColumnDefinitions>
                     <!-- Token -->
-                    <ColumnDefinition Width="120"/>
+                    <ColumnDefinition Width="200"/>
                     <!-- Espaço -->
                     <ColumnDefinition Width="12"/>
                     <!-- Botão -->

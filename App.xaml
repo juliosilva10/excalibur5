@@ -37,6 +37,7 @@
         <converters:NotNullToVisibilityConverter x:Key="NotNullToVis"/>
         <converters:IsPositiveConverter x:Key="IsPositive"/>
         <converters:IsNegativeConverter x:Key="IsNegative"/>
+        <converters:SequenceToColoredTextConverter x:Key="SequenceToColored"/>
         <BooleanToVisibilityConverter   x:Key="BoolToVis"/>
 
         <!-- Confidence Slider Style: colored track (red→orange→yellow→blue→green) -->

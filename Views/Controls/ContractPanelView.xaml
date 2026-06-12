@@ -44,6 +44,9 @@
                                     <DataTrigger Binding="{Binding DataContext.Strategy.IsBotVisible, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
                                         <Setter Property="Visibility" Value="Collapsed"/>
                                     </DataTrigger>
+                                    <DataTrigger Binding="{Binding DataContext.Virtual.IsVirtualVisible, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
                                 </Style.Triggers>
                             </Style>
                         </Border.Style>
@@ -108,6 +111,29 @@
                                    FontSize="11"
                                    FontWeight="SemiBold"/>
                     </Border>
+                    <!-- Virtual tab (when active) -->
+                    <Border CornerRadius="4"
+                            BorderBrush="#00f0ff" BorderThickness="1"
+                            Padding="10,3">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding DataContext.Virtual.IsVirtualVisible, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,1" EndPoint="0,0">
+                                <GradientStop Color="#0f2030" Offset="0"/>
+                                <GradientStop Color="#1a4a5e" Offset="0.85"/>
+                            </LinearGradientBrush>
+                        </Border.Background>
+                        <TextBlock Text="Entrada Virtual"
+                                   Foreground="#00f0ff" FontSize="11" FontWeight="SemiBold"/>
+                    </Border>
                 </StackPanel>
             </Border>
 
@@ -121,6 +147,9 @@
                                 <Setter Property="Visibility" Value="Collapsed"/>
                             </DataTrigger>
                             <DataTrigger Binding="{Binding DataContext.Strategy.IsBotVisible, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding DataContext.Virtual.IsVirtualVisible, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
                                 <Setter Property="Visibility" Value="Collapsed"/>
                             </DataTrigger>
                         </Style.Triggers>
@@ -167,6 +196,9 @@
                                     <Setter Property="Visibility" Value="Collapsed"/>
                                 </DataTrigger>
                                 <DataTrigger Binding="{Binding DataContext.Strategy.IsBotVisible, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding DataContext.Virtual.IsVirtualVisible, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
                                     <Setter Property="Visibility" Value="Collapsed"/>
                                 </DataTrigger>
                             </Style.Triggers>
@@ -330,6 +362,9 @@
                                     <Setter Property="Visibility" Value="Collapsed"/>
                                 </DataTrigger>
                                 <DataTrigger Binding="{Binding DataContext.Strategy.IsBotVisible, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding DataContext.Virtual.IsVirtualVisible, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
                                     <Setter Property="Visibility" Value="Collapsed"/>
                                 </DataTrigger>
                             </Style.Triggers>
@@ -914,6 +949,250 @@
                                    Foreground="#6090a8" FontSize="9"
                                    TextWrapping="Wrap"
                                    Margin="0,12,0,0"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- VIRTUAL PANEL (visible when Virtual active, spans cols 0-2) -->
+                <StackPanel Grid.Column="0" Grid.ColumnSpan="3"
+                            DataContext="{Binding DataContext.Virtual, RelativeSource={RelativeSource AncestorType=Window}}">
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsVirtualVisible}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+
+                    <!-- Sequência Alvo -->
+                    <TextBlock Text="Sequência Alvo"
+                               Foreground="#90b5c9"
+                               FontSize="10"
+                               Margin="0,0,0,4">
+                        <TextBlock.ToolTip>
+                            <ToolTip MaxWidth="260">
+                                <TextBlock TextWrapping="Wrap"
+                                           Text="Define o gatilho para sair das entradas virtuais nas abas Markets e Bot.&#x0a;Enquanto houver uma Sequência Alvo, compras manuais e sinais automáticos são simulados e registram W (vitória) ou L (derrota).&#x0a;Quando os últimos resultados coincidirem com esta sequência, as compras reais são liberadas a partir da próxima entrada."/>
+                            </ToolTip>
+                        </TextBlock.ToolTip>
+                    </TextBlock>
+                    <StackPanel>
+                        <StackPanel.ToolTip>
+                            <ToolTip MaxWidth="260">
+                                <TextBlock TextWrapping="Wrap"
+                                           Text="Com qualquer valor na Sequência Alvo, os botões Call, Put, Rise e Fall e os sinais do Bot começam com entradas virtuais.&#x0a;Exemplo: W L L L libera as compras reais somente depois que esse padrão ocorrer nas simulações."/>
+                            </ToolTip>
+                        </StackPanel.ToolTip>
+                        <ContentControl Content="{Binding TargetSequence, Converter={StaticResource SequenceToColored}}"
+                                        Width="300" Height="30"
+                                        HorizontalAlignment="Left">
+                            <ContentControl.ToolTip>
+                                <ToolTip MaxWidth="260">
+                                    <TextBlock TextWrapping="Wrap"
+                                               Text="Gatilho compartilhado entre Markets e Bot: W representa vitória e L representa derrota.&#x0a;Ao completar este padrão, as entradas reais são liberadas até que a Tolerância determine o retorno ao modo virtual."/>
+                                </ToolTip>
+                            </ContentControl.ToolTip>
+                            <ContentControl.Template>
+                                <ControlTemplate TargetType="ContentControl">
+                                    <Grid>
+                                        <Border x:Name="GlowBorder"
+                                                CornerRadius="8"
+                                                Background="Transparent"
+                                                BorderBrush="#00f0ff"
+                                                BorderThickness="1.5"
+                                                Opacity="0">
+                                            <Border.Margin>
+                                                <Thickness>-1,-1,-1,-1</Thickness>
+                                            </Border.Margin>
+                                            <Border.Effect>
+                                                <DropShadowEffect Color="#00f0ff"
+                                                                  BlurRadius="10"
+                                                                  ShadowDepth="0"
+                                                                  Opacity="0.9"/>
+                                            </Border.Effect>
+                                        </Border>
+                                        <Border BorderBrush="{StaticResource DerivCardBorderBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="8">
+                                            <Border.Background>
+                                                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                                    <GradientStop Color="#08141a" Offset="0.0"/>
+                                                    <GradientStop Color="#0d1f28" Offset="0.1"/>
+                                                    <GradientStop Color="#153342" Offset="0.5"/>
+                                                    <GradientStop Color="#153342" Offset="1.0"/>
+                                                </LinearGradientBrush>
+                                            </Border.Background>
+                                            <ContentPresenter Margin="8,0,8,0"
+                                                              HorizontalAlignment="Left"
+                                                              VerticalAlignment="Center"/>
+                                        </Border>
+                                    </Grid>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Trigger.EnterActions>
+                                                <BeginStoryboard>
+                                                    <Storyboard>
+                                                        <DoubleAnimation Storyboard.TargetName="GlowBorder"
+                                                                         Storyboard.TargetProperty="Opacity"
+                                                                         To="1" Duration="0:0:0.3"/>
+                                                    </Storyboard>
+                                                </BeginStoryboard>
+                                            </Trigger.EnterActions>
+                                            <Trigger.ExitActions>
+                                                <BeginStoryboard>
+                                                    <Storyboard>
+                                                        <DoubleAnimation Storyboard.TargetName="GlowBorder"
+                                                                         Storyboard.TargetProperty="Opacity"
+                                                                         To="0" Duration="0:0:0.3"/>
+                                                    </Storyboard>
+                                                </BeginStoryboard>
+                                            </Trigger.ExitActions>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </ContentControl.Template>
+                        </ContentControl>
+                        <TextBlock Text="{Binding SequenceSummary}"
+                                   Foreground="#a3b8cc"
+                                   FontFamily="Consolas"
+                                   FontSize="11"
+                                   FontWeight="SemiBold"
+                                   HorizontalAlignment="Left"
+                                   Margin="2,5,0,0"
+                                   ToolTip="Resumo agrupado da sequência. Exemplo: (1W 3L)."/>
+                    </StackPanel>
+
+                    <TextBlock Text="Tolerância"
+                               Foreground="#90b5c9"
+                               FontSize="10"
+                               Margin="0,14,0,4">
+                        <TextBlock.ToolTip>
+                            <ToolTip MaxWidth="260">
+                                <TextBlock TextWrapping="Wrap"
+                                           Text="Controla quando Markets e Bot deixam as entradas reais.&#x0a;Depois que a Sequência Alvo liberar compras reais, esta quantidade de derrotas reais consecutivas faz o programa voltar ao modo virtual.&#x0a;Uma vitória real zera a contagem de derrotas."/>
+                            </ToolTip>
+                        </TextBlock.ToolTip>
+                    </TextBlock>
+                    <TextBox Style="{StaticResource DerivTextBox}"
+                             Text="{Binding ToleranceText, UpdateSourceTrigger=PropertyChanged}"
+                             Height="30"
+                             Width="80"
+                             HorizontalAlignment="Left"
+                             MaxLength="10"
+                             PreviewTextInput="ToleranceInput_PreviewTextInput"
+                             DataObject.Pasting="ToleranceInput_Pasting">
+                        <TextBox.ToolTip>
+                            <ToolTip MaxWidth="260">
+                                <TextBlock TextWrapping="Wrap"
+                                           Text="Informe um inteiro maior que zero.&#x0a;Exemplo: com Tolerância 2, duas derrotas reais consecutivas fazem o programa voltar a simular até a Sequência Alvo ocorrer novamente.&#x0a;Se ficar vazio, a Sequência Alvo ainda controla as primeiras entradas virtuais, mas depois do gatilho o programa permanece nas entradas reais."/>
+                            </ToolTip>
+                        </TextBox.ToolTip>
+                    </TextBox>
+
+                    <!-- Botões W / L -->
+                    <StackPanel Orientation="Horizontal" Margin="0,14,0,8">
+                        <Button Command="{Binding RecordWinCommand}"
+                                Content="W" Width="60" Height="32"
+                                Style="{StaticResource DerivCallButtonStyle}"
+                                FontSize="13" FontWeight="Bold"
+                                Foreground="#34c759"
+                                Margin="0,0,10,0"
+                                ToolTip="Adicionar uma vitória (W) à Sequência Alvo."/>
+                        <Button Command="{Binding RecordLossCommand}"
+                                Content="L" Width="60" Height="32"
+                                Style="{StaticResource DerivPutButtonStyle}"
+                                FontSize="13" FontWeight="Bold"
+                                Foreground="#FF6B6B"
+                                ToolTip="Adicionar uma derrota (L) à Sequência Alvo."/>
+                        <Button Content="⌫ Apagar" Width="80" Height="32"
+                                FontSize="10" FontWeight="SemiBold"
+                                Foreground="#2a3038"
+                                Margin="10,0,0,0"
+                                Cursor="Hand"
+                                FocusVisualStyle="{x:Null}"
+                                Click="DeleteSequence_Click"
+                                PreviewMouseLeftButtonDown="DeleteSequence_PreviewMouseLeftButtonDown"
+                                PreviewMouseLeftButtonUp="DeleteSequence_PreviewMouseLeftButtonUp"
+                                MouseLeave="DeleteSequence_MouseLeave">
+                            <Button.ToolTip>
+                                <ToolTip MaxWidth="260">
+                                    <TextBlock TextWrapping="Wrap"
+                                               Text="Clique para apagar o último item. Dê dois cliques e segure para limpar a sequência e a tolerância."/>
+                                </ToolTip>
+                            </Button.ToolTip>
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Grid>
+                                        <Border x:Name="GlowBorder"
+                                                CornerRadius="8"
+                                                Background="White"
+                                                Opacity="0.22">
+                                            <Border.Effect>
+                                                <BlurEffect Radius="20"/>
+                                            </Border.Effect>
+                                        </Border>
+                                        <Border x:Name="ShadowBorder"
+                                                CornerRadius="8"
+                                                Background="Black"
+                                                Opacity="0.3"
+                                                Margin="0,2,0,-2"/>
+                                        <Border x:Name="MainBorder"
+                                                CornerRadius="8"
+                                                BorderThickness="1.5"
+                                                BorderBrush="#c0c4c8">
+                                            <Border.Background>
+                                                <LinearGradientBrush StartPoint="0,1" EndPoint="0,0">
+                                                    <GradientStop Color="#747c84" Offset="0.0"/>
+                                                    <GradientStop Color="#a2a8ae" Offset="0.48"/>
+                                                    <GradientStop Color="#d2d6da" Offset="1.0"/>
+                                                </LinearGradientBrush>
+                                            </Border.Background>
+                                            <Grid>
+                                                <Border CornerRadius="7,7,0,0" Height="8" VerticalAlignment="Top"
+                                                        Opacity="0.30" IsHitTestVisible="False">
+                                                    <Border.Background>
+                                                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                                            <GradientStop Color="White" Offset="0.0"/>
+                                                            <GradientStop Color="Transparent" Offset="1.0"/>
+                                                        </LinearGradientBrush>
+                                                    </Border.Background>
+                                                </Border>
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Grid>
+                                        </Border>
+                                    </Grid>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="GlowBorder" Property="Opacity" Value="0.45"/>
+                                            <Setter TargetName="MainBorder" Property="BorderBrush" Value="#a0a8b0"/>
+                                            <Setter TargetName="MainBorder" Property="Background">
+                                                <Setter.Value>
+                                                    <LinearGradientBrush StartPoint="0,1" EndPoint="0,0">
+                                                        <GradientStop Color="#858d95" Offset="0.0"/>
+                                                        <GradientStop Color="#b1b7bd" Offset="0.45"/>
+                                                        <GradientStop Color="#e0e3e6" Offset="1.0"/>
+                                                    </LinearGradientBrush>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Trigger>
+                                        <Trigger Property="IsPressed" Value="True">
+                                            <Setter TargetName="ShadowBorder" Property="Opacity" Value="0.05"/>
+                                            <Setter TargetName="GlowBorder" Property="Opacity" Value="0.6"/>
+                                            <Setter TargetName="MainBorder" Property="Background">
+                                                <Setter.Value>
+                                                    <LinearGradientBrush StartPoint="0,1" EndPoint="0,0">
+                                                        <GradientStop Color="#626a72" Offset="0.0"/>
+                                                        <GradientStop Color="#a0a6ac" Offset="1.0"/>
+                                                    </LinearGradientBrush>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
                     </StackPanel>
                 </StackPanel>
 

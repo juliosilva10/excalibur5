@@ -58,7 +58,11 @@ Resumo dos pontos-chave:
 
 ## Fluxo Principal
 
-1. Autenticação via token Deriv (WebSocket `authorize`)
+1. **Autenticação via REST OTP** (nova API):
+   - `GET /trading/v1/options/accounts` com `Deriv-App-ID` + `Authorization: Bearer {PAT}` → descobre `account_id`
+   - `POST /trading/v1/options/accounts/{id}/otp` → obtém URL WebSocket autenticada com OTP
+   - Conecta WebSocket na URL retornada (já autenticado, **sem** enviar `authorize`)
+   - Implementado em `DerivRestClient` + `DerivApiService.ConnectAndAuthorizeAsync`
 2. Subscrição de ticks de mercado
 3. Consulta de contratos disponíveis (`contracts_for`)
 4. Proposta e compra de contratos (`proposal` → `buy`)

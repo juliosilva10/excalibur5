@@ -6,6 +6,7 @@ using Excalibur5.Config;
 using Excalibur5.Models;
 using Excalibur5.Services;
 using Excalibur5.Services.Strategy;
+using Excalibur5.Services.Strategy.Virtual;
 
 namespace Excalibur5.ViewModels;
 
@@ -21,10 +22,12 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private readonly DispatcherTimer         _uptimeTimer;
     private readonly System.Diagnostics.Stopwatch _uptimeWatch = new();
     private readonly HashSet<long> _currentSessionContracts = new();
+    private readonly IVirtualEntryModeController _virtualEntryModeController;
     private volatile string _token = string.Empty;
     private int _timerBusy; // 0 = idle, 1 = busy — use Interlocked for atomic check-and-set
     private TimeSpan _serverOffset; // difference between server UTC and local UTC
     private bool _isBotSessionActive;
+    private bool _initialBalanceSet;
 
     [ObservableProperty] private bool    _isConnected;
     [ObservableProperty] private bool    _isConnecting;
@@ -38,7 +41,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty] private long    _pingMs;
     [ObservableProperty] private string  _serverUtc    = string.Empty;
     [ObservableProperty] private string  _statusMessage = string.Empty;
-    [ObservableProperty] private string  _uptime        = "00:00:00";
+    [ObservableProperty] private string  _uptime        = "00h 00m 00s";
+    public VirtualViewModel Virtual { get; } = new();
 
     public bool   IsVirtual        => AccountType.Equals("virtual", StringComparison.OrdinalIgnoreCase);
     public string AccountTypeLabel => IsVirtual ? "Virtual" : "Real";
@@ -73,9 +77,18 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _tickStream = tickStream;
         _contractService = contractService;
 
-        Markets = new MarketsViewModel(tickStream, contractService);
+        _virtualEntryModeController = new VirtualEntryModeController();
+        _virtualEntryModeController.Start(Virtual.GetSettings());
+        Virtual.SettingsChanged += OnVirtualSettingsChanged;
+
+        Markets = new MarketsViewModel(
+            tickStream,
+            contractService,
+            _virtualEntryModeController);
         Markets.SetRecoverViewModel(Recover);
-        Strategy = new StrategyViewModel(contractService);
+        Strategy = new StrategyViewModel(
+            contractService,
+            _virtualEntryModeController);
         Strategy.SetRecoverViewModel(Recover);
         History = new HistoryViewModel(contractService);
         History.TradeSettled += OnTradeSettledForPerformance;
@@ -87,6 +100,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             Recover.IsRecoverVisible = false;
             History.IsHistoryVisible = false;
             Performance.IsPerformanceVisible = false;
+            Virtual.IsVirtualVisible = false;
         };
         Markets.PropertyChanged += (_, e) =>
         {
@@ -95,6 +109,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 Log.IsLogVisible = false;
                 Strategy.IsBotVisible = false;
                 Recover.IsRecoverVisible = false;
+                Virtual.IsVirtualVisible = false;
             }
             if (e.PropertyName == nameof(Markets.IsMarketsVisible) || e.PropertyName == nameof(Markets.SelectedTab))
             {
@@ -113,6 +128,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 Recover.IsRecoverVisible = false;
                 History.IsHistoryVisible = false;
                 Performance.IsPerformanceVisible = false;
+                Virtual.IsVirtualVisible = false;
             }
             if (e.PropertyName == nameof(Log.IsLogVisible))
             {
@@ -137,6 +153,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 Recover.IsRecoverVisible = false;
                 History.IsHistoryVisible = false;
                 Performance.IsPerformanceVisible = false;
+                Virtual.IsVirtualVisible = false;
             }
         };
         Recover.PropertyChanged += (_, e) =>
@@ -148,6 +165,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 Strategy.IsBotVisible = false;
                 History.IsHistoryVisible = false;
                 Performance.IsPerformanceVisible = false;
+                Virtual.IsVirtualVisible = false;
             }
         };
         History.PropertyChanged += (_, e) =>
@@ -159,6 +177,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 Strategy.IsBotVisible = false;
                 Recover.IsRecoverVisible = false;
                 Performance.IsPerformanceVisible = false;
+                Virtual.IsVirtualVisible = false;
             }
         };
         Performance.PropertyChanged += (_, e) =>
@@ -170,6 +189,19 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 Strategy.IsBotVisible = false;
                 Recover.IsRecoverVisible = false;
                 History.IsHistoryVisible = false;
+                Virtual.IsVirtualVisible = false;
+            }
+        };
+        Virtual.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(Virtual.IsVirtualVisible) && Virtual.IsVirtualVisible)
+            {
+                Markets.IsMarketsVisible = false;
+                Log.IsLogVisible = false;
+                Strategy.IsBotVisible = false;
+                Recover.IsRecoverVisible = false;
+                History.IsHistoryVisible = false;
+                Performance.IsPerformanceVisible = false;
             }
         };
 
@@ -211,15 +243,20 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _uptimeTimer.Tick += (_, _) =>
         {
             var e = _uptimeWatch.Elapsed;
-            Uptime = $"{(int)e.TotalHours:D2}:{e.Minutes:D2}:{e.Seconds:D2}";
+            Uptime = $"{(int)e.TotalHours:D2}h {e.Minutes:D2}m {e.Seconds:D2}s";
             if (IsConnected)
             {
                 var serverNow = DateTimeOffset.UtcNow.Add(_serverOffset);
-                ServerUtc = serverNow.ToString("HH:mm:ss") + " UTC";
+                ServerUtc = serverNow.ToString("HH'h' mm'm' ss's'") + " UTC";
             }
         };
 
         AppLogger.Info(Src, $"MainViewModel created — log: {AppLogger.GetLogPath()}");
+    }
+
+    private void OnVirtualSettingsChanged(object? sender, EventArgs e)
+    {
+        _virtualEntryModeController.Start(Virtual.GetSettings());
     }
 
     private void OnTradeSettledForPerformance(object? sender, TradeHistoryItem trade)
@@ -273,9 +310,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
         try
         {
-            await _ws.ConnectAsync();
-            await _api.AuthorizeAsync(_token);
-            await _api.SubscribeBalanceAsync();
+            await _api.ConnectAndAuthorizeAsync(_token);
             TokenStore.Save(_token);
 
             // Busca ping e hora antes de mostrar a UI — garante que tudo aparece junto
@@ -283,7 +318,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             var timeTask = _api.GetServerTimeAsync();
             await Task.WhenAll(pingTask, timeTask);
             PingMs    = pingTask.Result;
-            ServerUtc = timeTask.Result.ToString("HH:mm:ss") + " UTC";
+            ServerUtc = timeTask.Result.ToString("HH'h' mm'm' ss's'") + " UTC";
             _serverOffset = timeTask.Result - DateTimeOffset.UtcNow;
 
             IsConnected   = true;
@@ -327,11 +362,13 @@ public partial class MainViewModel : ObservableObject, IDisposable
             LoginId       = string.Empty;
             AccountType   = string.Empty;
             Balance       = 0;
+            InitialBalance = 0;
+            _initialBalanceSet = false;
             Currency      = string.Empty;
             PingMs        = 0;
             ServerUtc     = string.Empty;
             StatusMessage = string.Empty;
-            Uptime        = "00:00:00";
+            Uptime        = "00h 00m 00s";
             _uptimeTimer.Stop();
             _uptimeWatch.Reset();
             _disconnecting = false;
@@ -350,8 +387,6 @@ public partial class MainViewModel : ObservableObject, IDisposable
             LoginId     = e.LoginId;
             AccountType = e.IsVirtual ? "virtual" : "real";
             Balance     = e.Balance;
-            if (IsConnecting)
-                InitialBalance = e.Balance;
             Currency    = e.Currency;
             AppLogger.Info(Src, $"UI updated: {e.LoginId} {e.Balance} {e.Currency}");
         }).Task.ContinueWith(t =>
@@ -368,6 +403,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             Balance  = e.Balance;
             Currency = e.Currency;
+            if (!_initialBalanceSet)
+            {
+                _initialBalanceSet = true;
+                InitialBalance = e.Balance;
+            }
             if (!_isBotSessionActive) return;
 
             var tab = Markets.SelectedTab;
@@ -389,6 +429,12 @@ public partial class MainViewModel : ObservableObject, IDisposable
         IsRefreshingBalance = false;
     }
 
+    [RelayCommand]
+    private void ToggleVirtualPanel()
+    {
+        Virtual.ToggleVirtualCommand.Execute(null);
+    }
+
     private void OnConnected(object? sender, EventArgs e)
     {
         _ = HandleConnectedAsync();
@@ -405,8 +451,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         AppLogger.Info(Src, "OnConnected (reconexão automática) — re-autorizando…");
         try
         {
-            await _api.AuthorizeAsync(_token);
-            await _api.SubscribeBalanceAsync();
+            await _api.ConnectAndAuthorizeAsync(_token);
 
             var pingTask = _api.PingAsync();
             var timeTask = _api.GetServerTimeAsync();
@@ -415,7 +460,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             await app.Dispatcher.InvokeAsync(() =>
             {
                 PingMs        = pingTask.Result;
-                ServerUtc     = timeTask.Result.ToString("HH:mm:ss") + " UTC";
+                ServerUtc     = timeTask.Result.ToString("HH'h' mm'm' ss's'") + " UTC";
                 _serverOffset = timeTask.Result - DateTimeOffset.UtcNow;
                 IsConnected   = true;
                 StatusMessage = string.Empty;
@@ -463,7 +508,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             await Task.WhenAll(pingTask, timeTask);
 
             PingMs    = pingTask.Result;
-            ServerUtc = timeTask.Result.ToString("HH:mm:ss") + " UTC";
+            ServerUtc = timeTask.Result.ToString("HH'h' mm'm' ss's'") + " UTC";
             _serverOffset = timeTask.Result - DateTimeOffset.UtcNow;
         }
         catch (Exception ex)
@@ -602,6 +647,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _api.BalanceUpdated -= OnBalanceUpdated;
         _ws.Disconnected    -= OnDisconnected;
         _ws.Connected       -= OnConnected;
+        Virtual.SettingsChanged -= OnVirtualSettingsChanged;
         Markets.Dispose();
         Strategy.Dispose();
         Recover.Dispose();

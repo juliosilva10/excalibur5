@@ -13,14 +13,16 @@ public partial class OpenPositionsViewModel : ObservableObject, IDisposable
     private const string Src = "OpenPositions";
     private readonly IContractService _contractService;
     private readonly DispatcherTimer _timer;
+    private readonly int _pipSize;
 
     public ObservableCollection<OpenPositionItem> Positions { get; } = new();
 
     [ObservableProperty] private bool _hasPositions;
 
-    public OpenPositionsViewModel(IContractService contractService)
+    public OpenPositionsViewModel(IContractService contractService, int pipSize)
     {
         _contractService = contractService;
+        _pipSize = pipSize;
         _contractService.OpenContractUpdated += OnOpenContractUpdated;
 
         _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
@@ -68,8 +70,9 @@ public partial class OpenPositionsViewModel : ObservableObject, IDisposable
             if (update.EntrySpot > 0)
             {
                 item.EntrySpot = update.EntrySpot;
-                if (!string.IsNullOrEmpty(update.EntrySpotRaw))
-                    item.EntrySpotDisplay = update.EntrySpotRaw;
+                item.EntrySpotDisplay = MarketPriceFormatter.Format(
+                    update.EntrySpot,
+                    _pipSize);
             }
 
             if (update.IsExpired || update.IsSold || update.Status == "sold" || update.Status == "lost" || update.Status == "won")
@@ -114,6 +117,63 @@ public partial class OpenPositionsViewModel : ObservableObject, IDisposable
         }
     }
 
+    public Task AddVirtualPositionAsync(
+        long tradeId,
+        string symbol,
+        string displayName,
+        string contractType,
+        decimal stake,
+        decimal entrySpot,
+        int durationSeconds)
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var item = new OpenPositionItem(
+            tradeId,
+            symbol,
+            displayName,
+            contractType,
+            stake,
+            now,
+            now + durationSeconds,
+            durationSeconds,
+            isVirtual: true)
+        {
+            EntrySpot = entrySpot,
+            EntrySpotDisplay = MarketPriceFormatter.Format(entrySpot, _pipSize),
+            CurrentValue = stake
+        };
+
+        return AddItemAsync(item);
+    }
+
+    public void UpdateVirtualPosition(long tradeId, decimal currentSpot)
+    {
+        var item = FindPosition(tradeId);
+        if (item == null || !item.IsVirtual) return;
+
+        var won = item.IsCallDirection
+            ? currentSpot > item.EntrySpot
+            : currentSpot < item.EntrySpot;
+        item.Profit = won ? item.BuyPrice * 0.5m : -item.BuyPrice;
+        item.CurrentValue = Math.Max(0m, item.BuyPrice + item.Profit);
+    }
+
+    public void CompleteVirtualPosition(long tradeId)
+    {
+        var item = FindPosition(tradeId);
+        if (item?.IsVirtual == true)
+            RemovePosition(tradeId);
+    }
+
+    private async Task AddItemAsync(OpenPositionItem item)
+    {
+        await (Application.Current?.Dispatcher?.InvokeAsync(() =>
+        {
+            Positions.Add(item);
+            HasPositions = Positions.Count > 0;
+        })?.Task ?? Task.CompletedTask);
+    }
+
     [RelayCommand]
     private async Task SellAsync(long contractId)
     {
@@ -150,6 +210,8 @@ public partial class OpenPositionsViewModel : ObservableObject, IDisposable
 
         Positions.Remove(item);
         HasPositions = Positions.Count > 0;
+
+        if (item.IsVirtual) return;
 
         _ = Task.Run(async () =>
         {

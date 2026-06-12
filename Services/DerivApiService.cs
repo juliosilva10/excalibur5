@@ -10,17 +10,19 @@ public sealed class DerivApiService : IDerivApiService, IDisposable
     private const string Src = "ApiService";
 
     private readonly IDerivWebSocketService _ws;
+    private readonly IDerivRestClient       _rest;
     private readonly ConcurrentDictionary<int, TaskCompletionSource<JsonElement>> _pending = new();
     private int _reqId;
 
     public event EventHandler<AuthorizeResponse>? Authorized;
     public event EventHandler<BalanceResponse>?   BalanceUpdated;
 
-    public DerivApiService(IDerivWebSocketService ws)
+    public DerivApiService(IDerivWebSocketService ws, IDerivRestClient rest)
     {
-        _ws = ws;
+        _ws   = ws;
+        _rest = rest;
         _ws.MessageReceived += OnMessageReceived;
-        AppLogger.Info(Src, "DerivApiService created");
+        AppLogger.Info(Src, "DerivApiService created (Options platform)");
     }
 
     private void OnMessageReceived(object? sender, string json)
@@ -47,6 +49,29 @@ public sealed class DerivApiService : IDerivApiService, IDisposable
             {
                 var msgType = mt.GetString();
 
+                // The OTP-authenticated connection may return an "authorize" msg_type
+                // with account info on connect (new platform behaviour).
+                if (msgType == "authorize" &&
+                    root.TryGetProperty("authorize", out var authEl))
+                {
+                    var isVirtual = false;
+                    if (authEl.TryGetProperty("is_virtual", out var iv))
+                    {
+                        isVirtual = iv.ValueKind == JsonValueKind.True
+                            || (iv.ValueKind == JsonValueKind.Number && iv.GetInt32() == 1);
+                    }
+                    var response = new AuthorizeResponse
+                    {
+                        LoginId   = authEl.TryGetProperty("loginid",    out var li)  ? li.GetString()  ?? "" : "",
+                        IsVirtual = isVirtual,
+                        Balance   = authEl.TryGetProperty("balance",    out var bal) ? bal.GetDecimal() : 0m,
+                        Currency  = authEl.TryGetProperty("currency",   out var cur) ? cur.GetString()  ?? "" : "",
+                        FullName  = authEl.TryGetProperty("fullname",   out var fn)  ? fn.GetString()   ?? "" : "",
+                    };
+                    AppLogger.Info(Src, $"Authorized (WS): {response.LoginId} | virtual={response.IsVirtual} | {response.Balance} {response.Currency}");
+                    Authorized?.Invoke(this, response);
+                }
+
                 if (msgType == "balance" &&
                     root.TryGetProperty("balance", out var balEl))
                 {
@@ -71,32 +96,31 @@ public sealed class DerivApiService : IDerivApiService, IDisposable
         }
     }
 
-    public async Task AuthorizeAsync(string token, CancellationToken ct = default)
+    /// <inheritdoc />
+    public async Task ConnectAndAuthorizeAsync(string patToken, CancellationToken ct = default)
     {
-        var reqId = NextReqId();
-        AppLogger.Info(Src, $"AuthorizeAsync req_id={reqId}");
-        var json = JsonSerializer.Serialize(new { authorize = token, req_id = reqId });
+        AppLogger.Info(Src, "ConnectAndAuthorizeAsync — REST account discovery + OTP flow");
 
-        var root = await SendAndWaitAsync(reqId, json, ct);
+        // 1. REST: discover account ID and type
+        var (accountId, accountType) = await _rest.GetAccountIdAsync(patToken, ct);
 
-        if (root.TryGetProperty("error", out var err))
+        // 2. REST: get OTP-authenticated WebSocket URL
+        var wsUrl = await _rest.GetWebSocketUrlAsync(accountId, patToken, ct);
+
+        // 3. Connect WebSocket (already authenticated — no authorize message needed)
+        await _ws.ConnectAsync(new Uri(wsUrl), ct);
+
+        // 4. Fire Authorized event from REST data (account_type is authoritative for the Options platform)
+        var restAuth = new AuthorizeResponse
         {
-            var msg = err.GetProperty("message").GetString();
-            AppLogger.Error(Src, $"Authorize error: {msg}");
-            throw new InvalidOperationException(msg);
-        }
-
-        var auth = root.GetProperty("authorize");
-        var response = new AuthorizeResponse
-        {
-            LoginId   = auth.TryGetProperty("loginid",    out var li)  ? li.GetString()  ?? "" : "",
-            IsVirtual = auth.TryGetProperty("is_virtual", out var iv)  && iv.GetInt32() == 1,
-            Balance   = auth.TryGetProperty("balance",    out var bal) ? bal.GetDecimal() : 0m,
-            Currency  = auth.TryGetProperty("currency",   out var cur) ? cur.GetString()  ?? "" : "",
-            FullName  = auth.TryGetProperty("fullname",   out var fn)  ? fn.GetString()   ?? "" : "",
+            LoginId   = accountId,
+            IsVirtual = string.Equals(accountType, "demo", StringComparison.OrdinalIgnoreCase),
         };
-        AppLogger.Info(Src, $"Authorized: {response.LoginId} | virtual={response.IsVirtual} | {response.Balance} {response.Currency}");
-        Authorized?.Invoke(this, response);
+        AppLogger.Info(Src, $"Authorized (REST): {restAuth.LoginId} | virtual={restAuth.IsVirtual} | type={accountType}");
+        Authorized?.Invoke(this, restAuth);
+
+        // 5. Subscribe to balance updates (will update balance/currency via BalanceUpdated event)
+        await SubscribeBalanceAsync(ct);
     }
 
     public async Task<long> PingAsync(CancellationToken ct = default)
@@ -165,6 +189,7 @@ public sealed class DerivApiService : IDerivApiService, IDisposable
     public void Dispose()
     {
         _ws.MessageReceived -= OnMessageReceived;
+        (_rest as IDisposable)?.Dispose();
         // Drain and cancel all pending requests atomically
         foreach (var key in _pending.Keys)
         {

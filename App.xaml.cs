@@ -33,7 +33,8 @@ public partial class App : Application
         };
 
         _wsService = new DerivWebSocketService();
-        var apiService      = new DerivApiService(_wsService);
+        var restClient     = new DerivRestClient();
+        var apiService      = new DerivApiService(_wsService, restClient);
         var tickService     = new TickStreamService(_wsService);
         var contractService = new ContractService(_wsService);
         var viewModel       = new MainViewModel(apiService, _wsService, tickService, contractService);

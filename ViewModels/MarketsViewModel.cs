@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Excalibur5.Models;
 using Excalibur5.Services;
+using Excalibur5.Services.Strategy.Virtual;
 
 namespace Excalibur5.ViewModels;
 
@@ -16,13 +17,20 @@ public partial class MarketsViewModel : ObservableObject, IDisposable
 
     public ObservableCollection<MarketTabViewModel> Tabs { get; } = new();
 
-    public MarketsViewModel(ITickStreamService tickService, IContractService contractService)
+    public MarketsViewModel(
+        ITickStreamService tickService,
+        IContractService contractService,
+        IVirtualEntryModeController entryModeController)
     {
         _tickService = tickService;
         _contractService = contractService;
 
         foreach (var market in MarketInfo.SyntheticMarkets)
-            Tabs.Add(new MarketTabViewModel(market, tickService, contractService));
+            Tabs.Add(new MarketTabViewModel(
+                market,
+                tickService,
+                contractService,
+                entryModeController));
     }
 
     public void SetRecoverViewModel(RecoverViewModel recoverVm)

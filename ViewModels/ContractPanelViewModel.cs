@@ -4,7 +4,9 @@ using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Excalibur5.Models;
+using Excalibur5.Models.Strategy;
 using Excalibur5.Services;
+using Excalibur5.Services.Strategy.Virtual;
 
 namespace Excalibur5.ViewModels;
 
@@ -21,6 +23,10 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
     public string EffectivePutContractType => ContractTypePut;
 
     private readonly IContractService _contractService;
+    private readonly IVirtualEntryModeController _entryModeController;
+    private readonly IVirtualTradeSimulator _virtualTradeSimulator;
+    private readonly Dictionary<long, int> _manualRealCycles = new();
+    private long _activeVirtualTradeId;
     private readonly int _pipSize;
     private readonly decimal _barrierInnerBase;
     private readonly decimal _barrierOuterBase;
@@ -142,15 +148,25 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
     public DateTime MinEndDate => new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
     public DateTime MaxEndDate => DateTime.UtcNow.Date.AddYears(1);
 
-    public ContractPanelViewModel(IContractService contractService, int pipSize = 2, decimal barrierInnerBase = 0.45m, decimal barrierOuterBase = 0.86m)
+    public ContractPanelViewModel(
+        IContractService contractService,
+        IVirtualEntryModeController entryModeController,
+        IVirtualTradeSimulator virtualTradeSimulator,
+        int pipSize = 2,
+        decimal barrierInnerBase = 0.45m,
+        decimal barrierOuterBase = 0.86m)
     {
         _contractService = contractService;
+        _entryModeController = entryModeController;
+        _virtualTradeSimulator = virtualTradeSimulator;
         _pipSize = pipSize;
         _barrierInnerBase = barrierInnerBase;
         _barrierOuterBase = barrierOuterBase;
         _contractService.ProposalUpdated += OnProposalUpdated;
         _contractService.OpenContractUpdated += OnMartingaleContractUpdated;
-        OpenPositions = new OpenPositionsViewModel(contractService);
+        _virtualTradeSimulator.TradeCompleted += OnVirtualTradeCompleted;
+        _virtualTradeSimulator.TradeUpdated += OnVirtualTradeUpdated;
+        OpenPositions = new OpenPositionsViewModel(contractService, pipSize);
         UpdateDurationRange();
     }
 
@@ -184,6 +200,7 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
 
     private void OnMartingaleContractUpdated(object? sender, OpenContractUpdate update)
     {
+        RecordManualRealResult(update);
         if (_recoverVm == null) return;
         if (RecoverMode != "Martingale" && RecoverMode != "Deficit Recovery") return;
         if (update.ContractId != _lastBoughtContractId) return;
@@ -486,6 +503,12 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
 
     private async Task BuyAsync(string contractType)
     {
+        if (_entryModeController.IsVirtualMode)
+        {
+            await StartManualVirtualTradeAsync(contractType);
+            return;
+        }
+
         var proposalId = contractType == ContractTypeCall ? _callProposalId : _putProposalId;
         var price = contractType == ContractTypeCall ? CallAskPrice : PutAskPrice;
 
@@ -512,6 +535,8 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
             {
                 LastBuyResult = $"Comprado! ID: {result.ContractId}";
                 _lastBoughtContractId = result.ContractId;
+                lock (_manualRealCycles)
+                    _manualRealCycles[result.ContractId] = _entryModeController.CurrentRealCycleId;
                 var expiry = GetDateExpiryForPosition();
                 var durationSec = GetDurationInSeconds();
                 _ = OpenPositions.AddPositionAsync(result, Symbol, DisplayName, contractType, expiry, durationSec);
@@ -531,6 +556,131 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
         {
             IsBuying = false;
         }
+    }
+
+    public void UpdateCurrentSpot(decimal spot)
+    {
+        _virtualTradeSimulator.UpdateSpot(spot);
+    }
+
+    private async Task StartManualVirtualTradeAsync(string contractType)
+    {
+        var stake = GetStakeValue();
+        if (stake <= 0 || _spotForBarriers <= 0)
+        {
+            LastBuyResult = "Aguarde os dados do mercado e confira o valor da entrada";
+            return;
+        }
+
+        if (!_entryModeController.TryReserveVirtualEntry())
+        {
+            LastBuyResult = "Entrada virtual em andamento";
+            return;
+        }
+
+        var tradeId = VirtualTradeIdGenerator.Next();
+        var direction = contractType == ContractTypeCall
+            ? SignalDirection.Call
+            : SignalDirection.Put;
+        var request = CreateVirtualTradeRequest(tradeId, direction);
+
+        if (!_virtualTradeSimulator.TryStart(request))
+        {
+            _entryModeController.CancelVirtualEntry();
+            LastBuyResult = "Não foi possível iniciar a entrada virtual";
+            return;
+        }
+
+        _activeVirtualTradeId = tradeId;
+        await OpenPositions.AddVirtualPositionAsync(
+            tradeId,
+            Symbol,
+            DisplayName,
+            contractType,
+            stake,
+            _spotForBarriers,
+            request.DurationSeconds);
+        LastBuyResult = $"Entrada virtual iniciada: {ContractTypeFormatter.ToDisplayLabel(contractType)}";
+    }
+
+    private VirtualTradeRequest CreateVirtualTradeRequest(
+        long tradeId,
+        SignalDirection direction)
+    {
+        var durationTicks = DurationUnit == DurationUnitType.Ticks
+            ? Math.Max(1, GetDurationValue())
+            : 0;
+        return new VirtualTradeRequest(
+            tradeId,
+            new TradeSignal { Direction = direction, Reason = "Entrada manual virtual" },
+            _spotForBarriers,
+            GetVirtualDurationSeconds(),
+            durationTicks);
+    }
+
+    private int GetVirtualDurationSeconds()
+    {
+        if (UseDuration) return Math.Max(1, GetDurationInSeconds());
+
+        var expiry = GetDateExpiryUnix();
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        return expiry.HasValue ? Math.Max(1, (int)(expiry.Value - now)) : 1;
+    }
+
+    private void OnVirtualTradeUpdated(object? sender, VirtualTradeUpdated update)
+    {
+        Application.Current?.Dispatcher?.InvokeAsync(() =>
+            OpenPositions.UpdateVirtualPosition(update.TradeId, update.CurrentSpot));
+    }
+
+    private void OnVirtualTradeCompleted(object? sender, VirtualTradeCompleted result)
+    {
+        var realModeActivated = _entryModeController.RecordVirtualResult(result.Won);
+        _activeVirtualTradeId = 0;
+        Application.Current?.Dispatcher?.InvokeAsync(() =>
+        {
+            OpenPositions.CompleteVirtualPosition(result.TradeId);
+            var outcome = result.Won ? "W" : "L";
+            LastBuyResult = realModeActivated
+                ? $"Virtual {outcome}: próxima entrada será real"
+                : $"Entrada virtual finalizada: {outcome}";
+        });
+    }
+
+    private void RecordManualRealResult(OpenContractUpdate update)
+    {
+        if (!IsSettled(update)) return;
+
+        int cycleId;
+        lock (_manualRealCycles)
+        {
+            if (!_manualRealCycles.Remove(update.ContractId, out cycleId)) return;
+        }
+
+        var returnedToVirtual = _entryModeController.RecordRealResult(
+            cycleId,
+            update.Profit >= 0);
+        if (returnedToVirtual)
+        {
+            Application.Current?.Dispatcher?.InvokeAsync(() =>
+                LastBuyResult = "Tolerância atingida: voltando às entradas virtuais");
+        }
+    }
+
+    private static bool IsSettled(OpenContractUpdate update)
+    {
+        return update.IsExpired || update.IsSold ||
+            update.Status is "sold" or "won" or "lost";
+    }
+
+    private void CancelManualVirtualTrade()
+    {
+        if (_activeVirtualTradeId == 0) return;
+
+        _virtualTradeSimulator.Cancel();
+        _entryModeController.CancelVirtualEntry();
+        OpenPositions.CompleteVirtualPosition(_activeVirtualTradeId);
+        _activeVirtualTradeId = 0;
     }
 
     private async Task ResubscribeAfterBuyAsync(string contractType)
@@ -942,6 +1092,7 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
     public async Task DeactivateAsync()
     {
         _active = false;
+        CancelManualVirtualTrade();
         _proposalCts?.Cancel();
         _proposalCts = null;
         _barrierRefreshCts?.Cancel();
@@ -1171,7 +1322,7 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
             else
                 _barriersFromApi = true;
 
-            AppLogger.Info(Src, $"Proposals ready: CALL id={_callProposalId} ask={CallAskPrice} ppp={CallPayoutPerPoint}, PUT id={_putProposalId} ask={PutAskPrice} ppp={PutPayoutPerPoint}");
+            AppLogger.Info(Src, $"Proposals ready: CALL id={_callProposalId} ask={CallAskPrice} payout={CallPayout} ppp={CallPayoutPerPoint}, PUT id={_putProposalId} ask={PutAskPrice} payout={PutPayout} ppp={PutPayoutPerPoint}");
         })?.Task ?? Task.CompletedTask);
     }
 
@@ -1244,12 +1395,16 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
 
     public void Dispose()
     {
+        CancelManualVirtualTrade();
         _proposalCts?.Cancel();
         _proposalCts?.Dispose();
         _barrierRefreshCts?.Cancel();
         _barrierRefreshCts?.Dispose();
         _contractService.ProposalUpdated -= OnProposalUpdated;
         _contractService.OpenContractUpdated -= OnMartingaleContractUpdated;
+        _virtualTradeSimulator.TradeCompleted -= OnVirtualTradeCompleted;
+        _virtualTradeSimulator.TradeUpdated -= OnVirtualTradeUpdated;
+        _virtualTradeSimulator.Dispose();
         OpenPositions.Dispose();
     }
 }

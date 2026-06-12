@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Excalibur5.Models;
 using Excalibur5.Services;
+using Excalibur5.Services.Strategy.Virtual;
 
 namespace Excalibur5.ViewModels;
 
@@ -107,11 +108,21 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
     public event EventHandler? TickCandleBorn;
     public event EventHandler<TickData>? TickReceived;
 
-    public MarketTabViewModel(MarketInfo market, ITickStreamService tickService, IContractService contractService)
+    public MarketTabViewModel(
+        MarketInfo market,
+        ITickStreamService tickService,
+        IContractService contractService,
+        IVirtualEntryModeController entryModeController)
     {
         _market      = market;
         _tickService = tickService;
-        ContractPanel = new ContractPanelViewModel(contractService, _market.PipSize, _market.BarrierInnerBase, _market.BarrierOuterBase);
+        ContractPanel = new ContractPanelViewModel(
+            contractService,
+            entryModeController,
+            new VirtualTradeSimulator(),
+            _market.PipSize,
+            _market.BarrierInnerBase,
+            _market.BarrierOuterBase);
         ContractPanel.PropertyChanged += OnContractPanelPropertyChanged;
     }
 
@@ -230,6 +241,7 @@ public partial class MarketTabViewModel : ObservableObject, IDisposable
                 UpdateTickCandleWithTick(tick);
 
             TickReceived?.Invoke(this, tick);
+            ContractPanel.UpdateCurrentSpot(tick.Quote);
         });
     }
 

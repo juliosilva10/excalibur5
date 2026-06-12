@@ -2,6 +2,7 @@ using Excalibur5.Models;
 using Excalibur5.Models.Strategy;
 using Excalibur5.Services;
 using Excalibur5.Services.Strategy.Recovery;
+using Excalibur5.Services.Strategy.Virtual;
 
 namespace Excalibur5.Services.Strategy;
 
@@ -15,6 +16,8 @@ public sealed class StrategyExecutor : IDisposable
 
     private readonly IContractService _contractService;
     private readonly IStrategyEngine _engine;
+    private readonly IVirtualEntryModeController _entryModeController;
+    private readonly IVirtualTradeSimulator _virtualTradeSimulator;
     private readonly Dictionary<long, TrackedPosition> _positions = new();
     private readonly HashSet<long> _recoveredUnconfirmedContracts = new();
     private readonly SemaphoreSlim _proposalLock = new(1, 1);
@@ -22,9 +25,10 @@ public sealed class StrategyExecutor : IDisposable
     private CancellationTokenSource _proposalCts = new();
     private StrategyConfig _config = new();
     private string _symbol = string.Empty;
-    private bool _active;
+    private volatile bool _active;
     private IRecoverStrategy? _recoverStrategy;
     private decimal _currentSpot;
+    private bool _ownsVirtualReservation;
 
     // Pre-subscribed proposal state
     private string _callProposalId = string.Empty;
@@ -50,14 +54,25 @@ public sealed class StrategyExecutor : IDisposable
     public event EventHandler<string>? TradeExecuted;
     public event EventHandler<BotPositionOpened>? PositionOpened;
     public event EventHandler<TradeCompleted>? TradeCompleted;
+    public event EventHandler<VirtualTradeResult>? VirtualTradeCompleted;
+    public event EventHandler<VirtualPositionOpened>? VirtualPositionOpened;
+    public event EventHandler<VirtualPositionUpdated>? VirtualPositionUpdated;
 
-    public StrategyExecutor(IContractService contractService, IStrategyEngine engine)
+    public StrategyExecutor(
+        IContractService contractService,
+        IStrategyEngine engine,
+        IVirtualEntryModeController entryModeController,
+        IVirtualTradeSimulator virtualTradeSimulator)
     {
         _contractService = contractService;
         _engine = engine;
+        _entryModeController = entryModeController;
+        _virtualTradeSimulator = virtualTradeSimulator;
         _engine.SignalGenerated += OnSignalGenerated;
         _contractService.OpenContractUpdated += OnOpenContractUpdated;
         _contractService.ProposalUpdated += OnBotProposalUpdated;
+        _virtualTradeSimulator.TradeCompleted += OnVirtualTradeCompleted;
+        _virtualTradeSimulator.TradeUpdated += OnVirtualTradeUpdated;
     }
 
     public void Start(StrategyConfig config, string symbol)
@@ -65,6 +80,7 @@ public sealed class StrategyExecutor : IDisposable
         _config = config;
         _symbol = symbol;
         _active = true;
+        _virtualTradeSimulator.Cancel();
         _recoverStrategy = RecoverStrategyFactory.Create(config);
         _proposalsReady = false;
         _callProposalId = string.Empty;
@@ -75,7 +91,34 @@ public sealed class StrategyExecutor : IDisposable
             TaskContinuationOptions.OnlyOnFaulted);
     }
 
+    public void Pause()
+    {
+        DeactivateExecution();
+        _virtualTradeSimulator.Pause();
+        AppLogger.Info(Src, "Executor paused");
+    }
+
+    public void Resume(StrategyConfig config, string symbol)
+    {
+        _config = config;
+        _symbol = symbol;
+        _active = true;
+        _virtualTradeSimulator.Resume();
+        _ = SubscribeBotProposalsAsync().ContinueWith(
+            task => AppLogger.Warn(Src, $"Proposal resume error: {task.Exception?.InnerException?.Message}"),
+            TaskContinuationOptions.OnlyOnFaulted);
+        AppLogger.Info(Src, "Executor resumed");
+    }
+
     public void Stop()
+    {
+        DeactivateExecution();
+        _virtualTradeSimulator.Cancel();
+        ReleaseVirtualReservation();
+        AppLogger.Info(Src, "Executor stopped");
+    }
+
+    private void DeactivateExecution()
     {
         _active = false;
         _proposalsReady = false;
@@ -84,14 +127,16 @@ public sealed class StrategyExecutor : IDisposable
         _executingEntryCandleIndex = null;
         _executingEntryCandleType = null;
         _ = UnsubscribeBotProposalsAsync().ContinueWith(
-            t => AppLogger.Warn(Src, $"Proposal unsubscribe error: {t.Exception?.InnerException?.Message}"),
+            task => AppLogger.Warn(
+                Src,
+                $"Proposal unsubscribe error: {task.Exception?.InnerException?.Message}"),
             TaskContinuationOptions.OnlyOnFaulted);
-        AppLogger.Info(Src, "Executor stopped");
     }
 
     public void UpdateCurrentSpot(decimal spot)
     {
         _currentSpot = spot;
+        _virtualTradeSimulator.UpdateSpot(spot);
     }
 
     public void ResolveExpiredPositionsLocally(decimal lastCandleClose)
@@ -126,8 +171,7 @@ public sealed class StrategyExecutor : IDisposable
             decimal estimatedProfit = won ? pos.BuyPrice * 0.5m : -pos.BuyPrice;
 
             pos.IsResolvedLocally = true;
-            _engine.RecordTradeResult(pos.Signal.ContributingIndicators, won);
-            RecordResult(pos, estimatedProfit);
+            RecordCompletedRealTrade(pos, estimatedProfit, won);
             TradeCompleted?.Invoke(this, new TradeCompleted(pos.ContractId, estimatedProfit, won));
             AppLogger.Info(Src, $"Resolved locally {pos.ContractId}: entry={pos.EntrySpot}, close={lastCandleClose}, won={won} (buyPrice={pos.BuyPrice}, currentStake={GetCurrentStake()})");
         }
@@ -297,20 +341,10 @@ public sealed class StrategyExecutor : IDisposable
         string contractType = string.Empty;
         decimal stake = 0m;
         long buyRequestedAt = 0;
+        var realCycleId = 0;
 
         try
         {
-            await ResolveExpiredPositionsBeforeBuyAsync();
-
-            var activeCount = CountActivePositions();
-            if (activeCount >= _config.MaxConcurrentContracts)
-            {
-                AppLogger.Info(Src, $"Signal ignored — max contracts reached ({activeCount}/{_config.MaxConcurrentContracts})");
-                return;
-            }
-
-            AppLogger.Info(Src, $"Active positions: {activeCount}/{_config.MaxConcurrentContracts}");
-
             if ((RequiresTimeSynchronizedEntry() || RequiresTickSynchronizedEntry()) && !_executingPendingSignal)
             {
                 _pendingSignal = signal;
@@ -320,10 +354,20 @@ public sealed class StrategyExecutor : IDisposable
                 return;
             }
 
+            if (_entryModeController.IsVirtualMode)
+            {
+                StartVirtualTrade(signal);
+                return;
+            }
+
+            await ResolveExpiredPositionsBeforeBuyAsync();
+            if (HasReachedPositionLimit()) return;
+
             contractType = signal.Direction == SignalDirection.Call
                 ? _config.CallContractType
                 : _config.PutContractType;
 
+            realCycleId = _entryModeController.CurrentRealCycleId;
             stake = GetCurrentStake();
             buyRequestedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             BuyResponse result;
@@ -387,7 +431,8 @@ public sealed class StrategyExecutor : IDisposable
                     ExpiryEpoch = now + _config.DurationSeconds + 5,
                     EntrySpot = _currentSpot,
                     EntryCandleIndex = _executingEntryCandleIndex,
-                    EntryCandleType = _executingEntryCandleType
+                    EntryCandleType = _executingEntryCandleType,
+                    RealCycleId = realCycleId
                 };
                 lock (_positions)
                     _positions[result.ContractId] = tracked;
@@ -408,7 +453,12 @@ public sealed class StrategyExecutor : IDisposable
         }
         catch (Exception ex)
         {
-            if (await TryRecoverUnconfirmedBuyAsync(signal, contractType, stake, buyRequestedAt))
+            if (await TryRecoverUnconfirmedBuyAsync(
+                    signal,
+                    contractType,
+                    stake,
+                    buyRequestedAt,
+                    realCycleId))
                 return;
 
             AppLogger.Warn(Src, $"Buy failed: {ex.Message}");
@@ -420,11 +470,101 @@ public sealed class StrategyExecutor : IDisposable
         }
     }
 
+    private void StartVirtualTrade(TradeSignal signal)
+    {
+        if (!_entryModeController.TryReserveVirtualEntry())
+        {
+            TradeExecuted?.Invoke(this, "Sinal virtual ignorado: simulação em andamento");
+            return;
+        }
+
+        _ownsVirtualReservation = true;
+        var tradeId = VirtualTradeIdGenerator.Next();
+        var durationTicks = _config.DurationApiUnit == "t"
+            ? _config.DurationApiValue
+            : 0;
+        var request = new VirtualTradeRequest(
+            tradeId,
+            signal,
+            _currentSpot,
+            _config.DurationSeconds,
+            durationTicks);
+
+        if (!_virtualTradeSimulator.TryStart(request))
+        {
+            ReleaseVirtualReservation();
+            AppLogger.Info(Src, "Virtual signal ignored — another simulation is active");
+            TradeExecuted?.Invoke(this, "Sinal virtual ignorado: simulação em andamento");
+            return;
+        }
+
+        var direction = signal.Direction == SignalDirection.Call ? "CALL" : "PUT";
+        var contractType = signal.Direction == SignalDirection.Call
+            ? _config.CallContractType
+            : _config.PutContractType;
+        VirtualPositionOpened?.Invoke(this, new VirtualPositionOpened(
+            tradeId,
+            _symbol,
+            contractType,
+            _config.Stake,
+            _currentSpot,
+            _config.DurationSeconds));
+        AppLogger.Info(Src, $"Virtual {direction} started at {_currentSpot}");
+        TradeExecuted?.Invoke(this, $"Entrada virtual {direction} iniciada");
+    }
+
+    private void OnVirtualTradeCompleted(object? sender, Virtual.VirtualTradeCompleted result)
+    {
+        if (!_active) return;
+
+        _engine.RecordTradeResult(result.Signal.ContributingIndicators, result.Won);
+        var realModeActivated = _entryModeController.RecordVirtualResult(result.Won);
+        _ownsVirtualReservation = false;
+        VirtualTradeCompleted?.Invoke(
+            this,
+            new VirtualTradeResult(result.TradeId, result.Won, realModeActivated));
+
+        var outcome = result.Won ? "W" : "L";
+        var suffix = realModeActivated ? " — próxima entrada será real" : string.Empty;
+        AppLogger.Info(Src, $"Virtual trade completed: {outcome}{suffix}");
+    }
+
+    private void OnVirtualTradeUpdated(object? sender, Virtual.VirtualTradeUpdated update)
+    {
+        VirtualPositionUpdated?.Invoke(
+            this,
+            new VirtualPositionUpdated(update.TradeId, update.CurrentSpot));
+    }
+
+    private void ReleaseVirtualReservation()
+    {
+        if (!_ownsVirtualReservation) return;
+
+        _entryModeController.CancelVirtualEntry();
+        _ownsVirtualReservation = false;
+    }
+
+    private bool HasReachedPositionLimit()
+    {
+        var activeCount = CountActivePositions();
+        if (activeCount < _config.MaxConcurrentContracts)
+        {
+            AppLogger.Info(Src, $"Active positions: {activeCount}/{_config.MaxConcurrentContracts}");
+            return false;
+        }
+
+        AppLogger.Info(
+            Src,
+            $"Signal ignored — max contracts reached ({activeCount}/{_config.MaxConcurrentContracts})");
+        return true;
+    }
+
     private async Task<bool> TryRecoverUnconfirmedBuyAsync(
         TradeSignal signal,
         string contractType,
         decimal stake,
-        long requestedAt)
+        long requestedAt,
+        int realCycleId)
     {
         if (stake <= 0 || string.IsNullOrWhiteSpace(contractType) || requestedAt <= 0)
             return false;
@@ -436,7 +576,7 @@ public sealed class StrategyExecutor : IDisposable
             var entry = await FindUnconfirmedBuyAsync(contractType, stake, requestedAt);
             if (entry == null) continue;
 
-            RecoverSettledBuy(entry, signal, contractType, stake);
+            RecoverSettledBuy(entry, signal, contractType, stake, realCycleId);
             return true;
         }
 
@@ -484,15 +624,15 @@ public sealed class StrategyExecutor : IDisposable
         ProfitTableEntry entry,
         TradeSignal signal,
         string contractType,
-        decimal fallbackStake)
+        decimal fallbackStake,
+        int realCycleId)
     {
         var buy = CreateRecoveredBuyResponse(entry, fallbackStake);
-        var recovered = CreateRecoveredPosition(entry, signal, buy.BuyPrice);
+        var recovered = CreateRecoveredPosition(entry, signal, buy.BuyPrice, realCycleId);
         bool won = entry.ProfitLoss >= 0;
 
         PositionOpened?.Invoke(this, new BotPositionOpened(buy, contractType, null, null));
-        _engine.RecordTradeResult(signal.ContributingIndicators, won);
-        RecordResult(recovered, entry.ProfitLoss);
+        RecordCompletedRealTrade(recovered, entry.ProfitLoss, won);
         TradeCompleted?.Invoke(this, new TradeCompleted(entry.ContractId, entry.ProfitLoss, won, entry.SellTime));
         AppLogger.Warn(Src, $"Recovered unconfirmed buy {entry.ContractId}: profit={entry.ProfitLoss:F2}");
     }
@@ -510,7 +650,8 @@ public sealed class StrategyExecutor : IDisposable
     private static TrackedPosition CreateRecoveredPosition(
         ProfitTableEntry entry,
         TradeSignal signal,
-        decimal stake)
+        decimal stake,
+        int realCycleId)
     {
         return new TrackedPosition
         {
@@ -520,6 +661,7 @@ public sealed class StrategyExecutor : IDisposable
             Signal = signal,
             EntryEpoch = entry.PurchaseTime,
             ExpiryEpoch = entry.SellTime,
+            RealCycleId = realCycleId
         };
     }
 
@@ -653,8 +795,7 @@ public sealed class StrategyExecutor : IDisposable
                 return;
             }
             bool won = update.Profit >= 0;
-            _engine.RecordTradeResult(tracked.Signal.ContributingIndicators, won);
-            RecordResult(tracked, update.Profit);
+            RecordCompletedRealTrade(tracked, update.Profit, won);
             RemovePosition(update.ContractId);
             TradeCompleted?.Invoke(this, new TradeCompleted(update.ContractId, update.Profit, won, update.SellTime));
             return;
@@ -727,8 +868,7 @@ public sealed class StrategyExecutor : IDisposable
             if (result.Success)
             {
                 bool won = profit >= 0;
-                _engine.RecordTradeResult(tracked.Signal.ContributingIndicators, won);
-                RecordResult(tracked, profit);
+                RecordCompletedRealTrade(tracked, profit, won);
                 RemovePosition(contractId);
                 TradeCompleted?.Invoke(this, new TradeCompleted(contractId, profit, won));
                 AppLogger.Info(Src, $"Sold contract {contractId}, profit={profit:F2}");
@@ -761,6 +901,19 @@ public sealed class StrategyExecutor : IDisposable
 
         if (_active && GetCurrentStake() != previousStake)
             _ = ResubscribeProposalsOnlyAsync();
+    }
+
+    private void RecordCompletedRealTrade(TrackedPosition tracked, decimal profit, bool won)
+    {
+        _engine.RecordTradeResult(tracked.Signal.ContributingIndicators, won);
+        var virtualModeActivated = _entryModeController.RecordRealResult(tracked.RealCycleId, won);
+        RecordResult(tracked, profit);
+
+        if (virtualModeActivated)
+        {
+            AppLogger.Info(Src, "Real loss tolerance reached — returning to virtual mode");
+            TradeExecuted?.Invoke(this, "Tolerância atingida — retornando às entradas virtuais");
+        }
     }
 
     private async Task ResubscribeProposalsOnlyAsync()
@@ -860,8 +1013,7 @@ public sealed class StrategyExecutor : IDisposable
             return false;
         }
 
-        _engine.RecordTradeResult(pos.Signal.ContributingIndicators, won);
-        RecordResult(pos, profit);
+        RecordCompletedRealTrade(pos, profit, won);
         TradeCompleted?.Invoke(this, new TradeCompleted(pos.ContractId, profit, won));
         AppLogger.Info(Src, $"Resolved stale position {pos.ContractId}: profit={profit:F2}, won={won} (buyPrice={pos.BuyPrice}, currentStake={GetCurrentStake()})");
         return true;
@@ -885,9 +1037,13 @@ public sealed class StrategyExecutor : IDisposable
 
     public void Dispose()
     {
+        ReleaseVirtualReservation();
         _engine.SignalGenerated -= OnSignalGenerated;
         _contractService.OpenContractUpdated -= OnOpenContractUpdated;
         _contractService.ProposalUpdated -= OnBotProposalUpdated;
+        _virtualTradeSimulator.TradeCompleted -= OnVirtualTradeCompleted;
+        _virtualTradeSimulator.TradeUpdated -= OnVirtualTradeUpdated;
+        _virtualTradeSimulator.Dispose();
         _proposalCts.Cancel();
         _proposalCts.Dispose();
         _proposalLock.Dispose();
@@ -908,6 +1064,7 @@ public sealed class StrategyExecutor : IDisposable
         public int? EntryCandleIndex { get; set; }
         public ChartSnapshotType? EntryCandleType { get; set; }
         public bool IsResolvedLocally { get; set; }
+        public int RealCycleId { get; init; }
     }
 }
 
@@ -917,3 +1074,12 @@ public sealed record BotPositionOpened(
     int? EntryCandleIndex,
     ChartSnapshotType? EntryCandleType);
 public sealed record TradeCompleted(long ContractId, decimal Profit, bool Won, long SellTime = 0);
+public sealed record VirtualTradeResult(long TradeId, bool Won, bool RealModeActivated);
+public sealed record VirtualPositionOpened(
+    long TradeId,
+    string Symbol,
+    string ContractType,
+    decimal Stake,
+    decimal EntrySpot,
+    int DurationSeconds);
+public sealed record VirtualPositionUpdated(long TradeId, decimal CurrentSpot);
