@@ -186,6 +186,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 Virtual.IsVirtualVisible = false;
                 Diversity.IsDiversityVisible = false;
             }
+            // Any recover config change invalidates the cached Diversity bridge so signal-mode
+            // sizing reflects the latest settings (not whatever they were on the first signal).
+            _diversityBridge = null;
         };
         History.PropertyChanged += (_, e) =>
         {
@@ -524,20 +527,23 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     // A Diversity group settled: treat the whole group as one contract for the virtual sequence
     // (net > 0 → a single win) and surface the net result on the panel/log.
+    // Fires on the WS receive thread, so marshal everything that touches recover/virtual state and
+    // UI onto the UI thread (non-blocking) — that state is also read on the UI thread when sizing
+    // the next group, and must not be mutated concurrently.
     private void OnDiversityGroupCompleted(object? sender, Services.Strategy.Diversity.DiversityGroupCompleted e)
     {
         var result = e.Result;
-        Application.Current?.Dispatcher.Invoke(() =>
+        AppLogger.Info("Diversity", $"Group {result.GroupId} net={result.TotalProfit:F2} won={result.Won}");
+        Application.Current?.Dispatcher?.InvokeAsync(() =>
         {
             Diversity.StatusText = result.Won
                 ? $"Grupo ganho: líquido +{result.TotalProfit:F2} (stake {result.TotalStake:F2})."
                 : $"Grupo perdido: líquido {result.TotalProfit:F2} (stake {result.TotalStake:F2}).";
+            // Group counts as one real result for the virtual entry-mode controller.
+            _virtualEntryModeController.RecordRealResult(_virtualEntryModeController.CurrentRealCycleId, result.Won);
+            // Feed recover so the next signal-fired group escalates after a net loss (group = 1 contract).
+            _diversityBridge?.RecordGroupResult(result);
         });
-        // Group counts as one real result for the virtual entry-mode controller.
-        _virtualEntryModeController.RecordRealResult(_virtualEntryModeController.CurrentRealCycleId, result.Won);
-        // Feed recover so the next signal-fired group escalates after a net loss (group = 1 contract).
-        _diversityBridge?.RecordGroupResult(result);
-        AppLogger.Info("Diversity", $"Group {result.GroupId} net={result.TotalProfit:F2} won={result.Won}");
     }
 
     private void OnConnected(object? sender, EventArgs e)
@@ -798,6 +804,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         History.Dispose();
         Log.Dispose();
         Strategy.SignalGenerated -= OnStrategySignalForDiversity;
+        _diversityCoordinator.GroupCompleted -= OnDiversityGroupCompleted;
         _diversityCoordinator.Dispose();
         (_tickStream as IDisposable)?.Dispose();
         (_contractService as IDisposable)?.Dispose();

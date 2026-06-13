@@ -96,8 +96,21 @@ public sealed class DiversityCoordinator : IDisposable
             _aggregator.RegisterGroup(groupId, contractIds, config.TotalStake);
 
             // Subscribe after registering so a fast settlement can't race ahead of the aggregator.
-            foreach (var leg in bought)
-                await _contractService.SubscribeOpenContractAsync(leg.ContractId, ct);
+            // If any subscribe fails we must NOT leave a registered-but-unsubscribed group: that
+            // would keep PendingGroupCount > 0 forever and wedge the signal gate. Roll back instead.
+            try
+            {
+                foreach (var leg in bought)
+                    await _contractService.SubscribeOpenContractAsync(leg.ContractId, ct);
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Warn(Src, $"Subscribe failed for group {groupId}: {ex.Message}. Rolling back and unwinding.");
+                _aggregator.DeregisterGroup(groupId);
+                await UnwindAsync(bought);
+                StatusMessage?.Invoke(this, "Falha ao assinar contratos do grupo. Grupo desfeito.");
+                return null;
+            }
 
             AppLogger.Info(Src, $"Group {groupId} opened with {bought.Count} legs, totalStake={config.TotalStake}");
             GroupOpened?.Invoke(this, new DiversityGroupOpened(groupId, bought));

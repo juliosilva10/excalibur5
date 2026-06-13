@@ -13,6 +13,7 @@ internal sealed class FakeContractService : IContractService
     private long _nextId = 1000;
     // Contract types that should fail the buy (to exercise partial-failure unwind).
     public HashSet<string> FailBuyForTypes { get; } = new();
+    public bool FailSubscribe { get; set; }
     public List<long> Subscribed { get; } = new();
     public List<long> Sold { get; } = new();
     public List<(string Symbol, string Type)> Bought { get; } = new();
@@ -29,6 +30,8 @@ internal sealed class FakeContractService : IContractService
 
     public Task SubscribeOpenContractAsync(long contractId, CancellationToken ct = default)
     {
+        if (FailSubscribe)
+            throw new InvalidOperationException("simulated subscribe failure");
         Subscribed.Add(contractId);
         return Task.CompletedTask;
     }
@@ -123,5 +126,18 @@ internal static class DiversityCoordinatorTests
         TestAssert.Null(groupId, "Group aborts");
         TestAssert.Equal(0, svc.Bought.Count, "No legs bought");
         TestAssert.Equal(0, svc.Sold.Count, "Nothing to unwind");
+    }
+
+    // Subscribe failure after registration must roll back: no zombie pending group, legs unwound.
+    public static async Task SubscribeFailureRollsBackGroup()
+    {
+        var svc = new FakeContractService { FailSubscribe = true };
+        using var coord = new DiversityCoordinator(svc);
+
+        var groupId = await coord.ExecuteGroupAsync(TwoLegConfig());
+        TestAssert.Null(groupId, "Group should abort when subscribe fails");
+        TestAssert.Equal(2, svc.Bought.Count, "Both legs were bought before subscribe");
+        TestAssert.Equal(2, svc.Sold.Count, "Both legs unwound on subscribe failure");
+        TestAssert.Equal(0, coord.PendingGroupCount, "No zombie pending group left to wedge the gate");
     }
 }

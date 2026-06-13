@@ -124,4 +124,22 @@ public sealed class GroupResultAggregator
             Won: totalProfit > 0m,
             ContractIds: contractIds);
     }
+
+    /// <summary>
+    /// Removes a group without emitting a result (e.g. when registration must be rolled back after
+    /// a failed subscribe). Returns the contract ids that were registered. Idempotent.
+    /// </summary>
+    public IReadOnlyList<long> DeregisterGroup(Guid groupId)
+    {
+        lock (_gate)
+        {
+            if (!_groups.TryGetValue(groupId, out var group))
+                return Array.Empty<long>();
+            var ids = new List<long>(group.ExpectedContracts);
+            _groups.Remove(groupId);
+            foreach (var id in group.ExpectedContracts)
+                _contractToGroup.Remove(id);
+            return ids;
+        }
+    }
 }

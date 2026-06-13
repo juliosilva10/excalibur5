@@ -51,6 +51,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Coordinator: buys all legs and consolidates", DiversityCoordinatorTests.BuysAllLegsAndConsolidates),
     ("Coordinator: partial failure unwinds", DiversityCoordinatorTests.PartialFailureUnwindsBoughtLegs),
     ("Coordinator: first leg failure buys nothing", DiversityCoordinatorTests.FirstLegFailureBuysNothing),
+    ("Coordinator: subscribe failure rolls back", DiversityCoordinatorTests.SubscribeFailureRollsBackGroup),
     ("DivRecover: stake distributed proportionally", DiversityRecoveryTests.StakeDistributedProportionally),
     ("DivRecover: stake respects minimum", DiversityRecoveryTests.StakeRespectsMinimum),
     ("DivRecover: stake sum matches target", DiversityRecoveryTests.StakeSumMatchesTargetAfterRounding),

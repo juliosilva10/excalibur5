@@ -17,6 +17,9 @@ public partial class DiversityViewModel : ObservableObject
     private readonly DiversityCoordinator? _coordinator;
     private Services.Strategy.Diversity.DiversityRecoveryBridge? _recoveryBridge;
     private decimal _currentTotalStake;
+    // Atomic re-entrancy gate (0 = idle, 1 = a buy is in flight). Guards against two near-
+    // simultaneous fires opening two groups regardless of which thread the signal arrives on.
+    private int _firing;
 
     [ObservableProperty] private bool _isDiversityVisible;
     [ObservableProperty] private bool _useSignalMode;
@@ -79,6 +82,9 @@ public partial class DiversityViewModel : ObservableObject
             return null;
         if (Legs.Count < 2) return null;
 
+        // Atomically claim the firing slot; if another fire is already in flight, bail.
+        if (Interlocked.CompareExchange(ref _firing, 1, 0) != 0) return null;
+
         var template = BuildConfig(DiversityTriggerMode.Signal);
         var config = _recoveryBridge != null
             ? _recoveryBridge.BuildNextGroup(template, _currentTotalStake)
@@ -94,6 +100,7 @@ public partial class DiversityViewModel : ObservableObject
         finally
         {
             IsBusy = false;
+            Interlocked.Exchange(ref _firing, 0);
         }
     }
 
@@ -152,6 +159,18 @@ public partial class DiversityViewModel : ObservableObject
                 return;
             }
         }
+        // Don't open a second concurrent group while one is still live (keeps "group = 1 contract").
+        if (_coordinator.PendingGroupCount > 0)
+        {
+            StatusText = "Já há um grupo em andamento. Aguarde a liquidação.";
+            return;
+        }
+        // Share the same atomic firing slot as signal mode so manual + signal can't double-fire.
+        if (Interlocked.CompareExchange(ref _firing, 1, 0) != 0)
+        {
+            StatusText = "Outro disparo em andamento.";
+            return;
+        }
 
         IsBusy = true;
         StatusText = "Comprando grupo...";
@@ -170,6 +189,7 @@ public partial class DiversityViewModel : ObservableObject
         finally
         {
             IsBusy = false;
+            Interlocked.Exchange(ref _firing, 0);
         }
     }
 
