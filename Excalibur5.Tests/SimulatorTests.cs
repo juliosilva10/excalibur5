@@ -66,13 +66,15 @@ internal static class SimulatorTests
         SignalDirection direction,
         decimal entrySpot,
         int seconds = 60,
-        int ticks = 0)
+        int ticks = 0,
+        decimal winProfit = 0m)
     {
         return new VirtualTradeRequest(
             VirtualTradeIdGenerator.Next(),
             new TradeSignal { Direction = direction },
             entrySpot,
             seconds,
-            ticks);
+            ticks,
+            winProfit);
     }
 }
