@@ -251,26 +251,16 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
                 }
                 else
                 {
-                    var avgRatio = GetAveragePayoutRatio();
-                    var recoveryTrades = _recoverVm.DeficitRecoveryTrades;
-                    var needed = _deficit / (avgRatio * recoveryTrades);
-                    var stake = Math.Max(needed, _baseStake);
-                    stake = Math.Min(stake, _recoverVm.DeficitMaxStake);
-                    StakeText = Math.Round(stake, 2).ToString("F2", CultureInfo.InvariantCulture);
+                    var avgRatio = RecoveryStakeCalculator.AveragePayoutRatio(_payoutRatios, _payoutCount);
+                    var stake = RecoveryStakeCalculator.NextStake(
+                        _deficit, avgRatio, _recoverVm.DeficitRecoveryTrades,
+                        _baseStake, _recoverVm.DeficitMaxStake);
+                    StakeText = stake.ToString("F2", CultureInfo.InvariantCulture);
                 }
             }
 
             _lastBoughtContractId = 0;
         });
-    }
-
-    private decimal GetAveragePayoutRatio()
-    {
-        if (_payoutCount == 0) return 0.5m;
-        decimal sum = 0;
-        for (int i = 0; i < _payoutCount; i++)
-            sum += _payoutRatios[i];
-        return sum / _payoutCount;
     }
 
     public event EventHandler<ManualTradeOpened>? ManualTradeOpened;

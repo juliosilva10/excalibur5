@@ -26,7 +26,13 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Barriers: empty for null/empty", BarrierTests.ReturnsEmptyForNullOrEmpty),
     ("Barriers: fallback empty when no spot", BarrierTests.FallbackOffsetsEmptyWhenNoSpot),
     ("Barriers: duration mode sorted/symmetric", BarrierTests.FallbackOffsetsDurationModeAreSortedAndSymmetric),
-    ("Barriers: end-time mode sorted", BarrierTests.FallbackOffsetsEndTimeModeSortedRelativeToSpot)
+    ("Barriers: end-time mode sorted", BarrierTests.FallbackOffsetsEndTimeModeSortedRelativeToSpot),
+    ("Recovery: average defaults without samples", RecoveryStakeTests.AverageDefaultsWhenNoSamples),
+    ("Recovery: average over samples", RecoveryStakeTests.AverageComputesOverSamples),
+    ("Recovery: base stake when no deficit", RecoveryStakeTests.NextStakeReturnsBaseWhenNoDeficit),
+    ("Recovery: sizes to recover deficit", RecoveryStakeTests.NextStakeRecoversDeficit),
+    ("Recovery: clamped to max stake", RecoveryStakeTests.NextStakeClampedToMax),
+    ("Recovery: never below base stake", RecoveryStakeTests.NextStakeNeverBelowBase)
 };
 
 var failures = 0;
