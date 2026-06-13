@@ -41,7 +41,13 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Digits: barrier ranges enforced", DigitOddsTests.BarrierRangesEnforced),
     ("Digits: Over5/Under5 has dead digit", DigitOddsTests.OverUnderSameBarrierHasDeadDigit),
     ("Digits: overlapping barriers full coverage", DigitOddsTests.OverlappingBarriersAreFullCoverage),
-    ("Digits: wins respects side", DigitOddsTests.WinsRespectsSide)
+    ("Digits: wins respects side", DigitOddsTests.WinsRespectsSide),
+    ("Group: two legs consolidate", GroupAggregatorTests.TwoLegsConsolidateOnLastSettlement),
+    ("Group: settles out of order", GroupAggregatorTests.SettlesOutOfOrder),
+    ("Group: duplicate settlement ignored", GroupAggregatorTests.DuplicateSettlementIgnored),
+    ("Group: force settle stuck leg", GroupAggregatorTests.ForceSettleResolvesStuckLeg),
+    ("Group: unknown contract null", GroupAggregatorTests.UnknownContractReturnsNull),
+    ("Group: cleans up after finalize", GroupAggregatorTests.CleansUpAfterFinalize)
 };
 
 var failures = 0;
