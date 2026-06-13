@@ -99,6 +99,63 @@ public partial class HistoryViewModel : ObservableObject, IDisposable
         _ = RefreshContractStatusAsync(buy.ContractId, requireSettlement: true);
     }
 
+    public void AddVirtualTrade(
+        long tradeId,
+        string operacao,
+        string strategyName,
+        string market,
+        string contractType,
+        decimal stake,
+        decimal entrySpot)
+    {
+        Application.Current?.Dispatcher?.Invoke(() =>
+        {
+            Trades.Insert(0, new TradeHistoryItem
+            {
+                Operacao = operacao,
+                Estrategia = strategyName,
+                Market = market,
+                Tipo = ContractTypeFormatter.ToDisplayLabel(contractType),
+                ReferenceNumber = "Virtual",
+                PurchaseTime = DateTime.Now,
+                Stake = stake,
+                EntrySpot = FormatSpot(entrySpot),
+                ContractId = tradeId
+            });
+        });
+    }
+
+    public void UpdateVirtualTradeResult(long tradeId, bool won, decimal exitSpot, decimal winProfit)
+    {
+        Application.Current?.Dispatcher?.Invoke(() =>
+        {
+            var item = Trades.FirstOrDefault(t => t.ContractId == tradeId);
+            if (item == null) return;
+
+            var idx = Trades.IndexOf(item);
+            if (idx < 0) return;
+
+            var profit = won ? winProfit : -item.Stake;
+
+            Trades[idx] = new TradeHistoryItem
+            {
+                Operacao = item.Operacao,
+                Estrategia = item.Estrategia,
+                Market = item.Market,
+                Tipo = item.Tipo,
+                ReferenceNumber = item.ReferenceNumber,
+                PurchaseTime = item.PurchaseTime,
+                Stake = item.Stake,
+                SellTime = DateTime.Now,
+                EntrySpot = item.EntrySpot,
+                ExitSpot = FormatSpot(exitSpot),
+                ContractValue = Math.Max(0m, item.Stake + profit),
+                ProfitLoss = profit,
+                ContractId = item.ContractId
+            };
+        });
+    }
+
     public void UpdateTradeResult(long contractId, decimal profit, long sellTime = 0)
     {
         Application.Current?.Dispatcher?.Invoke(() =>

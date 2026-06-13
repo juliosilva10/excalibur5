@@ -19,9 +19,10 @@ public sealed record VirtualTradeRequest(
     TradeSignal Signal,
     decimal EntrySpot,
     int DurationSeconds,
-    int DurationTicks);
+    int DurationTicks,
+    decimal WinProfit);
 
-public sealed record VirtualTradeCompleted(long TradeId, TradeSignal Signal, bool Won);
+public sealed record VirtualTradeCompleted(long TradeId, TradeSignal Signal, bool Won, decimal ExitSpot, decimal WinProfit);
 public sealed record VirtualTradeUpdated(long TradeId, decimal CurrentSpot);
 
 public sealed class VirtualTradeSimulator : IVirtualTradeSimulator
@@ -132,6 +133,7 @@ public sealed class VirtualTradeSimulator : IVirtualTradeSimulator
             EntrySpot = request.EntrySpot,
             LastSpot = request.EntrySpot,
             DurationTicks = Math.Max(0, request.DurationTicks),
+            WinProfit = request.WinProfit,
             Remaining = duration,
             Deadline = DateTimeOffset.UtcNow + duration
         };
@@ -168,7 +170,7 @@ public sealed class VirtualTradeSimulator : IVirtualTradeSimulator
         var won = trade.Signal.Direction == SignalDirection.Call
             ? trade.LastSpot > trade.EntrySpot
             : trade.LastSpot < trade.EntrySpot;
-        return new VirtualTradeCompleted(trade.TradeId, trade.Signal, won);
+        return new VirtualTradeCompleted(trade.TradeId, trade.Signal, won, trade.LastSpot, trade.WinProfit);
     }
 
     private void RaiseCompleted(VirtualTradeCompleted? completed)
@@ -186,6 +188,7 @@ public sealed class VirtualTradeSimulator : IVirtualTradeSimulator
         public decimal EntrySpot { get; init; }
         public decimal LastSpot { get; set; }
         public int DurationTicks { get; init; }
+        public decimal WinProfit { get; init; }
         public int TicksObserved { get; set; }
         public TimeSpan Remaining { get; set; }
         public DateTimeOffset Deadline { get; set; }

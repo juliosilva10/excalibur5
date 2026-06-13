@@ -236,6 +236,19 @@ public partial class MainViewModel : ObservableObject, IDisposable
             History.UpdateTradeResult(e.ContractId, e.Profit, e.SellTime);
         };
 
+        Strategy.VirtualTradeOpened += (_, e) =>
+        {
+            var market = Markets.SelectedTab?.DisplayName ?? "";
+            History.AddVirtualTrade(
+                e.TradeId, "Bot (Virtual)", Strategy.StrategyMode, market,
+                e.ContractType, e.Stake, e.EntrySpot);
+        };
+
+        Strategy.VirtualTradeSettled += (_, e) =>
+        {
+            History.UpdateVirtualTradeResult(e.TradeId, e.Won, e.ExitSpot, e.WinProfit);
+        };
+
         _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(10) };
         _timer.Tick += OnTimerTick;
 
@@ -531,6 +544,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             _watchedPanel.PropertyChanged -= OnContractPanelChanged;
             _watchedPanel.ManualTradeOpened -= OnManualTradeOpened;
+            _watchedPanel.ManualVirtualTradeOpened -= OnManualVirtualTradeOpened;
+            _watchedPanel.ManualVirtualTradeSettled -= OnManualVirtualTradeSettled;
         }
 
         _watchedPanel = Markets.SelectedTab?.ContractPanel;
@@ -539,17 +554,33 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             _watchedPanel.PropertyChanged += OnContractPanelChanged;
             _watchedPanel.ManualTradeOpened += OnManualTradeOpened;
+            _watchedPanel.ManualVirtualTradeOpened += OnManualVirtualTradeOpened;
+            _watchedPanel.ManualVirtualTradeSettled += OnManualVirtualTradeSettled;
         }
+    }
+
+    private void OnManualVirtualTradeOpened(object? sender, ManualVirtualTradeOpened e)
+    {
+        var market = Markets.SelectedTab?.DisplayName ?? "";
+        History.AddVirtualTrade(
+            e.TradeId, "Manual (Virtual)", "", market,
+            e.ContractType, e.Stake, e.EntrySpot);
+    }
+
+    private void OnManualVirtualTradeSettled(object? sender, ManualVirtualTradeSettled e)
+    {
+        History.UpdateVirtualTradeResult(e.TradeId, e.Won, e.ExitSpot, e.WinProfit);
     }
 
     private void OnManualTradeOpened(object? sender, ManualTradeOpened e)
     {
-        if (!_isBotSessionActive) return;
-
         var tab = Markets.SelectedTab;
         var market = tab?.DisplayName ?? "";
-        _currentSessionContracts.Add(e.BuyResult.ContractId);
         History.AddManualTrade(e.BuyResult, e.ContractType, market);
+
+        if (!_isBotSessionActive) return;
+
+        _currentSessionContracts.Add(e.BuyResult.ContractId);
         if (tab != null)
         {
             Performance.OnTradeOpened(e.BuyResult.ContractId, market, e.BuyResult.StartTime, null, null,
@@ -562,9 +593,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
     {
         _isBotSessionActive = true;
         _currentSessionContracts.Clear();
-        History.ResetSession();
         Performance.ResetSession(Balance);
-        AppLogger.Info(Src, "Bot session metrics reset");
+        AppLogger.Info(Src, "Bot session metrics reset (history preserved across sessions)");
     }
 
     private void OnContractPanelChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
