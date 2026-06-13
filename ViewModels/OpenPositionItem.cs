@@ -10,6 +10,7 @@ public partial class OpenPositionItem : ObservableObject
     public string DisplayName { get; }
     public string ContractTypeLabel { get; }
     public decimal BuyPrice { get; }
+    public decimal WinProfit { get; set; }
     public bool IsVirtual { get; }
     public bool IsRealPosition => !IsVirtual;
     public bool IsCallDirection { get; }
