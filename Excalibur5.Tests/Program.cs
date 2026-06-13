@@ -47,7 +47,10 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Group: duplicate settlement ignored", GroupAggregatorTests.DuplicateSettlementIgnored),
     ("Group: force settle stuck leg", GroupAggregatorTests.ForceSettleResolvesStuckLeg),
     ("Group: unknown contract null", GroupAggregatorTests.UnknownContractReturnsNull),
-    ("Group: cleans up after finalize", GroupAggregatorTests.CleansUpAfterFinalize)
+    ("Group: cleans up after finalize", GroupAggregatorTests.CleansUpAfterFinalize),
+    ("Coordinator: buys all legs and consolidates", DiversityCoordinatorTests.BuysAllLegsAndConsolidates),
+    ("Coordinator: partial failure unwinds", DiversityCoordinatorTests.PartialFailureUnwindsBoughtLegs),
+    ("Coordinator: first leg failure buys nothing", DiversityCoordinatorTests.FirstLegFailureBuysNothing)
 };
 
 var failures = 0;
