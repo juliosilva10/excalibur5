@@ -30,6 +30,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private TimeSpan _serverOffset; // difference between server UTC and local UTC
     private volatile bool _isBotSessionActive;
     private volatile bool _initialBalanceSet;
+    private DispatcherTimer? _saveUiDebounce;
+    private bool _saveUiPending;
 
     [ObservableProperty] private bool    _isConnected;
     [ObservableProperty] private bool    _isConnecting;
@@ -621,7 +623,26 @@ public partial class MainViewModel : ObservableObject, IDisposable
         }
     }
 
+    // Schedules a debounced UI-state save; bursts of panel/property changes collapse
+    // into a single disk write instead of writing on every change.
     private void SaveUiState()
+    {
+        if (_saveUiDebounce == null)
+        {
+            _saveUiDebounce = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+            _saveUiDebounce.Tick += (_, _) =>
+            {
+                _saveUiDebounce!.Stop();
+                _saveUiPending = false;
+                WriteUiStateNow();
+            };
+        }
+        _saveUiPending = true;
+        _saveUiDebounce.Stop();
+        _saveUiDebounce.Start();
+    }
+
+    private void WriteUiStateNow()
     {
         var panel = Log.IsLogVisible ? "log" : Markets.IsMarketsVisible ? "markets" : "";
         var market = Markets.SelectedTab?.Symbol;
@@ -672,7 +693,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     public void Dispose()
     {
-        SaveUiState();
+        _saveUiDebounce?.Stop();
+        if (_saveUiPending) WriteUiStateNow();
         DetachWatchedPanel();
         _timer.Stop();
         _uptimeTimer.Stop();

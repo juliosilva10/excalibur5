@@ -11,8 +11,7 @@ public static class BotStateStore
 
     public static void Save(BotState state)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
-        File.WriteAllText(FilePath, JsonSerializer.Serialize(state));
+        AtomicFile.WriteAllText(FilePath, JsonSerializer.Serialize(state));
     }
 
     public static BotState Load()

@@ -7,6 +7,7 @@ namespace Excalibur5.Services;
 public static class AppLogger
 {
     private static readonly string LogPath;
+    private static readonly string PrevLogPath;
     private static readonly BlockingCollection<string> _queue = new(boundedCapacity: 2048);
     private const long MaxBytes = 5 * 1024 * 1024;
 
@@ -19,9 +20,11 @@ public static class AppLogger
             "Excalibur5", "logs");
         Directory.CreateDirectory(dir);
         LogPath = Path.Combine(dir, "excalibur5.log");
+        PrevLogPath = Path.Combine(dir, "excalibur5.prev.log");
 
-        // Clear log file on startup
-        try { File.WriteAllText(LogPath, string.Empty); } catch { }
+        // Roll the previous session's log aside instead of wiping it — the prior log
+        // is exactly what's needed to diagnose an unexpected exit.
+        Rotate();
 
         var thread = new Thread(WriteLoop) { IsBackground = true, Name = "AppLogger" };
         thread.Start();
@@ -31,6 +34,18 @@ public static class AppLogger
             _queue.CompleteAdding();
             thread.Join(millisecondsTimeout: 2000);
         };
+    }
+
+    // Moves the current log to excalibur5.prev.log (overwriting any older prev), leaving
+    // a fresh empty current log. Best-effort: failures are swallowed.
+    private static void Rotate()
+    {
+        try
+        {
+            if (File.Exists(LogPath))
+                File.Move(LogPath, PrevLogPath, overwrite: true);
+        }
+        catch { }
     }
 
     public static void Info(string source, string message)  => Enqueue("INFO ", source, message);
@@ -56,28 +71,37 @@ public static class AppLogger
     {
         try
         {
-            using var writer = new StreamWriter(LogPath, append: true, Encoding.UTF8, bufferSize: 65536)
+            var writer = OpenWriter();
+            try
             {
-                AutoFlush = false
-            };
-            foreach (var line in _queue.GetConsumingEnumerable())
-            {
-                try
+                foreach (var line in _queue.GetConsumingEnumerable())
                 {
-                    writer.WriteLine(line);
-                    if (_queue.Count == 0)
+                    try
                     {
-                        writer.Flush();
-                        if (writer.BaseStream.Length > MaxBytes)
+                        writer.WriteLine(line);
+                        if (_queue.Count == 0)
                         {
-                            writer.BaseStream.SetLength(0);
-                            writer.BaseStream.Seek(0, SeekOrigin.Begin);
+                            writer.Flush();
+                            if (writer.BaseStream.Length > MaxBytes)
+                            {
+                                // Real rotation: close current, move it to .prev, reopen fresh.
+                                writer.Dispose();
+                                Rotate();
+                                writer = OpenWriter();
+                            }
                         }
                     }
+                    catch { }
                 }
-                catch { }
+            }
+            finally
+            {
+                writer.Dispose();
             }
         }
         catch { }
     }
+
+    private static StreamWriter OpenWriter() =>
+        new(LogPath, append: true, Encoding.UTF8, bufferSize: 65536) { AutoFlush = false };
 }

@@ -11,8 +11,7 @@ public static class RecoverStateStore
 
     public static void Save(RecoverState state)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
-        File.WriteAllText(FilePath, JsonSerializer.Serialize(state));
+        AtomicFile.WriteAllText(FilePath, JsonSerializer.Serialize(state));
     }
 
     public static RecoverState Load()

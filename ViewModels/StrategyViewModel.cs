@@ -39,6 +39,11 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
     private RecoverViewModel? _recoverVm;
     private long _lastTrendCandleEpoch;
 
+    // Debounced persistence: property changes arrive in bursts (typing, slider drags),
+    // so we coalesce them into a single disk write instead of writing per keystroke.
+    private readonly System.Windows.Threading.DispatcherTimer _saveDebounce;
+    private bool _savePending;
+
     // Config
     [ObservableProperty] private bool _useDuration = true;
     [ObservableProperty] private string _durationUnit = "Minutes";
@@ -104,6 +109,16 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
     {
         _contractService = contractService;
         _virtualEntryModeController = virtualEntryModeController;
+        _saveDebounce = new System.Windows.Threading.DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(500)
+        };
+        _saveDebounce.Tick += (_, _) =>
+        {
+            _saveDebounce.Stop();
+            _savePending = false;
+            WriteStateNow();
+        };
         _engine.SignalGenerated += OnSignalGenerated;
         _tickScalperEngine.SignalGenerated += OnTickScalperSignal;
         _candleDynamicsEngine.SignalGenerated += OnCandleDynamicsSignal;
@@ -151,7 +166,16 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
         _restoringState = false;
     }
 
+    // Schedules a debounced save; bursts of property changes collapse into one disk write.
     private void SaveState()
+    {
+        if (_restoringState) return;
+        _savePending = true;
+        _saveDebounce.Stop();
+        _saveDebounce.Start();
+    }
+
+    private void WriteStateNow()
     {
         if (_restoringState) return;
         BotStateStore.Save(new BotState
@@ -874,7 +898,8 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
 
     public void Dispose()
     {
-        SaveState();
+        _saveDebounce.Stop();
+        if (_savePending) WriteStateNow();
         Stop();
         if (_activeMarketTab != null)
             _activeMarketTab.ContractPanel.PropertyChanged -= OnContractPanelSync;

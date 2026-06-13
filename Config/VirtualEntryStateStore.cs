@@ -11,8 +11,7 @@ public static class VirtualEntryStateStore
 
     public static void Save(VirtualEntryState state)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
-        File.WriteAllText(FilePath, JsonSerializer.Serialize(state));
+        AtomicFile.WriteAllText(FilePath, JsonSerializer.Serialize(state));
     }
 
     public static VirtualEntryState Load()

@@ -23,7 +23,7 @@ public static class TokenStore
         Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
         var plain     = Encoding.UTF8.GetBytes(token);
         var encrypted = ProtectedData.Protect(plain, null, DataProtectionScope.CurrentUser);
-        File.WriteAllBytes(FilePath, encrypted);
+        AtomicFile.WriteAllBytes(FilePath, encrypted);
     }
 
     public static string Load()
