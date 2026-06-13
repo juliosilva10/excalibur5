@@ -18,6 +18,8 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
 
     public event EventHandler<BotPositionOpened>? BotTradeOpened;
     public event EventHandler<TradeCompleted>? BotTradeCompleted;
+    public event EventHandler<VirtualPositionOpened>? VirtualTradeOpened;
+    public event EventHandler<VirtualTradeResult>? VirtualTradeSettled;
 
     private readonly IContractService _contractService;
     private readonly IVirtualEntryModeController _virtualEntryModeController;
@@ -641,6 +643,7 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
     private void OnVirtualTradeCompleted(object? sender, VirtualTradeResult e)
     {
         ReportStrategyResult(e.Won);
+        VirtualTradeSettled?.Invoke(this, e);
         Application.Current?.Dispatcher?.InvokeAsync(() =>
         {
             _activeMarketTab?.ContractPanel.OpenPositions.CompleteVirtualPosition(e.TradeId);
@@ -657,6 +660,8 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
     {
         if (_activeMarketTab == null) return;
 
+        VirtualTradeOpened?.Invoke(this, e);
+
         _ = _activeMarketTab.ContractPanel.OpenPositions.AddVirtualPositionAsync(
             e.TradeId,
             e.Symbol,
@@ -664,7 +669,8 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
             e.ContractType,
             e.Stake,
             e.EntrySpot,
-            e.DurationSeconds);
+            e.DurationSeconds,
+            e.WinProfit);
     }
 
     private void OnVirtualPositionUpdated(object? sender, VirtualPositionUpdated e)

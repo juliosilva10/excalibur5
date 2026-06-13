@@ -124,7 +124,8 @@ public partial class OpenPositionsViewModel : ObservableObject, IDisposable
         string contractType,
         decimal stake,
         decimal entrySpot,
-        int durationSeconds)
+        int durationSeconds,
+        decimal winProfit)
     {
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var item = new OpenPositionItem(
@@ -140,7 +141,8 @@ public partial class OpenPositionsViewModel : ObservableObject, IDisposable
         {
             EntrySpot = entrySpot,
             EntrySpotDisplay = MarketPriceFormatter.Format(entrySpot, _pipSize),
-            CurrentValue = stake
+            CurrentValue = stake,
+            WinProfit = winProfit
         };
 
         return AddItemAsync(item);

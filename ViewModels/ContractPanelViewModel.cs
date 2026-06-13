@@ -273,6 +273,8 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
     }
 
     public event EventHandler<ManualTradeOpened>? ManualTradeOpened;
+    public event EventHandler<ManualVirtualTradeOpened>? ManualVirtualTradeOpened;
+    public event EventHandler<ManualVirtualTradeSettled>? ManualVirtualTradeSettled;
 
     public OpenPositionsViewModel OpenPositions { get; }
 
@@ -594,6 +596,9 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
         }
 
         _activeVirtualTradeId = tradeId;
+        ManualVirtualTradeOpened?.Invoke(
+            this,
+            new ManualVirtualTradeOpened(tradeId, contractType, stake, _spotForBarriers, request.WinProfit));
         await OpenPositions.AddVirtualPositionAsync(
             tradeId,
             Symbol,
@@ -601,7 +606,8 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
             contractType,
             stake,
             _spotForBarriers,
-            request.DurationSeconds);
+            request.DurationSeconds,
+            request.WinProfit);
         LastBuyResult = $"Entrada virtual iniciada: {ContractTypeFormatter.ToDisplayLabel(contractType)}";
     }
 
@@ -617,7 +623,18 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
             new TradeSignal { Direction = direction, Reason = "Entrada manual virtual" },
             _spotForBarriers,
             GetVirtualDurationSeconds(),
-            durationTicks);
+            durationTicks,
+            GetVirtualWinProfit(direction));
+    }
+
+    private decimal GetVirtualWinProfit(SignalDirection direction)
+    {
+        var stake = GetStakeValue();
+        var payout = direction == SignalDirection.Call ? CallPayout : PutPayout;
+        if (payout > 0 && stake > 0)
+            return payout - stake;
+
+        return 0m;
     }
 
     private int GetVirtualDurationSeconds()
@@ -639,6 +656,9 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
     {
         var realModeActivated = _entryModeController.RecordVirtualResult(result.Won);
         _activeVirtualTradeId = 0;
+        ManualVirtualTradeSettled?.Invoke(
+            this,
+            new ManualVirtualTradeSettled(result.TradeId, result.Won, result.ExitSpot, result.WinProfit));
         Application.Current?.Dispatcher?.InvokeAsync(() =>
         {
             OpenPositions.CompleteVirtualPosition(result.TradeId);
@@ -1415,3 +1435,10 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
 }
 
 public sealed record ManualTradeOpened(BuyResponse BuyResult, string ContractType);
+public sealed record ManualVirtualTradeOpened(
+    long TradeId,
+    string ContractType,
+    decimal Stake,
+    decimal EntrySpot,
+    decimal WinProfit);
+public sealed record ManualVirtualTradeSettled(long TradeId, bool Won, decimal ExitSpot, decimal WinProfit);
