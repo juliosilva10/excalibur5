@@ -32,6 +32,7 @@
             <Button Grid.Row="0"
                     Command="{Binding Markets.ToggleMarketsCommand}"
                     ToolTip="Mercados Disponíveis"
+                    AutomationProperties.Name="Mercados Disponíveis"
                     Margin="8,12,8,0"
                     Width="40" Height="40"
                     Cursor="Hand"
@@ -146,6 +147,7 @@
                 <!-- Recover button -->
                 <Button Command="{Binding Recover.ToggleRecoverCommand}"
                         ToolTip="Gerenciamento de Recuperação"
+                        AutomationProperties.Name="Gerenciamento de Recuperação"
                         Margin="8,0,8,0"
                         Width="40" Height="40"
                         Cursor="Hand"
@@ -247,6 +249,7 @@
                 <!-- Virtual button -->
                 <Button Command="{Binding ToggleVirtualPanelCommand}"
                         ToolTip="Simulações de entradas sem realizar operações reais"
+                        AutomationProperties.Name="Simulações de entradas virtuais"
                         Margin="8,0,8,0"
                         Width="40" Height="40"
                         Cursor="Hand"
@@ -348,6 +351,7 @@
                 <!-- Bot button -->
                 <Button Command="{Binding Strategy.ToggleBotCommand}"
                         ToolTip="Estratégia Automatizada"
+                        AutomationProperties.Name="Estratégia Automatizada"
                         Margin="8,0,8,0"
                         Width="40" Height="40"
                         Cursor="Hand"
@@ -457,6 +461,7 @@
                 <!-- History button -->
                 <Button Command="{Binding History.ToggleHistoryCommand}"
                         ToolTip="Histórico de Operações"
+                        AutomationProperties.Name="Histórico de Operações"
                         Margin="8,0,8,0"
                         Width="40" Height="40"
                         Cursor="Hand"
@@ -559,6 +564,7 @@
                 <!-- Performance button -->
                 <Button Command="{Binding Performance.TogglePerformanceCommand}"
                         ToolTip="Performance de Operações"
+                        AutomationProperties.Name="Performance de Operações"
                         Margin="8,0,8,0"
                         Width="40" Height="40"
                         Cursor="Hand"
@@ -666,6 +672,7 @@
             <StackPanel Grid.Row="2" Margin="0,0,0,12">
                 <Button Command="{Binding Log.ToggleLogCommand}"
                         ToolTip="Log"
+                        AutomationProperties.Name="Log de eventos"
                         Margin="8,0,8,0"
                         Width="40" Height="40"
                         Cursor="Hand"
