@@ -53,14 +53,14 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string _expiryDisplay = string.Empty;
     [ObservableProperty] private string _selectedBarrierDisplay = string.Empty;
     [ObservableProperty] private string _payoutPerPointDisplay = "0.000000";
-    [ObservableProperty] private string _directionMode = "Ambos"; // "Call", "Put", "Ambos"
+    [ObservableProperty] private string _directionMode = DirectionModeKeys.Both; // Call, Put, Ambos
     [ObservableProperty] private string _stakeText = "10";
     [ObservableProperty] private string _takeProfitText = "5.00";
     [ObservableProperty] private string _stopLossText = "3.00";
     [ObservableProperty] private string _maxContractsText = "3";
     [ObservableProperty] private double _confidenceThreshold = 0.70;
     [ObservableProperty] private string _recoverMode = string.Empty;
-    [ObservableProperty] private string _strategyMode = "Multi-Indicador";
+    [ObservableProperty] private string _strategyMode = StrategyModeKeys.MultiIndicator;
     [ObservableProperty] private string _sampleSizeText = "5";
     [ObservableProperty] private string _deficitMaxStakeText = "50";
     [ObservableProperty] private string _deficitRecoveryTradesText = "1";
@@ -78,12 +78,12 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
 
     public ObservableCollection<string> AvailableBarrierDisplays { get; } = new();
     public bool UseEndTime => !UseDuration;
-    public List<string> RecoverModes { get; } = ["", "Martingale", "Deficit Recovery"];
-    public List<string> StrategyModes { get; } = ["Multi-Indicador", "Tendência", "Tick Scalper", "Candle Dynamics"];
-    public bool IsTrendMode => StrategyMode == "Tendência";
-    public bool IsTickScalperMode => StrategyMode == "Tick Scalper";
-    public bool IsCandleDynamicsMode => StrategyMode == "Candle Dynamics";
-    public bool IsDeficitMode => RecoverMode == "Deficit Recovery";
+    public List<string> RecoverModes { get; } = [.. RecoverModeKeys.WithNone];
+    public List<string> StrategyModes { get; } = [.. StrategyModeKeys.All];
+    public bool IsTrendMode => StrategyMode == StrategyModeKeys.Trend;
+    public bool IsTickScalperMode => StrategyMode == StrategyModeKeys.TickScalper;
+    public bool IsCandleDynamicsMode => StrategyMode == StrategyModeKeys.CandleDynamics;
+    public bool IsDeficitMode => RecoverMode == RecoverModeKeys.Deficit;
 
     // Indicators
     [ObservableProperty] private bool _enableEma = true;
@@ -770,8 +770,8 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
 
         var direction = DirectionMode switch
         {
-            "Call" => SignalDirection.Call,
-            "Put" => SignalDirection.Put,
+            DirectionModeKeys.Call => SignalDirection.Call,
+            DirectionModeKeys.Put => SignalDirection.Put,
             _ => SignalDirection.None // Both
         };
 

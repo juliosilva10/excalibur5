@@ -47,7 +47,7 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
     private int _payoutCount;
 
     [ObservableProperty] private string _recoverMode = string.Empty;
-    public List<string> RecoverModes { get; } = ["", "Martingale", "Deficit Recovery"];
+    public List<string> RecoverModes { get; } = [.. RecoverModeKeys.WithNone];
 
     // Contract type strategy
     public List<IContractTypeStrategy> AvailableStrategies { get; } =
@@ -179,7 +179,7 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
 
     partial void OnRecoverModeChanged(string value)
     {
-        if (value == "Martingale" || value == "Deficit Recovery")
+        if (value == RecoverModeKeys.Martingale || value == RecoverModeKeys.Deficit)
         {
             _baseStake = GetStakeValue();
             if (_baseStake <= 0)
@@ -204,7 +204,7 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
     {
         RecordManualRealResult(update);
         if (_recoverVm == null) return;
-        if (RecoverMode != "Martingale" && RecoverMode != "Deficit Recovery") return;
+        if (RecoverMode != RecoverModeKeys.Martingale && RecoverMode != RecoverModeKeys.Deficit) return;
         if (update.ContractId != _lastBoughtContractId) return;
         if (!update.IsExpired && !update.IsSold && update.Status is not ("sold" or "won" or "lost")) return;
 
@@ -212,7 +212,7 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
         {
             bool isLoss = update.Profit < 0;
 
-            if (RecoverMode == "Martingale")
+            if (RecoverMode == RecoverModeKeys.Martingale)
             {
                 if (isLoss && _martingaleLevel < _recoverVm.MaxLevel)
                 {
@@ -226,7 +226,7 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
                     StakeText = _baseStake.ToString("F2", CultureInfo.InvariantCulture);
                 }
             }
-            else if (RecoverMode == "Deficit Recovery")
+            else if (RecoverMode == RecoverModeKeys.Deficit)
             {
                 if (isLoss)
                 {

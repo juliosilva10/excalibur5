@@ -165,7 +165,13 @@ public sealed class StrategyExecutor : IDisposable
             else
                 won = lastCandleClose < pos.EntrySpot;
 
-            decimal estimatedProfit = won ? pos.BuyPrice * 0.5m : -pos.BuyPrice;
+            // Use the real payout captured at buy time; fall back to a 50% heuristic only
+            // if the broker didn't report a payout for this contract.
+            decimal estimatedProfit;
+            if (won)
+                estimatedProfit = pos.Payout > 0 ? pos.Payout - pos.BuyPrice : pos.BuyPrice * 0.5m;
+            else
+                estimatedProfit = -pos.BuyPrice;
 
             pos.IsResolvedLocally = true;
             RecordCompletedRealTrade(pos, estimatedProfit, won);
@@ -464,6 +470,7 @@ public sealed class StrategyExecutor : IDisposable
                     ContractId = result.ContractId,
                     Direction = signal.Direction,
                     BuyPrice = result.BuyPrice,
+                    Payout = result.Payout,
                     Signal = signal,
                     DynamicStopLoss = -GetEffectiveStopLoss(),
                     EntryEpoch = now,
@@ -745,21 +752,21 @@ public sealed class StrategyExecutor : IDisposable
     private bool RequiresSynchronizedTickEntry()
     {
         return _config.DurationApiUnit == "t"
-            || _config.StrategyMode is "Tick Scalper" or "Candle Dynamics";
+            || _config.StrategyMode is StrategyModeKeys.TickScalper or StrategyModeKeys.CandleDynamics;
     }
 
     private bool RequiresTimeSynchronizedEntry()
     {
         return _config.SyncEntryToCandleBoundary
             && _config.DurationApiUnit != "t"
-            && _config.StrategyMode is not ("Tick Scalper" or "Candle Dynamics");
+            && _config.StrategyMode is not (StrategyModeKeys.TickScalper or StrategyModeKeys.CandleDynamics);
     }
 
     private bool RequiresTickSynchronizedEntry()
     {
         return _config.SyncEntryToCandleBoundary
             && (_config.DurationApiUnit == "t"
-                || _config.StrategyMode is "Tick Scalper" or "Candle Dynamics");
+                || _config.StrategyMode is StrategyModeKeys.TickScalper or StrategyModeKeys.CandleDynamics);
     }
 
     public void OnTimeCandleBirth(int? entryCandleIndex)
@@ -806,7 +813,7 @@ public sealed class StrategyExecutor : IDisposable
     private bool IsExpiryBoundContract()
     {
         return _config.DurationApiUnit == "t"
-            || _config.StrategyMode is "Tick Scalper" or "Candle Dynamics";
+            || _config.StrategyMode is StrategyModeKeys.TickScalper or StrategyModeKeys.CandleDynamics;
     }
 
     private static void SyncTrackedPosition(TrackedPosition tracked, OpenContractUpdate update)
@@ -1075,7 +1082,7 @@ public sealed class StrategyExecutor : IDisposable
     private int CountActivePositions()
     {
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        var grace = _config.StrategyMode == "Tendência" ? 5 : 0;
+        var grace = _config.StrategyMode == StrategyModeKeys.Trend ? 5 : 0;
         lock (_positions)
         {
             int count = 0;
@@ -1128,6 +1135,7 @@ public sealed class StrategyExecutor : IDisposable
         public long ContractId { get; init; }
         public SignalDirection Direction { get; init; }
         public decimal BuyPrice { get; init; }
+        public decimal Payout { get; init; }
         public TradeSignal Signal { get; init; } = null!;
         public decimal DynamicStopLoss { get; set; }
         public long EntryEpoch { get; set; }

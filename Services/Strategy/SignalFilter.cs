@@ -19,7 +19,7 @@ public sealed class SignalFilter
         StrategyConfig config)
     {
         // In Tick Scalper mode there are no candles to filter against.
-        if (config.StrategyMode == "Tick Scalper")
+        if (config.StrategyMode == StrategyModeKeys.TickScalper)
             return false;
 
         // Apply cooldown after a loss.

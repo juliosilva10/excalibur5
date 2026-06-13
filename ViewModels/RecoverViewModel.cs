@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Excalibur5.Config;
+using Excalibur5.Models;
 
 namespace Excalibur5.ViewModels;
 
@@ -10,7 +11,7 @@ public partial class RecoverViewModel : ObservableObject, IDisposable
 
     [ObservableProperty] private bool _isRecoverVisible;
     [ObservableProperty] private bool _isEnabled;
-    [ObservableProperty] private string _selectedMode = "Martingale";
+    [ObservableProperty] private string _selectedMode = RecoverModeKeys.Martingale;
 
     // Martingale fields
     [ObservableProperty] private string _stakeText = "0.35";
@@ -21,9 +22,9 @@ public partial class RecoverViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string _deficitMaxStakeText = "50";
     [ObservableProperty] private string _deficitRecoveryTradesText = "1";
 
-    public List<string> RecoverModes { get; } = ["Martingale", "Deficit Recovery"];
-    public bool IsMartingaleMode => SelectedMode == "Martingale";
-    public bool IsDeficitMode => SelectedMode == "Deficit Recovery";
+    public List<string> RecoverModes { get; } = [.. RecoverModeKeys.Active];
+    public bool IsMartingaleMode => SelectedMode == RecoverModeKeys.Martingale;
+    public bool IsDeficitMode => SelectedMode == RecoverModeKeys.Deficit;
 
     public decimal BaseStake => decimal.TryParse(StakeText, System.Globalization.NumberStyles.Number,
         System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : 0.35m;
