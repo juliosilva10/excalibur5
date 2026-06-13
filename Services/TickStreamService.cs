@@ -42,31 +42,39 @@ public sealed class TickStreamService : ITickStreamService, IDisposable
 
     private void OnMessage(object? sender, string json)
     {
-        JsonDocument doc;
-        try { doc = JsonDocument.Parse(json); }
-        catch { return; }
-
-        using (doc)
+        try
         {
-            var root = doc.RootElement;
+            JsonDocument doc;
+            try { doc = JsonDocument.Parse(json); }
+            catch { return; }
 
-            if (root.TryGetProperty("req_id", out var reqIdEl))
+            using (doc)
             {
-                var rid = reqIdEl.GetInt32();
-                if (_pending.TryRemove(rid, out var tcs))
+                var root = doc.RootElement;
+
+                if (root.TryGetProperty("req_id", out var reqIdEl) &&
+                    reqIdEl.TryGetInt32(out var rid))
                 {
-                    tcs.TrySetResult(root.Clone());
+                    if (_pending.TryRemove(rid, out var tcs))
+                    {
+                        tcs.TrySetResult(root.Clone());
+                    }
+                }
+
+                if (root.TryGetProperty("msg_type", out var mt))
+                {
+                    var msgType = mt.GetString();
+                    if (msgType == "tick" && root.TryGetProperty("tick", out var tickEl))
+                    {
+                        ProcessTick(tickEl);
+                    }
                 }
             }
-
-            if (root.TryGetProperty("msg_type", out var mt))
-            {
-                var msgType = mt.GetString();
-                if (msgType == "tick" && root.TryGetProperty("tick", out var tickEl))
-                {
-                    ProcessTick(tickEl);
-                }
-            }
+        }
+        catch (Exception ex)
+        {
+            // A malformed payload must never tear down the shared WebSocket receive loop.
+            AppLogger.Warn(Src, $"OnMessage error (ignored): {ex.Message}");
         }
     }
 
@@ -82,9 +90,11 @@ public sealed class TickStreamService : ITickStreamService, IDisposable
         decimal quote = 0m;
         if (tickEl.TryGetProperty("quote", out var q))
         {
-            quoteRaw = q.GetRawText();
-            quote = decimal.Parse(quoteRaw, System.Globalization.CultureInfo.InvariantCulture);
+            var raw = q.GetRawText();
+            if (!decimal.TryParse(raw, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out quote))
+                return; // malformed quote — drop this tick rather than crash the receive loop
 
+            quoteRaw = raw;
             if (PipSizes.TryGetValue(symbol, out var pipSize))
                 quoteRaw = quote.ToString("F" + pipSize, System.Globalization.CultureInfo.InvariantCulture);
         }
@@ -116,7 +126,9 @@ public sealed class TickStreamService : ITickStreamService, IDisposable
 
     private async Task<string> SubscribeInternalAsync(string symbol, bool retried, CancellationToken ct)
     {
-        if (_subscriptions.ContainsKey(symbol))
+        // Atomically claim the slot so two concurrent subscribes can't both proceed
+        // and double-subscribe server-side.
+        if (!_subscriptions.TryAdd(symbol, ""))
         {
             AppLogger.Info(Src, $"Already subscribed to {symbol}");
             return _subscriptions[symbol];
@@ -124,8 +136,6 @@ public sealed class TickStreamService : ITickStreamService, IDisposable
 
         var reqId = Interlocked.Increment(ref _reqId);
         var payload = JsonSerializer.Serialize(new { ticks = symbol, subscribe = 1, req_id = reqId });
-
-        _subscriptions[symbol] = "";
 
         try
         {
@@ -326,7 +336,17 @@ public sealed class TickStreamService : ITickStreamService, IDisposable
         });
 
         AppLogger.Info(Src, $"Sending req_id={reqId}: {json[..Math.Min(json.Length, 120)]}");
-        await _ws.SendAsync(json, ct);
+        try
+        {
+            await _ws.SendAsync(json, ct);
+        }
+        catch
+        {
+            if (_pending.TryRemove(reqId, out var orphan))
+                orphan.TrySetCanceled();
+            throw;
+        }
+
         return await tcs.Task;
     }
 

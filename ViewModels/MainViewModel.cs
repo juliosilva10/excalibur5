@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Windows;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -21,7 +22,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private readonly DispatcherTimer         _timer;
     private readonly DispatcherTimer         _uptimeTimer;
     private readonly System.Diagnostics.Stopwatch _uptimeWatch = new();
-    private readonly HashSet<long> _currentSessionContracts = new();
+    // Accessed from background WebSocket/trade callbacks and the UI thread, so it must be thread-safe.
+    private readonly ConcurrentDictionary<long, byte> _currentSessionContracts = new();
     private readonly IVirtualEntryModeController _virtualEntryModeController;
     private volatile string _token = string.Empty;
     private int _timerBusy; // 0 = idle, 1 = busy — use Interlocked for atomic check-and-set
@@ -214,7 +216,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             var tab = Markets.SelectedTab;
             var market = tab?.DisplayName ?? "";
-            _currentSessionContracts.Add(e.BuyResult.ContractId);
+            _currentSessionContracts[e.BuyResult.ContractId] = 0;
             History.AddBotTrade(e.BuyResult, e.ContractType, Strategy.StrategyMode, market);
             if (tab != null)
             {
@@ -227,7 +229,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
         Strategy.BotTradeCompleted += (_, e) =>
         {
-            if (!_currentSessionContracts.Contains(e.ContractId)) return;
+            if (!_currentSessionContracts.ContainsKey(e.ContractId)) return;
 
             var tab = Markets.SelectedTab;
             if (tab != null)
@@ -274,7 +276,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     private void OnTradeSettledForPerformance(object? sender, TradeHistoryItem trade)
     {
-        if (!_currentSessionContracts.Contains(trade.ContractId)) return;
+        if (!_currentSessionContracts.ContainsKey(trade.ContractId)) return;
 
         var tab = Markets.SelectedTab;
         if (tab != null && IsTradeFromSelectedMarket(trade, tab))
@@ -540,13 +542,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     private void WatchContractPanelChanges()
     {
-        if (_watchedPanel != null)
-        {
-            _watchedPanel.PropertyChanged -= OnContractPanelChanged;
-            _watchedPanel.ManualTradeOpened -= OnManualTradeOpened;
-            _watchedPanel.ManualVirtualTradeOpened -= OnManualVirtualTradeOpened;
-            _watchedPanel.ManualVirtualTradeSettled -= OnManualVirtualTradeSettled;
-        }
+        DetachWatchedPanel();
 
         _watchedPanel = Markets.SelectedTab?.ContractPanel;
 
@@ -557,6 +553,18 @@ public partial class MainViewModel : ObservableObject, IDisposable
             _watchedPanel.ManualVirtualTradeOpened += OnManualVirtualTradeOpened;
             _watchedPanel.ManualVirtualTradeSettled += OnManualVirtualTradeSettled;
         }
+    }
+
+    // Detaches every handler attached in WatchContractPanelChanges. Kept in one place
+    // so subscribe and unsubscribe can never drift out of sync.
+    private void DetachWatchedPanel()
+    {
+        if (_watchedPanel == null) return;
+
+        _watchedPanel.PropertyChanged -= OnContractPanelChanged;
+        _watchedPanel.ManualTradeOpened -= OnManualTradeOpened;
+        _watchedPanel.ManualVirtualTradeOpened -= OnManualVirtualTradeOpened;
+        _watchedPanel.ManualVirtualTradeSettled -= OnManualVirtualTradeSettled;
     }
 
     private void OnManualVirtualTradeOpened(object? sender, ManualVirtualTradeOpened e)
@@ -580,7 +588,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
         if (!_isBotSessionActive) return;
 
-        _currentSessionContracts.Add(e.BuyResult.ContractId);
+        _currentSessionContracts[e.BuyResult.ContractId] = 0;
         if (tab != null)
         {
             Performance.OnTradeOpened(e.BuyResult.ContractId, market, e.BuyResult.StartTime, null, null,
@@ -665,11 +673,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     public void Dispose()
     {
         SaveUiState();
-        if (_watchedPanel != null)
-        {
-            _watchedPanel.PropertyChanged -= OnContractPanelChanged;
-            _watchedPanel.ManualTradeOpened -= OnManualTradeOpened;
-        }
+        DetachWatchedPanel();
         _timer.Stop();
         _uptimeTimer.Stop();
         _uptimeWatch.Stop();

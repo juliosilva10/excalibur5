@@ -8,6 +8,11 @@ namespace Excalibur5;
 public partial class App : Application
 {
     private DerivWebSocketService? _wsService;
+    private DerivRestClient? _restClient;
+    private DerivApiService? _apiService;
+    private TickStreamService? _tickService;
+    private ContractService? _contractService;
+    private MainViewModel? _viewModel;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -32,23 +37,38 @@ public partial class App : Application
             ex.SetObserved();
         };
 
-        _wsService = new DerivWebSocketService();
-        var restClient     = new DerivRestClient();
-        var apiService      = new DerivApiService(_wsService, restClient);
-        var tickService     = new TickStreamService(_wsService);
-        var contractService = new ContractService(_wsService);
-        var viewModel       = new MainViewModel(apiService, _wsService, tickService, contractService);
-        new MainWindow { DataContext = viewModel }.Show();
+        _wsService       = new DerivWebSocketService();
+        _restClient      = new DerivRestClient();
+        _apiService      = new DerivApiService(_wsService, _restClient);
+        _tickService     = new TickStreamService(_wsService);
+        _contractService = new ContractService(_wsService);
+        _viewModel       = new MainViewModel(_apiService, _wsService, _tickService, _contractService);
+        new MainWindow { DataContext = _viewModel }.Show();
     }
 
     protected override async void OnExit(ExitEventArgs e)
     {
         AppLogger.Info("App", "=== Excalibur5 exiting ===");
+
+        // Dispose services (which unhook their WebSocket event handlers) before the
+        // WebSocket itself, then dispose the socket last.
+        TryDispose(_viewModel);
+        TryDispose(_contractService);
+        TryDispose(_tickService);
+        TryDispose(_apiService);
+        TryDispose(_restClient);
+
         if (_wsService != null)
         {
             try { await _wsService.DisposeAsync(); }
             catch { /* ignore */ }
         }
         base.OnExit(e);
+    }
+
+    private static void TryDispose(IDisposable? disposable)
+    {
+        try { disposable?.Dispose(); }
+        catch (Exception ex) { AppLogger.Warn("App", $"Dispose error: {ex.Message}"); }
     }
 }

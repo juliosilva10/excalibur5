@@ -27,73 +27,90 @@ public sealed class DerivApiService : IDerivApiService, IDisposable
 
     private void OnMessageReceived(object? sender, string json)
     {
-        JsonDocument doc;
-        try { doc = JsonDocument.Parse(json); }
+        try
+        {
+            JsonDocument doc;
+            try { doc = JsonDocument.Parse(json); }
+            catch (Exception ex)
+            {
+                AppLogger.Error(Src, "Failed to parse incoming JSON", ex);
+                return;
+            }
+
+            using (doc)
+            {
+                var root = doc.RootElement;
+
+                if (root.TryGetProperty("req_id", out var reqIdEl) &&
+                    reqIdEl.TryGetInt32(out var reqId) &&
+                    _pending.TryRemove(reqId, out var tcs))
+                {
+                    tcs.TrySetResult(root.Clone());
+                }
+
+                if (root.TryGetProperty("msg_type", out var mt))
+                {
+                    var msgType = mt.GetString();
+
+                    // The OTP-authenticated connection may return an "authorize" msg_type
+                    // with account info on connect (new platform behaviour).
+                    if (msgType == "authorize" &&
+                        root.TryGetProperty("authorize", out var authEl))
+                    {
+                        var isVirtual = false;
+                        if (authEl.TryGetProperty("is_virtual", out var iv))
+                        {
+                            isVirtual = iv.ValueKind == JsonValueKind.True
+                                || (iv.ValueKind == JsonValueKind.Number && iv.TryGetInt32(out var ivNum) && ivNum == 1);
+                        }
+                        var response = new AuthorizeResponse
+                        {
+                            LoginId   = authEl.TryGetProperty("loginid",    out var li)  ? li.GetString()  ?? "" : "",
+                            IsVirtual = isVirtual,
+                            Balance   = authEl.TryGetProperty("balance",    out var bal) && bal.TryGetDecimal(out var balVal) ? balVal : 0m,
+                            Currency  = authEl.TryGetProperty("currency",   out var cur) ? cur.GetString()  ?? "" : "",
+                            FullName  = authEl.TryGetProperty("fullname",   out var fn)  ? fn.GetString()   ?? "" : "",
+                        };
+                        AppLogger.Info(Src, $"Authorized (WS): {MaskLoginId(response.LoginId)} | virtual={response.IsVirtual} | {response.Balance} {response.Currency}");
+                        Authorized?.Invoke(this, response);
+                    }
+
+                    if (msgType == "balance" &&
+                        root.TryGetProperty("balance", out var balEl))
+                    {
+                        var balance = new BalanceResponse
+                        {
+                            Balance  = balEl.TryGetProperty("balance",  out var b) && b.TryGetDecimal(out var bVal) ? bVal : 0m,
+                            Currency = balEl.TryGetProperty("currency", out var c) ? c.GetString() ?? "" : "",
+                            LoginId  = balEl.TryGetProperty("loginid",  out var l) ? l.GetString() ?? "" : "",
+                        };
+                        AppLogger.Info(Src, $"Balance update: {balance.Balance} {balance.Currency}");
+                        BalanceUpdated?.Invoke(this, balance);
+                    }
+
+                    if (msgType == "error")
+                    {
+                        var errMsg = root.TryGetProperty("error", out var e)
+                            ? e.TryGetProperty("message", out var m) ? m.GetString() : "unknown"
+                            : "unknown";
+                        AppLogger.Warn(Src, $"Server error push (no req_id): {errMsg}");
+                    }
+                }
+            }
+        }
         catch (Exception ex)
         {
-            AppLogger.Error(Src, "Failed to parse incoming JSON", ex);
-            return;
+            // A malformed payload must never tear down the shared WebSocket receive loop.
+            AppLogger.Warn(Src, $"OnMessageReceived error (ignored): {ex.Message}");
         }
+    }
 
-        using (doc)
-        {
-            var root = doc.RootElement;
-
-            if (root.TryGetProperty("req_id", out var reqIdEl) &&
-                _pending.TryRemove(reqIdEl.GetInt32(), out var tcs))
-            {
-                tcs.TrySetResult(root.Clone());
-            }
-
-            if (root.TryGetProperty("msg_type", out var mt))
-            {
-                var msgType = mt.GetString();
-
-                // The OTP-authenticated connection may return an "authorize" msg_type
-                // with account info on connect (new platform behaviour).
-                if (msgType == "authorize" &&
-                    root.TryGetProperty("authorize", out var authEl))
-                {
-                    var isVirtual = false;
-                    if (authEl.TryGetProperty("is_virtual", out var iv))
-                    {
-                        isVirtual = iv.ValueKind == JsonValueKind.True
-                            || (iv.ValueKind == JsonValueKind.Number && iv.GetInt32() == 1);
-                    }
-                    var response = new AuthorizeResponse
-                    {
-                        LoginId   = authEl.TryGetProperty("loginid",    out var li)  ? li.GetString()  ?? "" : "",
-                        IsVirtual = isVirtual,
-                        Balance   = authEl.TryGetProperty("balance",    out var bal) ? bal.GetDecimal() : 0m,
-                        Currency  = authEl.TryGetProperty("currency",   out var cur) ? cur.GetString()  ?? "" : "",
-                        FullName  = authEl.TryGetProperty("fullname",   out var fn)  ? fn.GetString()   ?? "" : "",
-                    };
-                    AppLogger.Info(Src, $"Authorized (WS): {response.LoginId} | virtual={response.IsVirtual} | {response.Balance} {response.Currency}");
-                    Authorized?.Invoke(this, response);
-                }
-
-                if (msgType == "balance" &&
-                    root.TryGetProperty("balance", out var balEl))
-                {
-                    var balance = new BalanceResponse
-                    {
-                        Balance  = balEl.TryGetProperty("balance",  out var b) ? b.GetDecimal() : 0m,
-                        Currency = balEl.TryGetProperty("currency", out var c) ? c.GetString() ?? "" : "",
-                        LoginId  = balEl.TryGetProperty("loginid",  out var l) ? l.GetString() ?? "" : "",
-                    };
-                    AppLogger.Info(Src, $"Balance update: {balance.Balance} {balance.Currency}");
-                    BalanceUpdated?.Invoke(this, balance);
-                }
-
-                if (msgType == "error")
-                {
-                    var errMsg = root.TryGetProperty("error", out var e)
-                        ? e.TryGetProperty("message", out var m) ? m.GetString() : "unknown"
-                        : "unknown";
-                    AppLogger.Warn(Src, $"Server error push (no req_id): {errMsg}");
-                }
-            }
-        }
+    // Masks a login id for logging (keeps first 2 + last 2 chars), so PII isn't written in plaintext.
+    private static string MaskLoginId(string loginId)
+    {
+        if (string.IsNullOrEmpty(loginId) || loginId.Length <= 4)
+            return "****";
+        return $"{loginId[..2]}****{loginId[^2..]}";
     }
 
     /// <inheritdoc />
@@ -152,7 +169,7 @@ public sealed class DerivApiService : IDerivApiService, IDisposable
 
         if (root.TryGetProperty("error", out var err))
         {
-            var msg = err.GetProperty("message").GetString();
+            var msg = err.TryGetProperty("message", out var m) ? m.GetString() ?? "unknown" : "unknown";
             AppLogger.Error(Src, $"SubscribeBalance error: {msg}");
             throw new InvalidOperationException(msg);
         }
@@ -180,7 +197,17 @@ public sealed class DerivApiService : IDerivApiService, IDisposable
             }
         });
 
-        await _ws.SendAsync(json, ct);
+        try
+        {
+            await _ws.SendAsync(json, ct);
+        }
+        catch
+        {
+            if (_pending.TryRemove(reqId, out var orphan))
+                orphan.TrySetCanceled();
+            throw;
+        }
+
         return await tcs.Task;
     }
 
@@ -189,7 +216,7 @@ public sealed class DerivApiService : IDerivApiService, IDisposable
     public void Dispose()
     {
         _ws.MessageReceived -= OnMessageReceived;
-        (_rest as IDisposable)?.Dispose();
+        // Note: _rest is an injected dependency; its lifetime is owned by the DI container, not this service.
         // Drain and cancel all pending requests atomically
         foreach (var key in _pending.Keys)
         {

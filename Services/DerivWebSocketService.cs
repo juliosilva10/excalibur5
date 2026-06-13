@@ -108,7 +108,7 @@ public sealed class DerivWebSocketService : IDerivWebSocketService
                 while (!result.EndOfMessage);
 
                 var json = Encoding.UTF8.GetString(messageStream.GetBuffer(), 0, (int)messageStream.Length);
-                MessageReceived?.Invoke(this, json);
+                DispatchMessage(json);
             }
 
             AppLogger.Info(Src, $"Receive loop exited — WS state: {_ws?.State}");
@@ -125,6 +125,26 @@ public sealed class DerivWebSocketService : IDerivWebSocketService
         finally
         {
             ArrayPool<byte>.Shared.Return(buffer);
+        }
+    }
+
+    // Fans the message out to each subscriber independently so one throwing handler
+    // (e.g. a malformed payload) cannot tear down the receive loop or starve the others.
+    private void DispatchMessage(string json)
+    {
+        var handlers = MessageReceived;
+        if (handlers == null) return;
+
+        foreach (var handler in handlers.GetInvocationList())
+        {
+            try
+            {
+                ((EventHandler<string>)handler)(this, json);
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Warn(Src, $"MessageReceived handler threw (ignored): {ex.Message}");
+            }
         }
     }
 

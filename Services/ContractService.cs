@@ -14,6 +14,8 @@ public sealed class ContractService : IContractService, IDisposable
     private readonly ConcurrentDictionary<string, string> _activeSubIds = new();
     private readonly ConcurrentDictionary<string, string> _subIdToContractType = new();
     private readonly ConcurrentDictionary<long, string> _openContractSubIds = new();
+    // Tracks contract IDs we want updates for, so we can re-subscribe after a reconnect.
+    private readonly ConcurrentDictionary<long, byte> _trackedContracts = new();
     private int _reqId = 20000;
 
     public event EventHandler<ProposalResponse>? ProposalUpdated;
@@ -23,54 +25,99 @@ public sealed class ContractService : IContractService, IDisposable
     {
         _ws = ws;
         _ws.MessageReceived += OnMessage;
+        _ws.Disconnected += OnDisconnected;
+        _ws.Connected += OnConnected;
         AppLogger.Info(Src, "ContractService created");
+    }
+
+    private void OnDisconnected(object? sender, EventArgs e)
+    {
+        // Subscription IDs are tied to the dead socket. Drop them so a reconnect
+        // re-subscribes instead of short-circuiting on a stale ContainsKey check.
+        var pendingCount = _pending.Count;
+        foreach (var key in _pending.Keys.ToList())
+        {
+            if (_pending.TryRemove(key, out var tcs))
+                tcs.TrySetCanceled();
+        }
+
+        _activeSubIds.Clear();
+        _subIdToContractType.Clear();
+        _openContractSubIds.Clear();
+        AppLogger.Info(Src, $"OnDisconnected — cancelled {pendingCount} pending requests, cleared subscriptions ({_trackedContracts.Count} contracts tracked for re-subscribe)");
+    }
+
+    private void OnConnected(object? sender, EventArgs e)
+    {
+        // Re-subscribe to open contracts so TP/SL/trailing keeps receiving updates
+        // after an automatic reconnect.
+        var contracts = _trackedContracts.Keys.ToList();
+        if (contracts.Count == 0) return;
+
+        AppLogger.Info(Src, $"OnConnected — re-subscribing {contracts.Count} open contract(s)");
+        foreach (var contractId in contracts)
+        {
+            _ = SubscribeOpenContractAsync(contractId)
+                .ContinueWith(
+                    t => AppLogger.Warn(Src, $"Re-subscribe failed for {contractId}: {t.Exception?.InnerException?.Message}"),
+                    TaskContinuationOptions.OnlyOnFaulted);
+        }
     }
 
     private void OnMessage(object? sender, string json)
     {
-        JsonDocument doc;
-        try { doc = JsonDocument.Parse(json); }
-        catch { return; }
-
-        using (doc)
+        try
         {
-            var root = doc.RootElement;
+            JsonDocument doc;
+            try { doc = JsonDocument.Parse(json); }
+            catch { return; }
 
-            if (root.TryGetProperty("req_id", out var reqIdEl) &&
-                _pending.TryRemove(reqIdEl.GetInt32(), out var tcs))
+            using (doc)
             {
-                tcs.TrySetResult(root.Clone());
-            }
+                var root = doc.RootElement;
 
-            if (root.TryGetProperty("msg_type", out var mt))
-            {
-                var msgType = mt.GetString();
-
-                if (msgType == "proposal" &&
-                    root.TryGetProperty("proposal", out var propEl))
+                if (root.TryGetProperty("req_id", out var reqIdEl) &&
+                    reqIdEl.TryGetInt32(out var reqId) &&
+                    _pending.TryRemove(reqId, out var tcs))
                 {
-                    var proposal = ParseProposal(root, propEl);
-                    if (proposal != null)
+                    tcs.TrySetResult(root.Clone());
+                }
+
+                if (root.TryGetProperty("msg_type", out var mt))
+                {
+                    var msgType = mt.GetString();
+
+                    if (msgType == "proposal" &&
+                        root.TryGetProperty("proposal", out var propEl))
                     {
-                        var withType = proposal;
-                        if (string.IsNullOrEmpty(proposal.ContractType) &&
-                            !string.IsNullOrEmpty(proposal.SubscriptionId) &&
-                            _subIdToContractType.TryGetValue(proposal.SubscriptionId, out var ct))
+                        var proposal = ParseProposal(root, propEl);
+                        if (proposal != null)
                         {
-                            withType = proposal with { ContractType = ct };
+                            var withType = proposal;
+                            if (string.IsNullOrEmpty(proposal.ContractType) &&
+                                !string.IsNullOrEmpty(proposal.SubscriptionId) &&
+                                _subIdToContractType.TryGetValue(proposal.SubscriptionId, out var ct))
+                            {
+                                withType = proposal with { ContractType = ct };
+                            }
+                            ProposalUpdated?.Invoke(this, withType);
                         }
-                        ProposalUpdated?.Invoke(this, withType);
+                    }
+
+                    if (msgType == "proposal_open_contract" &&
+                        root.TryGetProperty("proposal_open_contract", out var pocEl))
+                    {
+                        var update = ParseOpenContractUpdate(root, pocEl);
+                        if (update != null)
+                            OpenContractUpdated?.Invoke(this, update);
                     }
                 }
-
-                if (msgType == "proposal_open_contract" &&
-                    root.TryGetProperty("proposal_open_contract", out var pocEl))
-                {
-                    var update = ParseOpenContractUpdate(root, pocEl);
-                    if (update != null)
-                        OpenContractUpdated?.Invoke(this, update);
-                }
             }
+        }
+        catch (Exception ex)
+        {
+            // A malformed payload must never tear down the shared WebSocket receive loop.
+            AppLogger.Warn(Src, $"OnMessage error (ignored): {ex.Message}");
         }
     }
 
@@ -407,7 +454,19 @@ public sealed class ContractService : IContractService, IDisposable
                 t.TrySetCanceled();
         });
 
-        await _ws.SendAsync(json, ct);
+        try
+        {
+            await _ws.SendAsync(json, ct);
+        }
+        catch
+        {
+            // Send failed: remove the orphaned pending entry so it doesn't accumulate
+            // until the next full disconnect.
+            if (_pending.TryRemove(reqId, out var orphan))
+                orphan.TrySetCanceled();
+            throw;
+        }
+
         return await tcs.Task;
     }
 
@@ -490,6 +549,8 @@ public sealed class ContractService : IContractService, IDisposable
 
     public async Task SubscribeOpenContractAsync(long contractId, CancellationToken ct = default)
     {
+        _trackedContracts[contractId] = 0;
+
         if (_openContractSubIds.ContainsKey(contractId))
         {
             AppLogger.Info(Src, $"Already subscribed to open contract: {contractId}");
@@ -533,6 +594,8 @@ public sealed class ContractService : IContractService, IDisposable
 
     public async Task UnsubscribeOpenContractAsync(long contractId, CancellationToken ct = default)
     {
+        _trackedContracts.TryRemove(contractId, out _);
+
         if (!_openContractSubIds.TryRemove(contractId, out var subId)) return;
 
         var reqId = Interlocked.Increment(ref _reqId);
@@ -737,9 +800,12 @@ public sealed class ContractService : IContractService, IDisposable
     public void Dispose()
     {
         _ws.MessageReceived -= OnMessage;
+        _ws.Disconnected -= OnDisconnected;
+        _ws.Connected -= OnConnected;
         _activeSubIds.Clear();
         _subIdToContractType.Clear();
         _openContractSubIds.Clear();
+        _trackedContracts.Clear();
         foreach (var key in _pending.Keys)
         {
             if (_pending.TryRemove(key, out var tcs))
