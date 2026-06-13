@@ -15,12 +15,20 @@ namespace Excalibur5.ViewModels.Diversity;
 public partial class DiversityViewModel : ObservableObject
 {
     private readonly DiversityCoordinator? _coordinator;
+    private Services.Strategy.Diversity.DiversityRecoveryBridge? _recoveryBridge;
+    private decimal _currentTotalStake;
 
     [ObservableProperty] private bool _isDiversityVisible;
     [ObservableProperty] private bool _useSignalMode;
+    [ObservableProperty] private string _confidenceThresholdText = "0.60";
     [ObservableProperty] private string _statusText = string.Empty;
     [ObservableProperty] private string _coverageText = string.Empty;
     [ObservableProperty] private bool _isBusy;
+
+    /// <summary>Minimum signal confidence (0-1) required to fire a group in signal mode.</summary>
+    public double ConfidenceThreshold =>
+        double.TryParse(ConfidenceThresholdText, System.Globalization.NumberStyles.Any,
+            System.Globalization.CultureInfo.InvariantCulture, out var v) && v is > 0 and <= 1 ? v : 0.6;
 
     public ObservableCollection<DiversityLegRow> Legs { get; } = new();
 
@@ -45,6 +53,49 @@ public partial class DiversityViewModel : ObservableObject
 
     [RelayCommand]
     private void ToggleDiversity() => IsDiversityVisible = !IsDiversityVisible;
+
+    /// <summary>
+    /// Supplies the recover bridge used in signal mode so each auto-fired group draws its total
+    /// stake from recover (distributed across legs) and escalates after a net group loss.
+    /// </summary>
+    public void SetRecoveryBridge(Services.Strategy.Diversity.DiversityRecoveryBridge? bridge)
+    {
+        _recoveryBridge = bridge;
+        _currentTotalStake = BuildConfig(DiversityTriggerMode.Signal).TotalStake;
+    }
+
+    /// <summary>
+    /// Called on each strategy signal. Fires the whole group when the signal gate allows it
+    /// (signal mode on, not busy, no pending group, confidence above threshold). Returns the
+    /// group config that was sent, or null if nothing fired. Applies recover sizing when a bridge
+    /// is set. Safe to call from the live signal path.
+    /// </summary>
+    public async Task<DiversityGroupConfig?> TryFireFromSignalAsync(double signalConfidence)
+    {
+        if (_coordinator == null) return null;
+        if (!DiversitySignalGate.ShouldFire(
+                UseSignalMode, signalConfidence, ConfidenceThreshold,
+                _coordinator.PendingGroupCount, IsBusy))
+            return null;
+        if (Legs.Count < 2) return null;
+
+        var template = BuildConfig(DiversityTriggerMode.Signal);
+        var config = _recoveryBridge != null
+            ? _recoveryBridge.BuildNextGroup(template, _currentTotalStake)
+            : template;
+        _currentTotalStake = config.TotalStake;
+
+        IsBusy = true;
+        try
+        {
+            var groupId = await _coordinator.ExecuteGroupAsync(config);
+            return groupId != null ? config : null;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
 
     [RelayCommand]
     private void AddLeg()

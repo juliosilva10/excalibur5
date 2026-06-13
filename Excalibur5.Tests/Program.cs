@@ -58,7 +58,12 @@ var tests = new (string Name, Func<Task> Run)[]
     ("DivRecover: resets after group win", DiversityRecoveryTests.RecoverResetsAfterGroupWin),
     ("DivRecover: builds next group redistributed", DiversityRecoveryTests.BuildNextGroupRedistributesEscalatedStake),
     ("DivRecover: virtual group nets to one W/L", DiversityRecoveryTests.VirtualGroupNetsToSingleOutcome),
-    ("DivRecover: no recover uses base total", DiversityRecoveryTests.NoRecoverUsesBaseTotal)
+    ("DivRecover: no recover uses base total", DiversityRecoveryTests.NoRecoverUsesBaseTotal),
+    ("SignalGate: fires when conditions met", DiversitySignalGateTests.FiresWhenAllConditionsMet),
+    ("SignalGate: off → no fire", DiversitySignalGateTests.DoesNotFireWhenSignalModeOff),
+    ("SignalGate: below threshold → no fire", DiversitySignalGateTests.DoesNotFireBelowThreshold),
+    ("SignalGate: pending group → no fire", DiversitySignalGateTests.DoesNotFireWhilePendingGroup),
+    ("SignalGate: busy → no fire", DiversitySignalGateTests.DoesNotFireWhileBusy)
 };
 
 var failures = 0;

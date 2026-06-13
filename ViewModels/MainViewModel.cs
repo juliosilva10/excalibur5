@@ -8,6 +8,7 @@ using Excalibur5.Models;
 using Excalibur5.Services;
 using Excalibur5.Services.Strategy;
 using Excalibur5.Services.Strategy.Virtual;
+using Excalibur5.Models.Strategy;
 
 namespace Excalibur5.ViewModels;
 
@@ -103,6 +104,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
         Diversity = new Diversity.DiversityViewModel(_diversityCoordinator);
         _diversityCoordinator.GroupCompleted += OnDiversityGroupCompleted;
         _diversityCoordinator.StatusMessage += (_, msg) => AppLogger.Info("Diversity", msg);
+        // Signal mode: each strategy signal may fire a Diversity group (gated by confidence).
+        Strategy.SignalGenerated += OnStrategySignalForDiversity;
 
         Markets.MarketsRequested += () =>
         {
@@ -480,6 +483,39 @@ public partial class MainViewModel : ObservableObject, IDisposable
         Virtual.ToggleVirtualCommand.Execute(null);
     }
 
+    // Each strategy signal may fire a Diversity group when signal mode is enabled. The group's
+    // total stake is sized by recover (treating the group as one contract).
+    private Services.Strategy.Diversity.DiversityRecoveryBridge? _diversityBridge;
+    private void OnStrategySignalForDiversity(object? sender, TradeSignal signal)
+    {
+        if (!Diversity.UseSignalMode) return;
+
+        if (_diversityBridge == null)
+            _diversityBridge = BuildDiversityRecoveryBridge();
+        Diversity.SetRecoveryBridge(_diversityBridge);
+
+        _ = Diversity.TryFireFromSignalAsync(signal.Confidence);
+    }
+
+    private Services.Strategy.Diversity.DiversityRecoveryBridge BuildDiversityRecoveryBridge()
+    {
+        var baseTotal = Diversity.BuildConfig(Models.Diversity.DiversityTriggerMode.Signal).TotalStake;
+        Services.Strategy.Recovery.IRecoverStrategy? recover = null;
+        if (Recover.IsEnabled)
+        {
+            var cfg = new StrategyConfig
+            {
+                RecoverMode = Recover.SelectedMode,
+                MartingaleFactor = Recover.Factor,
+                MartingaleMaxLevel = Recover.MaxLevel,
+                DeficitMaxStake = Recover.DeficitMaxStake,
+                DeficitRecoveryTrades = Recover.DeficitRecoveryTrades
+            };
+            recover = Services.Strategy.Recovery.RecoverStrategyFactory.Create(cfg);
+        }
+        return new Services.Strategy.Diversity.DiversityRecoveryBridge(recover, baseTotal);
+    }
+
     [RelayCommand]
     private void ToggleDiversityPanel()
     {
@@ -499,6 +535,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
         });
         // Group counts as one real result for the virtual entry-mode controller.
         _virtualEntryModeController.RecordRealResult(_virtualEntryModeController.CurrentRealCycleId, result.Won);
+        // Feed recover so the next signal-fired group escalates after a net loss (group = 1 contract).
+        _diversityBridge?.RecordGroupResult(result);
         AppLogger.Info("Diversity", $"Group {result.GroupId} net={result.TotalProfit:F2} won={result.Won}");
     }
 
@@ -759,6 +797,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         Recover.Dispose();
         History.Dispose();
         Log.Dispose();
+        Strategy.SignalGenerated -= OnStrategySignalForDiversity;
         _diversityCoordinator.Dispose();
         (_tickStream as IDisposable)?.Dispose();
         (_contractService as IDisposable)?.Dispose();

@@ -20,6 +20,8 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
     public event EventHandler<TradeCompleted>? BotTradeCompleted;
     public event EventHandler<VirtualPositionOpened>? VirtualTradeOpened;
     public event EventHandler<VirtualTradeResult>? VirtualTradeSettled;
+    /// <summary>Re-surfaces engine signals (with confidence) for consumers like Diversity signal mode.</summary>
+    public event EventHandler<TradeSignal>? SignalGenerated;
 
     private readonly IContractService _contractService;
     private readonly IVirtualEntryModeController _virtualEntryModeController;
@@ -623,6 +625,7 @@ public partial class StrategyViewModel : ObservableObject, IDisposable
 
     private void OnSignalGenerated(object? sender, TradeSignal signal)
     {
+        SignalGenerated?.Invoke(this, signal);
         Application.Current?.Dispatcher?.InvokeAsync(() =>
         {
             var dir = signal.Direction == SignalDirection.Call ? "CALL" : "PUT";

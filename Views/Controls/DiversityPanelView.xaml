@@ -123,6 +123,7 @@
             <Grid Grid.Row="5">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
                 <Button Grid.Column="0" Content="Comprar grupo" Padding="14,6"
@@ -130,7 +131,15 @@
                         Background="#00f0ff" BorderThickness="0"
                         IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBool}}"
                         Command="{Binding ExecuteGroupCommand}"/>
-                <TextBlock Grid.Column="1" Text="{Binding StatusText}" TextWrapping="Wrap"
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="14,0,0,0">
+                    <CheckBox IsChecked="{Binding UseSignalMode}" Foreground="#c0d8e8" VerticalAlignment="Center"
+                              Content="Modo por sinal" ToolTip="Dispara o grupo automaticamente quando a estratégia gera um sinal acima da confiança"/>
+                    <TextBlock Text="Conf. mín." Foreground="#6a8aa0" FontSize="10" VerticalAlignment="Center" Margin="10,0,4,0"/>
+                    <TextBox Text="{Binding ConfidenceThresholdText, UpdateSourceTrigger=PropertyChanged}"
+                             Width="44" Background="#07121a" Foreground="#e0eef8"
+                             BorderBrush="#2a5568" BorderThickness="1" Padding="3,2" VerticalAlignment="Center"/>
+                </StackPanel>
+                <TextBlock Grid.Column="2" Text="{Binding StatusText}" TextWrapping="Wrap"
                            VerticalAlignment="Center" Margin="12,0,0,0"
                            Foreground="#a3b8cc" FontSize="10"/>
             </Grid>
