@@ -26,3 +26,6 @@ Thumbs.db
 desktop.ini
 
 # NOTE: The public Deriv App ID (33we3QV2jfoLet2b2EFxB, in DerivRestClient.cs) is NOT secret and is intentionally tracked
+
+# Local dotnet CLI home (build artifacts/telemetry)
+.dotnet-cli-home/
