@@ -64,7 +64,13 @@ var tests = new (string Name, Func<Task> Run)[]
     ("SignalGate: off → no fire", DiversitySignalGateTests.DoesNotFireWhenSignalModeOff),
     ("SignalGate: below threshold → no fire", DiversitySignalGateTests.DoesNotFireBelowThreshold),
     ("SignalGate: pending group → no fire", DiversitySignalGateTests.DoesNotFireWhilePendingGroup),
-    ("SignalGate: busy → no fire", DiversitySignalGateTests.DoesNotFireWhileBusy)
+    ("SignalGate: busy → no fire", DiversitySignalGateTests.DoesNotFireWhileBusy),
+    ("Row: digit over maps to leg", DiversityContractRowTests.DigitOverRowMapsToLegWithDigitBarrier),
+    ("Row: digit defaults to ticks only", DiversityContractRowTests.DigitContractDefaultsToTicksOnly),
+    ("Row: rise/fall offers more units", DiversityContractRowTests.SwitchingToRiseFallOffersMoreUnits),
+    ("Row: ticks clamped to 10", DiversityContractRowTests.TicksDurationClampedToTen),
+    ("Row: non-digit has no barrier", DiversityContractRowTests.NonDigitContractHasNoBarrier),
+    ("Row: seconds maps to 's' code", DiversityContractRowTests.SecondsDurationMapsToCorrectUnitCode)
 };
 
 var failures = 0;

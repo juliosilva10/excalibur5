@@ -72,7 +72,7 @@ public sealed class DiversityCoordinator : IDisposable
                 {
                     result = await _contractService.BuyDirectAsync(
                         leg.Symbol, leg.ContractType, leg.Stake,
-                        leg.DurationTicks, "t", leg.Barrier, ct);
+                        leg.DurationTicks, leg.DurationUnit, leg.Barrier, ct);
                 }
                 catch (Exception ex)
                 {

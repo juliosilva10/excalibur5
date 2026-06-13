@@ -125,6 +125,32 @@ public partial class HistoryViewModel : ObservableObject, IDisposable
         });
     }
 
+    /// <summary>
+    /// Registers a completed Diversity group as a single history line. The group is treated as one
+    /// contract: stake is the total committed across its contracts and profit is the net of all of
+    /// them. Already settled, so no contract-status poll is started (ContractId = 0).
+    /// </summary>
+    public void AddDiversityGroup(Models.Diversity.GroupResult result, string market, string strategyName = "Diversity")
+    {
+        Application.Current?.Dispatcher?.Invoke(() =>
+        {
+            Trades.Insert(0, new TradeHistoryItem
+            {
+                Operacao = "Diversity",
+                Estrategia = strategyName,
+                Market = market,
+                Tipo = $"Grupo ({result.ContractIds.Count} contratos)",
+                ReferenceNumber = result.GroupId.ToString("N")[..8],
+                PurchaseTime = DateTime.Now,
+                Stake = result.TotalStake,
+                SellTime = DateTime.Now,
+                ContractValue = Math.Max(0m, result.TotalStake + result.TotalProfit),
+                ProfitLoss = result.TotalProfit,
+                ContractId = 0
+            });
+        });
+    }
+
     public void UpdateVirtualTradeResult(long tradeId, bool won, decimal exitSpot, decimal winProfit)
     {
         Application.Current?.Dispatcher?.Invoke(() =>

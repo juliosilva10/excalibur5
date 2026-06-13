@@ -101,7 +101,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         History.TradeSettled += OnTradeSettledForPerformance;
 
         _diversityCoordinator = new Services.Strategy.Diversity.DiversityCoordinator(contractService);
-        Diversity = new Diversity.DiversityViewModel(_diversityCoordinator);
+        Diversity = new Diversity.DiversityViewModel(_diversityCoordinator, Virtual);
         _diversityCoordinator.GroupCompleted += OnDiversityGroupCompleted;
         _diversityCoordinator.StatusMessage += (_, msg) => AppLogger.Info("Diversity", msg);
         // Signal mode: each strategy signal may fire a Diversity group (gated by confidence).
@@ -539,6 +539,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
             Diversity.StatusText = result.Won
                 ? $"Grupo ganho: líquido +{result.TotalProfit:F2} (stake {result.TotalStake:F2})."
                 : $"Grupo perdido: líquido {result.TotalProfit:F2} (stake {result.TotalStake:F2}).";
+            // Register the group as a single line in the History table.
+            History.AddDiversityGroup(result, Markets.SelectedTab?.DisplayName ?? "");
             // Group counts as one real result for the virtual entry-mode controller.
             _virtualEntryModeController.RecordRealResult(_virtualEntryModeController.CurrentRealCycleId, result.Won);
             // Feed recover so the next signal-fired group escalates after a net loss (group = 1 contract).

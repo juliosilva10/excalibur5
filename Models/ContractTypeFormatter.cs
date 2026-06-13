@@ -10,6 +10,12 @@ public static class ContractTypeFormatter
         "VANILLALONGPUT" => "Put",
         "MULTUP" => "Multiplier Up",
         "MULTDOWN" => "Multiplier Down",
+        "DIGITOVER" => "Digit Over",
+        "DIGITUNDER" => "Digit Under",
+        "DIGITEVEN" => "Digit Even",
+        "DIGITODD" => "Digit Odd",
+        "DIGITMATCH" => "Digit Match",
+        "DIGITDIFF" => "Digit Diff",
         _ when contractType.Contains("CALL", StringComparison.OrdinalIgnoreCase) => "Call",
         _ when contractType.Contains("PUT", StringComparison.OrdinalIgnoreCase) => "Put",
         _ => contractType

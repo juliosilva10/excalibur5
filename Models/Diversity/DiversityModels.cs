@@ -33,6 +33,8 @@ public sealed record DiversityLeg
     public string? Barrier { get; init; }
     public required decimal Stake { get; init; }
     public int DurationTicks { get; init; } = 1;
+    /// <summary>Broker duration unit code: "t" ticks, "s" seconds, "m" minutes, "h" hours, "d" days.</summary>
+    public string DurationUnit { get; init; } = "t";
 
     /// <summary>Optional display label, e.g. "Over 5 @ V10".</summary>
     public string? Label { get; init; }
