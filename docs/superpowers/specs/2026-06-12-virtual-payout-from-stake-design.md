@@ -22,6 +22,12 @@ O `VirtualPositionOpened` já carrega um `WinProfit` calculado corretamente, mas
 O lucro das entradas virtuais deve refletir o payout real da API aplicado ao
 valor do campo Stake, de forma consistente em todos os pontos.
 
+A tabela de Posições Abertas deve mostrar esse retorno na coluna **Lucro/Perda**
+(e no **Valor** que a acompanha), em vez do lucro fixo de 50%. Nenhuma coluna
+nova é adicionada à interface — o campo `WinProfit` introduzido no
+`OpenPositionItem` é apenas interno, carregando o valor do payout (já presente no
+evento `VirtualPositionOpened`) até a coluna Lucro/Perda existente.
+
 ## Fórmula única
 
 ```
@@ -40,8 +46,9 @@ em ambos os pontos de cálculo (`StrategyExecutor` e `ContractPanelViewModel`).
 
 ## Mudanças
 
-1. **`OpenPositionItem`** — adicionar propriedade `WinProfit` (lucro alvo definido
-   na abertura). A lista usa esse valor em vez do 50% fixo.
+1. **`OpenPositionItem`** — adicionar propriedade interna `WinProfit` (lucro alvo
+   definido na abertura). Não é uma coluna nova na UI; serve apenas para a coluna
+   Lucro/Perda existente usar esse valor em vez do 50% fixo.
 
 2. **`OpenPositionsViewModel.AddVirtualPositionAsync`** — receber `winProfit` como
    parâmetro e armazená-lo no item.
