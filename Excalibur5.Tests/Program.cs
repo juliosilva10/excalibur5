@@ -50,7 +50,15 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Group: cleans up after finalize", GroupAggregatorTests.CleansUpAfterFinalize),
     ("Coordinator: buys all legs and consolidates", DiversityCoordinatorTests.BuysAllLegsAndConsolidates),
     ("Coordinator: partial failure unwinds", DiversityCoordinatorTests.PartialFailureUnwindsBoughtLegs),
-    ("Coordinator: first leg failure buys nothing", DiversityCoordinatorTests.FirstLegFailureBuysNothing)
+    ("Coordinator: first leg failure buys nothing", DiversityCoordinatorTests.FirstLegFailureBuysNothing),
+    ("DivRecover: stake distributed proportionally", DiversityRecoveryTests.StakeDistributedProportionally),
+    ("DivRecover: stake respects minimum", DiversityRecoveryTests.StakeRespectsMinimum),
+    ("DivRecover: stake sum matches target", DiversityRecoveryTests.StakeSumMatchesTargetAfterRounding),
+    ("DivRecover: escalates after group loss", DiversityRecoveryTests.RecoverEscalatesAfterGroupLoss),
+    ("DivRecover: resets after group win", DiversityRecoveryTests.RecoverResetsAfterGroupWin),
+    ("DivRecover: builds next group redistributed", DiversityRecoveryTests.BuildNextGroupRedistributesEscalatedStake),
+    ("DivRecover: virtual group nets to one W/L", DiversityRecoveryTests.VirtualGroupNetsToSingleOutcome),
+    ("DivRecover: no recover uses base total", DiversityRecoveryTests.NoRecoverUsesBaseTotal)
 };
 
 var failures = 0;
