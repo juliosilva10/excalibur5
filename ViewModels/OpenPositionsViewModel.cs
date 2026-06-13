@@ -156,7 +156,7 @@ public partial class OpenPositionsViewModel : ObservableObject, IDisposable
         var won = item.IsCallDirection
             ? currentSpot > item.EntrySpot
             : currentSpot < item.EntrySpot;
-        item.Profit = won ? item.BuyPrice * 0.5m : -item.BuyPrice;
+        item.Profit = won ? item.WinProfit : -item.BuyPrice;
         item.CurrentValue = Math.Max(0m, item.BuyPrice + item.Profit);
     }
 
