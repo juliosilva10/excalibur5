@@ -864,58 +864,27 @@ public sealed class StrategyExecutor : IDisposable
         if (tracked.IsResolvedLocally) return;
         if (IsExpiryBoundContract()) return;
 
-        // Trailing stop logic
-        if (_config.EnableTrailingStop && update.Profit > 0)
-        {
-            decimal tp = GetEffectiveTakeProfit();
+        var decision = PositionRiskEvaluator.Evaluate(
+            profit: update.Profit,
+            currentDynamicStopLoss: tracked.DynamicStopLoss,
+            effectiveTakeProfit: GetEffectiveTakeProfit(),
+            effectiveStopLoss: GetEffectiveStopLoss(),
+            enableTrailingStop: _config.EnableTrailingStop,
+            entryEpoch: tracked.EntryEpoch,
+            expiryEpoch: tracked.ExpiryEpoch,
+            nowEpoch: DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+            isValidToSell: update.IsValidToSell);
 
-            if (update.Profit >= tp * 0.9m)
-            {
-                decimal newSl = tp * 0.5m;
-                if (newSl > tracked.DynamicStopLoss)
-                {
-                    tracked.DynamicStopLoss = newSl;
-                    AppLogger.Info(Src, $"Trailing SL → +{newSl:F2} for {update.ContractId}");
-                }
-            }
-            else if (update.Profit >= tp * 0.7m)
-            {
-                if (tracked.DynamicStopLoss < 0)
-                {
-                    tracked.DynamicStopLoss = 0;
-                    AppLogger.Info(Src, $"Trailing SL → breakeven for {update.ContractId}");
-                }
-            }
+        if (decision.NewStopLoss is { } newSl)
+        {
+            tracked.DynamicStopLoss = newSl;
+            AppLogger.Info(Src, $"Trailing SL → {newSl:F2} for {update.ContractId}");
         }
 
-        // Check Take Profit
-        var effectiveTp = GetEffectiveTakeProfit();
-        if (update.Profit >= effectiveTp)
+        if (decision.ShouldSell)
         {
-            if (!update.IsValidToSell) return;
             tracked.IsSelling = true;
-            AppLogger.Info(Src, $"TP hit for {update.ContractId}: profit={update.Profit:F2} >= {effectiveTp:F2}");
-            await SellPositionAsync(update.ContractId, tracked, update.Profit);
-            return;
-        }
-
-        // Time-based dynamic stop loss
-        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        var totalDuration = tracked.ExpiryEpoch - tracked.EntryEpoch;
-        var timeRemaining = Math.Max(tracked.ExpiryEpoch - now, 1);
-        var timeRatio = totalDuration > 0 ? (decimal)timeRemaining / totalDuration : 0m;
-        var timeSl = -(GetEffectiveStopLoss() * timeRatio);
-
-        // Use the tighter of trailing SL and time-based SL
-        decimal effectiveSl = _config.EnableTrailingStop
-            ? Math.Max(tracked.DynamicStopLoss, timeSl)
-            : timeSl;
-
-        if (update.Profit <= effectiveSl)
-        {
-            if (!update.IsValidToSell) return;
-            tracked.IsSelling = true;
-            AppLogger.Info(Src, $"SL hit for {update.ContractId}: profit={update.Profit:F2} <= {effectiveSl:F2} (time ratio={timeRatio:F2})");
+            AppLogger.Info(Src, $"{decision.Reason} for {update.ContractId}");
             await SellPositionAsync(update.ContractId, tracked, update.Profit);
         }
     }

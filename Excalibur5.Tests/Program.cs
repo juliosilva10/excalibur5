@@ -14,7 +14,13 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Equal final price is a loss", SimulatorTests.EqualFinalPriceIsLoss),
     ("Timed trade remains paused", SimulatorTests.TimedTradeRemainsPaused),
     ("Completed trade carries win profit", SimulatorTests.CompletedTradeCarriesWinProfit),
-    ("Market prices use selected pip size", PriceFormattingTests.UsesSelectedPipSize)
+    ("Market prices use selected pip size", PriceFormattingTests.UsesSelectedPipSize),
+    ("Risk: take profit triggers sell", PositionRiskTests.TakeProfitTriggersSell),
+    ("Risk: TP waits when not valid to sell", PositionRiskTests.TakeProfitWaitsWhenNotValidToSell),
+    ("Risk: trailing stop ratchets at 90%", PositionRiskTests.TrailingStopRatchetsAt90Percent),
+    ("Risk: trailing stop breakeven at 70%", PositionRiskTests.TrailingStopMovesToBreakevenAt70Percent),
+    ("Risk: stop loss triggers sell", PositionRiskTests.StopLossTriggersSell),
+    ("Risk: holds between thresholds", PositionRiskTests.HoldsBetweenThresholds)
 };
 
 var failures = 0;
