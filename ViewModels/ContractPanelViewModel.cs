@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.Input;
 using Excalibur5.Models;
 using Excalibur5.Models.Strategy;
 using Excalibur5.Services;
+using Excalibur5.Services.Strategy;
 using Excalibur5.Services.Strategy.Virtual;
 
 namespace Excalibur5.ViewModels;
@@ -1000,53 +1001,16 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
 
         if (_spotForBarriers <= 0) return;
 
-        if (UseDuration)
-        {
-            // Duration mode: barriers scale with dur^0.513 — matches Deriv website behavior.
-            // Formula: inner = round(inner_base × dur^0.513, step)
-            //          outer = round(outer_base × dur^0.513, step)
-            // step = 10^(1 - pipSize)  (rounds to 10-pip granularity)
-            // Barriers: [-outer, -inner, 0, +inner, +outer]
+        var offsets = BarrierCalculator.GenerateFallbackOffsets(
+            spot: _spotForBarriers,
+            pipSize: _pipSize,
+            useDuration: UseDuration,
+            durationMinutes: GetDurationInMinutes(),
+            innerBase: _barrierInnerBase,
+            outerBase: _barrierOuterBase);
 
-            var durationMinutes = GetDurationInMinutes();
-            if (durationMinutes <= 0) durationMinutes = 1;
-
-            decimal scaleFactor = (decimal)Math.Pow(durationMinutes, 0.513);
-            decimal step = (decimal)Math.Pow(10, 1 - _pipSize);
-
-            decimal innerStep = Math.Round(_barrierInnerBase * scaleFactor / step, MidpointRounding.AwayFromZero) * step;
-            decimal outerStep = Math.Round(_barrierOuterBase * scaleFactor / step, MidpointRounding.AwayFromZero) * step;
-
-            // Ensure minimum of 1 step
-            if (innerStep < step) innerStep = step;
-            if (outerStep <= innerStep) outerStep = innerStep + step;
-
-            _apiBarriers.Add(-outerStep);
-            _apiBarriers.Add(-innerStep);
-            _apiBarriers.Add(0m);
-            _apiBarriers.Add(innerStep);
-            _apiBarriers.Add(outerStep);
-
-            _apiBarriers.Sort();
-            _barriersAreRelative = true;
-        }
-        else
-        {
-            // End Time mode: generate barriers as absolute round numbers
-            decimal step = 10m;
-            var baseBarrier = Math.Floor(_spotForBarriers / step) * step;
-
-            // Generate 10 barriers around spot (matches Deriv site pattern)
-            for (int i = -3; i <= 6; i++)
-            {
-                var absBarrier = baseBarrier + (i * step);
-                if (absBarrier > 0)
-                    _apiBarriers.Add(absBarrier - _spotForBarriers);
-            }
-
-            _apiBarriers.Sort();
-            _barriersAreRelative = true;
-        }
+        _apiBarriers.AddRange(offsets);
+        _barriersAreRelative = true;
 
         UpdateBarrierDisplays();
     }
@@ -1266,7 +1230,7 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
         catch (OperationCanceledException) { }
         catch (InvalidOperationException ex) when (ex.Message.StartsWith("Barriers available are"))
         {
-            var barriers = ParseBarriersFromError(ex.Message);
+            var barriers = BarrierCalculator.ParseBarriersFromError(ex.Message);
             if (barriers.Count > 0)
             {
                 await (Application.Current?.Dispatcher?.InvokeAsync(() =>
@@ -1349,23 +1313,6 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
 
             AppLogger.Info(Src, $"Proposals ready: CALL id={_callProposalId} ask={CallAskPrice} payout={CallPayout} ppp={CallPayoutPerPoint}, PUT id={_putProposalId} ask={PutAskPrice} payout={PutPayout} ppp={PutPayoutPerPoint}");
         })?.Task ?? Task.CompletedTask);
-    }
-
-    private static List<string> ParseBarriersFromError(string message)
-    {
-        // Format: "Barriers available are +29.320, +15.430, +0.050, -15.280, -29.040"
-        var result = new List<string>();
-        var prefix = "Barriers available are ";
-        if (!message.StartsWith(prefix)) return result;
-
-        var csv = message.Substring(prefix.Length);
-        foreach (var part in csv.Split(','))
-        {
-            var trimmed = part.Trim();
-            if (!string.IsNullOrEmpty(trimmed))
-                result.Add(trimmed);
-        }
-        return result;
     }
 
     private long? GetDateExpiryUnix()

@@ -20,7 +20,13 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Risk: trailing stop ratchets at 90%", PositionRiskTests.TrailingStopRatchetsAt90Percent),
     ("Risk: trailing stop breakeven at 70%", PositionRiskTests.TrailingStopMovesToBreakevenAt70Percent),
     ("Risk: stop loss triggers sell", PositionRiskTests.StopLossTriggersSell),
-    ("Risk: holds between thresholds", PositionRiskTests.HoldsBetweenThresholds)
+    ("Risk: holds between thresholds", PositionRiskTests.HoldsBetweenThresholds),
+    ("Barriers: parse from error message", BarrierTests.ParsesBarriersFromErrorMessage),
+    ("Barriers: empty for unrelated message", BarrierTests.ReturnsEmptyForUnrelatedMessage),
+    ("Barriers: empty for null/empty", BarrierTests.ReturnsEmptyForNullOrEmpty),
+    ("Barriers: fallback empty when no spot", BarrierTests.FallbackOffsetsEmptyWhenNoSpot),
+    ("Barriers: duration mode sorted/symmetric", BarrierTests.FallbackOffsetsDurationModeAreSortedAndSymmetric),
+    ("Barriers: end-time mode sorted", BarrierTests.FallbackOffsetsEndTimeModeSortedRelativeToSpot)
 };
 
 var failures = 0;
