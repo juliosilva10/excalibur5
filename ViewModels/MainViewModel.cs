@@ -25,6 +25,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     // Accessed from background WebSocket/trade callbacks and the UI thread, so it must be thread-safe.
     private readonly ConcurrentDictionary<long, byte> _currentSessionContracts = new();
     private readonly IVirtualEntryModeController _virtualEntryModeController;
+    private readonly Services.Strategy.Diversity.DiversityCoordinator _diversityCoordinator;
     private volatile string _token = string.Empty;
     private int _timerBusy; // 0 = idle, 1 = busy — use Interlocked for atomic check-and-set
     private TimeSpan _serverOffset; // difference between server UTC and local UTC
@@ -59,6 +60,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     public RecoverViewModel Recover { get; } = new();
     public HistoryViewModel History { get; }
     public PerformanceViewModel Performance { get; } = new();
+    public Diversity.DiversityViewModel Diversity { get; }
 
     partial void OnAccountTypeChanged(string value)
     {
@@ -97,6 +99,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
         History = new HistoryViewModel(contractService);
         History.TradeSettled += OnTradeSettledForPerformance;
 
+        _diversityCoordinator = new Services.Strategy.Diversity.DiversityCoordinator(contractService);
+        Diversity = new Diversity.DiversityViewModel(_diversityCoordinator);
+        _diversityCoordinator.GroupCompleted += OnDiversityGroupCompleted;
+        _diversityCoordinator.StatusMessage += (_, msg) => AppLogger.Info("Diversity", msg);
+
         Markets.MarketsRequested += () =>
         {
             Log.IsLogVisible = false;
@@ -105,6 +112,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             History.IsHistoryVisible = false;
             Performance.IsPerformanceVisible = false;
             Virtual.IsVirtualVisible = false;
+            Diversity.IsDiversityVisible = false;
         };
         Markets.PropertyChanged += (_, e) =>
         {
@@ -114,6 +122,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 Strategy.IsBotVisible = false;
                 Recover.IsRecoverVisible = false;
                 Virtual.IsVirtualVisible = false;
+                Diversity.IsDiversityVisible = false;
             }
             if (e.PropertyName == nameof(Markets.IsMarketsVisible) || e.PropertyName == nameof(Markets.SelectedTab))
             {
@@ -133,6 +142,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 History.IsHistoryVisible = false;
                 Performance.IsPerformanceVisible = false;
                 Virtual.IsVirtualVisible = false;
+                Diversity.IsDiversityVisible = false;
             }
             if (e.PropertyName == nameof(Log.IsLogVisible))
             {
@@ -158,6 +168,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 History.IsHistoryVisible = false;
                 Performance.IsPerformanceVisible = false;
                 Virtual.IsVirtualVisible = false;
+                Diversity.IsDiversityVisible = false;
             }
         };
         Recover.PropertyChanged += (_, e) =>
@@ -170,6 +181,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 History.IsHistoryVisible = false;
                 Performance.IsPerformanceVisible = false;
                 Virtual.IsVirtualVisible = false;
+                Diversity.IsDiversityVisible = false;
             }
         };
         History.PropertyChanged += (_, e) =>
@@ -182,6 +194,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 Recover.IsRecoverVisible = false;
                 Performance.IsPerformanceVisible = false;
                 Virtual.IsVirtualVisible = false;
+                Diversity.IsDiversityVisible = false;
             }
         };
         Performance.PropertyChanged += (_, e) =>
@@ -194,6 +207,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 Recover.IsRecoverVisible = false;
                 History.IsHistoryVisible = false;
                 Virtual.IsVirtualVisible = false;
+                Diversity.IsDiversityVisible = false;
             }
         };
         Virtual.PropertyChanged += (_, e) =>
@@ -206,6 +220,20 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 Recover.IsRecoverVisible = false;
                 History.IsHistoryVisible = false;
                 Performance.IsPerformanceVisible = false;
+                Diversity.IsDiversityVisible = false;
+            }
+        };
+        Diversity.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(Diversity.IsDiversityVisible) && Diversity.IsDiversityVisible)
+            {
+                Markets.IsMarketsVisible = false;
+                Log.IsLogVisible = false;
+                Strategy.IsBotVisible = false;
+                Recover.IsRecoverVisible = false;
+                History.IsHistoryVisible = false;
+                Performance.IsPerformanceVisible = false;
+                Virtual.IsVirtualVisible = false;
             }
         };
 
@@ -450,6 +478,28 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private void ToggleVirtualPanel()
     {
         Virtual.ToggleVirtualCommand.Execute(null);
+    }
+
+    [RelayCommand]
+    private void ToggleDiversityPanel()
+    {
+        Diversity.ToggleDiversityCommand.Execute(null);
+    }
+
+    // A Diversity group settled: treat the whole group as one contract for the virtual sequence
+    // (net > 0 → a single win) and surface the net result on the panel/log.
+    private void OnDiversityGroupCompleted(object? sender, Services.Strategy.Diversity.DiversityGroupCompleted e)
+    {
+        var result = e.Result;
+        Application.Current?.Dispatcher.Invoke(() =>
+        {
+            Diversity.StatusText = result.Won
+                ? $"Grupo ganho: líquido +{result.TotalProfit:F2} (stake {result.TotalStake:F2})."
+                : $"Grupo perdido: líquido {result.TotalProfit:F2} (stake {result.TotalStake:F2}).";
+        });
+        // Group counts as one real result for the virtual entry-mode controller.
+        _virtualEntryModeController.RecordRealResult(_virtualEntryModeController.CurrentRealCycleId, result.Won);
+        AppLogger.Info("Diversity", $"Group {result.GroupId} net={result.TotalProfit:F2} won={result.Won}");
     }
 
     private void OnConnected(object? sender, EventArgs e)
@@ -709,6 +759,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         Recover.Dispose();
         History.Dispose();
         Log.Dispose();
+        _diversityCoordinator.Dispose();
         (_tickStream as IDisposable)?.Dispose();
         (_contractService as IDisposable)?.Dispose();
         (_api as IDisposable)?.Dispose();

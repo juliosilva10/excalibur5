@@ -1,0 +1,139 @@
+<UserControl x:Class="Excalibur5.Views.Controls.DiversityPanelView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:sys="clr-namespace:System;assembly=System.Runtime"
+             mc:Ignorable="d"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008">
+    <UserControl.Resources>
+        <x:Array x:Key="ContractTypes" Type="sys:String">
+            <sys:String>DIGITOVER</sys:String>
+            <sys:String>DIGITUNDER</sys:String>
+            <sys:String>DIGITEVEN</sys:String>
+            <sys:String>DIGITODD</sys:String>
+            <sys:String>DIGITMATCH</sys:String>
+            <sys:String>DIGITDIFF</sys:String>
+            <sys:String>CALL</sys:String>
+            <sys:String>PUT</sys:String>
+        </x:Array>
+    </UserControl.Resources>
+
+    <Border CornerRadius="6" BorderBrush="#1d4957" BorderThickness="1" Margin="0,4,0,0">
+        <Border.Background>
+            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                <GradientStop Color="#0a1821" Offset="0"/>
+                <GradientStop Color="#07121a" Offset="1"/>
+            </LinearGradientBrush>
+        </Border.Background>
+
+        <Grid Margin="14,10,14,10">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header -->
+            <TextBlock Grid.Row="0" Text="Diversity — grupo de contratos"
+                       Foreground="#e0eef8" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,2"/>
+            <TextBlock Grid.Row="1" TextWrapping="Wrap" Foreground="#7da0b8" FontSize="10" Margin="0,0,0,8"
+                       Text="Várias pernas compradas juntas e tratadas como UM contrato: recover e virtual atuam sobre o líquido do grupo."/>
+
+            <!-- Legs list -->
+            <ItemsControl Grid.Row="2" ItemsSource="{Binding Legs}" MaxHeight="260"
+                          ScrollViewer.VerticalScrollBarVisibility="Auto">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border CornerRadius="4" Background="#0e2230" BorderBrush="#1d4957"
+                                BorderThickness="1" Margin="0,0,0,6" Padding="8,6">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <WrapPanel Grid.Column="0" Orientation="Horizontal">
+                                    <StackPanel Margin="0,0,10,0">
+                                        <TextBlock Text="Mercado" Foreground="#6a8aa0" FontSize="9"/>
+                                        <TextBox Text="{Binding Symbol, UpdateSourceTrigger=PropertyChanged}"
+                                                 Width="64" Background="#07121a" Foreground="#e0eef8"
+                                                 BorderBrush="#2a5568" BorderThickness="1" Padding="3,2"/>
+                                    </StackPanel>
+                                    <StackPanel Margin="0,0,10,0">
+                                        <TextBlock Text="Tipo" Foreground="#6a8aa0" FontSize="9"/>
+                                        <ComboBox ItemsSource="{StaticResource ContractTypes}"
+                                                  SelectedItem="{Binding ContractType, UpdateSourceTrigger=PropertyChanged}"
+                                                  Width="104"/>
+                                    </StackPanel>
+                                    <StackPanel Margin="0,0,10,0">
+                                        <TextBlock Text="Barreira/Dígito" Foreground="#6a8aa0" FontSize="9"/>
+                                        <TextBox Text="{Binding Barrier, UpdateSourceTrigger=PropertyChanged}"
+                                                 Width="56" Background="#07121a" Foreground="#e0eef8"
+                                                 BorderBrush="#2a5568" BorderThickness="1" Padding="3,2"/>
+                                    </StackPanel>
+                                    <StackPanel Margin="0,0,10,0">
+                                        <TextBlock Text="Ticks" Foreground="#6a8aa0" FontSize="9"/>
+                                        <TextBox Text="{Binding DurationTicks, UpdateSourceTrigger=PropertyChanged}"
+                                                 Width="40" Background="#07121a" Foreground="#e0eef8"
+                                                 BorderBrush="#2a5568" BorderThickness="1" Padding="3,2"/>
+                                    </StackPanel>
+                                    <StackPanel>
+                                        <TextBlock Text="Stake" Foreground="#6a8aa0" FontSize="9"/>
+                                        <TextBox Text="{Binding StakeText, UpdateSourceTrigger=PropertyChanged}"
+                                                 Width="56" Background="#07121a" Foreground="#e0eef8"
+                                                 BorderBrush="#2a5568" BorderThickness="1" Padding="3,2"/>
+                                    </StackPanel>
+                                </WrapPanel>
+                                <Button Grid.Column="1" Content="✕" Width="24" Height="24"
+                                        VerticalAlignment="Center" Margin="8,10,0,0"
+                                        Foreground="#ff6b6b" Background="Transparent" BorderThickness="0"
+                                        Cursor="Hand" ToolTip="Remover perna"
+                                        Command="{Binding DataContext.RemoveLegCommand,
+                                                  RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                        CommandParameter="{Binding}"/>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- Add leg -->
+            <Button Grid.Row="3" Content="+ Adicionar perna" HorizontalAlignment="Left" Margin="0,2,0,8"
+                    Padding="10,4" Foreground="#00f0ff" Background="#0e2230" BorderBrush="#2a5568"
+                    BorderThickness="1" Cursor="Hand" Command="{Binding AddLegCommand}"/>
+
+            <!-- Coverage / guidance -->
+            <Border Grid.Row="4" CornerRadius="4" Background="#0e2230" Padding="8,5" Margin="0,0,0,8">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="Visibility" Value="Visible"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding CoverageText}" Value="">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+                <TextBlock Text="{Binding CoverageText}" TextWrapping="Wrap" Foreground="#c0d8e8" FontSize="10"/>
+            </Border>
+
+            <!-- Actions + status -->
+            <Grid Grid.Row="5">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Button Grid.Column="0" Content="Comprar grupo" Padding="14,6"
+                        Foreground="#0a1821" FontWeight="SemiBold" Cursor="Hand"
+                        Background="#00f0ff" BorderThickness="0"
+                        IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBool}}"
+                        Command="{Binding ExecuteGroupCommand}"/>
+                <TextBlock Grid.Column="1" Text="{Binding StatusText}" TextWrapping="Wrap"
+                           VerticalAlignment="Center" Margin="12,0,0,0"
+                           Foreground="#a3b8cc" FontSize="10"/>
+            </Grid>
+        </Grid>
+    </Border>
+</UserControl>

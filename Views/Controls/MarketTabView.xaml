@@ -247,6 +247,9 @@
                         <DataTrigger Binding="{Binding DataContext.Performance.IsPerformanceVisible, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
                             <Setter Property="Visibility" Value="Collapsed"/>
                         </DataTrigger>
+                        <DataTrigger Binding="{Binding DataContext.Diversity.IsDiversityVisible, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                        </DataTrigger>
                     </Style.Triggers>
                 </Style>
             </controls:ContractPanelView.Style>
@@ -281,5 +284,20 @@
                 </Style>
             </controls:PerformancePanelView.Style>
         </controls:PerformancePanelView>
+
+        <!-- Diversity panel -->
+        <controls:DiversityPanelView Grid.Row="2"
+                                     DataContext="{Binding DataContext.Diversity, RelativeSource={RelativeSource AncestorType=Window}}">
+            <controls:DiversityPanelView.Style>
+                <Style TargetType="controls:DiversityPanelView">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding DataContext.Diversity.IsDiversityVisible, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                            <Setter Property="Visibility" Value="Visible"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </controls:DiversityPanelView.Style>
+        </controls:DiversityPanelView>
     </Grid>
 </UserControl>
