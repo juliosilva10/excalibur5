@@ -18,7 +18,7 @@ public sealed class StrategyExecutor : IDisposable
     private readonly IStrategyEngine _engine;
     private readonly IVirtualEntryModeController _entryModeController;
     private readonly IVirtualTradeSimulator _virtualTradeSimulator;
-    private readonly Dictionary<long, TrackedPosition> _positions = new();
+    private readonly PositionTracker _positions = new();
     private readonly HashSet<long> _recoveredUnconfirmedContracts = new();
     private readonly SemaphoreSlim _proposalLock = new(1, 1);
     private readonly SemaphoreSlim _signalLock = new(1, 1);
@@ -138,22 +138,12 @@ public sealed class StrategyExecutor : IDisposable
 
     public void ResolveExpiredPositionsLocally(decimal lastCandleClose)
     {
-        List<TrackedPosition>? expired = null;
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
-        lock (_positions)
-        {
-            foreach (var kvp in _positions)
-            {
-                if (kvp.Value.ExpiryEpoch <= now && !kvp.Value.IsSelling && !kvp.Value.IsResolvedLocally)
-                {
-                    expired ??= new List<TrackedPosition>();
-                    expired.Add(kvp.Value);
-                }
-            }
-        }
+        var expired = _positions.Where(
+            p => p.ExpiryEpoch <= now && !p.IsSelling && !p.IsResolvedLocally);
 
-        if (expired == null) return;
+        if (expired.Count == 0) return;
 
         AppLogger.Info(Src, $"Resolving {expired.Count} position(s) locally via candle close={lastCandleClose}");
 
@@ -480,8 +470,7 @@ public sealed class StrategyExecutor : IDisposable
                     EntryCandleType = _executingEntryCandleType,
                     RealCycleId = realCycleId
                 };
-                lock (_positions)
-                    _positions[result.ContractId] = tracked;
+                _positions.AddOrUpdate(result.ContractId, tracked);
 
                 await _contractService.SubscribeOpenContractAsync(result.ContractId);
 
@@ -672,11 +661,10 @@ public sealed class StrategyExecutor : IDisposable
 
     private bool MarkRecoveredUnconfirmedContract(long contractId)
     {
-        lock (_positions)
-        {
-            if (_positions.ContainsKey(contractId)) return false;
-            return _recoveredUnconfirmedContracts.Add(contractId);
-        }
+        // Reserve under the tracker's lock so the "no open position + add to set" check
+        // stays atomic against concurrent buys.
+        return _positions.TryReserveIfAbsent(
+            contractId, () => _recoveredUnconfirmedContracts.Add(contractId));
     }
 
     private void RecoverSettledBuy(
@@ -834,13 +822,10 @@ public sealed class StrategyExecutor : IDisposable
     private async Task HandleOpenContractUpdatedAsync(OpenContractUpdate update)
     {
         TrackedPosition? tracked;
-        lock (_positions)
-        {
-            if (!_positions.TryGetValue(update.ContractId, out tracked))
-                return;
-            if (tracked.IsSelling)
-                return;
-        }
+        if (!_positions.TryGet(update.ContractId, out tracked))
+            return;
+        if (tracked.IsSelling)
+            return;
 
         if (!_active) return;
 
@@ -981,32 +966,15 @@ public sealed class StrategyExecutor : IDisposable
 
     private void RemovePosition(long contractId)
     {
-        lock (_positions)
-            _positions.Remove(contractId);
+        _positions.Remove(contractId);
     }
 
     private async Task ResolveExpiredPositionsBeforeBuyAsync()
     {
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        List<TrackedPosition>? expired = null;
-        lock (_positions)
-        {
-            foreach (var kvp in _positions)
-            {
-                if (kvp.Value.ExpiryEpoch <= now && !kvp.Value.IsSelling)
-                {
-                    expired ??= new List<TrackedPosition>();
-                    expired.Add(kvp.Value);
-                }
-            }
-            if (expired != null)
-            {
-                foreach (var pos in expired)
-                    _positions.Remove(pos.ContractId);
-            }
-        }
+        var expired = _positions.ExtractWhere(p => p.ExpiryEpoch <= now && !p.IsSelling);
 
-        if (expired == null) return;
+        if (expired.Count == 0) return;
 
         AppLogger.Info(Src, $"Resolving {expired.Count} expired position(s) before new buy");
         foreach (var pos in expired)
@@ -1036,8 +1004,7 @@ public sealed class StrategyExecutor : IDisposable
 
         if (!resolved)
         {
-            lock (_positions)
-                _positions[pos.ContractId] = pos;
+            _positions.AddOrUpdate(pos.ContractId, pos);
             AppLogger.Info(Src, $"Position {pos.ContractId} not yet settled by API — re-queued");
             return false;
         }
@@ -1052,16 +1019,7 @@ public sealed class StrategyExecutor : IDisposable
     {
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var grace = _config.StrategyMode == StrategyModeKeys.Trend ? 5 : 0;
-        lock (_positions)
-        {
-            int count = 0;
-            foreach (var kvp in _positions)
-            {
-                if (kvp.Value.ExpiryEpoch > now + grace)
-                    count++;
-            }
-            return count;
-        }
+        return _positions.CountWhere(p => p.ExpiryEpoch > now + grace);
     }
 
     public void Dispose()
@@ -1115,6 +1073,97 @@ public sealed class StrategyExecutor : IDisposable
         public ChartSnapshotType? EntryCandleType { get; set; }
         public bool IsResolvedLocally { get; set; }
         public int RealCycleId { get; init; }
+    }
+
+    // Thread-safe store for open tracked positions. Encapsulates the dictionary and its
+    // lock so callers can't forget to synchronize. Snapshot/predicate helpers run under
+    // the lock and return copies, so iteration never races with mutation.
+    private sealed class PositionTracker
+    {
+        private readonly Dictionary<long, TrackedPosition> _positions = new();
+        private readonly object _gate = new();
+
+        public int Count
+        {
+            get { lock (_gate) return _positions.Count; }
+        }
+
+        public void AddOrUpdate(long contractId, TrackedPosition position)
+        {
+            lock (_gate) _positions[contractId] = position;
+        }
+
+        public bool TryGet(long contractId, out TrackedPosition position)
+        {
+            lock (_gate) return _positions.TryGetValue(contractId, out position!);
+        }
+
+        public bool Contains(long contractId)
+        {
+            lock (_gate) return _positions.ContainsKey(contractId);
+        }
+
+        public void Remove(long contractId)
+        {
+            lock (_gate) _positions.Remove(contractId);
+        }
+
+        /// <summary>Runs <paramref name="reserve"/> under the same lock, but only if no
+        /// position with <paramref name="contractId"/> exists. Preserves the original
+        /// atomic coupling between the positions map and an external reservation set.</summary>
+        public bool TryReserveIfAbsent(long contractId, Func<bool> reserve)
+        {
+            lock (_gate)
+            {
+                if (_positions.ContainsKey(contractId)) return false;
+                return reserve();
+            }
+        }
+
+        /// <summary>Returns a snapshot list of positions matching <paramref name="predicate"/>.</summary>
+        public List<TrackedPosition> Where(Func<TrackedPosition, bool> predicate)
+        {
+            lock (_gate)
+            {
+                List<TrackedPosition>? matches = null;
+                foreach (var kvp in _positions)
+                {
+                    if (predicate(kvp.Value))
+                        (matches ??= new List<TrackedPosition>()).Add(kvp.Value);
+                }
+                return matches ?? new List<TrackedPosition>();
+            }
+        }
+
+        /// <summary>Atomically removes and returns positions matching <paramref name="predicate"/>.</summary>
+        public List<TrackedPosition> ExtractWhere(Func<TrackedPosition, bool> predicate)
+        {
+            lock (_gate)
+            {
+                List<TrackedPosition>? matches = null;
+                foreach (var kvp in _positions)
+                {
+                    if (predicate(kvp.Value))
+                        (matches ??= new List<TrackedPosition>()).Add(kvp.Value);
+                }
+                if (matches != null)
+                    foreach (var pos in matches)
+                        _positions.Remove(pos.ContractId);
+                return matches ?? new List<TrackedPosition>();
+            }
+        }
+
+        /// <summary>Counts positions matching <paramref name="predicate"/> under the lock.</summary>
+        public int CountWhere(Func<TrackedPosition, bool> predicate)
+        {
+            lock (_gate)
+            {
+                int count = 0;
+                foreach (var kvp in _positions)
+                    if (predicate(kvp.Value)) count++;
+                return count;
+            }
+        }
     }
 }
 
