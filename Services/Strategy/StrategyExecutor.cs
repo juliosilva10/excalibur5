@@ -9,8 +9,6 @@ namespace Excalibur5.Services.Strategy;
 public sealed class StrategyExecutor : IDisposable
 {
     private const string Src = "StrategyExecutor";
-    private const string BotCallKey = "BOT_CALL";
-    private const string BotPutKey = "BOT_PUT";
     private const int UnconfirmedBuyLookbackSeconds = 30;
     private static readonly int[] UnconfirmedBuyRecoveryDelays = [1000, 3000, 7000, 15000, 30000];
 
@@ -20,24 +18,14 @@ public sealed class StrategyExecutor : IDisposable
     private readonly IVirtualTradeSimulator _virtualTradeSimulator;
     private readonly PositionTracker _positions = new();
     private readonly HashSet<long> _recoveredUnconfirmedContracts = new();
-    private readonly SemaphoreSlim _proposalLock = new(1, 1);
     private readonly SemaphoreSlim _signalLock = new(1, 1);
-    // Guards the _proposalCts swap and the _proposals snapshot publication so that
-    // cross-thread readers never see a disposed CTS or a torn/partial snapshot.
-    private readonly object _proposalGate = new();
-    private CancellationTokenSource _proposalCts = new();
+    private readonly ProposalSubscriptionManager _proposalManager;
     private StrategyConfig _config = new();
     private string _symbol = string.Empty;
     private volatile bool _active;
     private IRecoverStrategy? _recoverStrategy;
     private decimal _currentSpot;
     private bool _ownsVirtualReservation;
-
-    // Pre-subscribed proposal state — published as one immutable snapshot via a single
-    // volatile reference. Reference assignment is atomic, so readers on the WS/signal
-    // threads always observe a consistent (id+ask+payout) view with no torn decimals.
-    private volatile BotProposalState _proposals = BotProposalState.Empty;
-    private decimal _proposalStake;
 
     // Candle-aligned entry state
     private TradeSignal? _pendingSignal;
@@ -67,6 +55,7 @@ public sealed class StrategyExecutor : IDisposable
         _engine = engine;
         _entryModeController = entryModeController;
         _virtualTradeSimulator = virtualTradeSimulator;
+        _proposalManager = new ProposalSubscriptionManager(contractService, Src);
         _engine.SignalGenerated += OnSignalGenerated;
         _contractService.OpenContractUpdated += OnOpenContractUpdated;
         _contractService.ProposalUpdated += OnBotProposalUpdated;
@@ -81,7 +70,7 @@ public sealed class StrategyExecutor : IDisposable
         _active = true;
         _virtualTradeSimulator.Cancel();
         _recoverStrategy = RecoverStrategyFactory.Create(config);
-        lock (_proposalGate) { _proposals = BotProposalState.Empty; }
+        _proposalManager.Clear();
         AppLogger.Info(Src, $"Executor started for {symbol}, TP={config.TakeProfitUsd}, SL={config.StopLossUsd}, trailing={config.EnableTrailingStop}, recover={config.RecoverMode}");
         _ = SubscribeBotProposalsAsync().ContinueWith(
             t => AppLogger.Warn(Src, $"Initial proposal subscribe error: {t.Exception?.InnerException?.Message}"),
@@ -118,7 +107,7 @@ public sealed class StrategyExecutor : IDisposable
     private void DeactivateExecution()
     {
         _active = false;
-        lock (_proposalGate) { _proposals = BotProposalState.Empty; }
+        _proposalManager.Clear();
         _pendingSignal = null;
         _executingPendingSignal = false;
         _executingEntryCandleIndex = null;
@@ -173,187 +162,42 @@ public sealed class StrategyExecutor : IDisposable
     public void RefreshProposals()
     {
         if (!_active) return;
-        lock (_proposalGate) { _proposals = BotProposalState.Empty; }
+        _proposalManager.Clear();
         AppLogger.Info(Src, "RefreshProposals — resubscribing bot proposals");
         _ = SubscribeBotProposalsAsync().ContinueWith(
             t => AppLogger.Warn(Src, $"RefreshProposals error: {t.Exception?.InnerException?.Message}"),
             TaskContinuationOptions.OnlyOnFaulted);
     }
 
-    private async Task SubscribeBotProposalsAsync()
+    // Builds the (re)subscribe parameters from the current stake and config. Evaluated by
+    // the manager INSIDE its lock so the stake/config snapshot is taken at the right moment.
+    private ProposalRequest BuildProposalRequest()
     {
-        CancellationToken ct;
-        lock (_proposalGate)
-        {
-            _proposalCts.Cancel();
-            _proposalCts.Dispose();
-            _proposalCts = new CancellationTokenSource();
-            ct = _proposalCts.Token;
-        }
-
-        await _proposalLock.WaitAsync();
-        try
-        {
-            lock (_proposalGate) { _proposals = BotProposalState.Empty; }
-            if (ct.IsCancellationRequested) return;
-
-            var stake = GetCurrentStake();
-            _proposalStake = stake;
-            var duration = _config.DurationApiValue;
-            var durationUnit = _config.DurationApiUnit;
-            var barrier = _config.Barrier;
-            var callType = _config.CallContractType;
-            var putType = _config.PutContractType;
-            var barrierParam = callType is "CALL" or "CALLE" ? null : barrier;
-
-            await UnsubscribeBotProposalsAsync();
-
-            var callTask = _contractService.SubscribeProposalAsync(
-                _symbol, callType, stake, duration, durationUnit,
-                barrier: barrierParam, subscriptionKey: BotCallKey);
-
-            var putTask = _contractService.SubscribeProposalAsync(
-                _symbol, putType, stake, duration, durationUnit,
-                barrier: barrierParam, subscriptionKey: BotPutKey);
-
-            var callResp = await callTask;
-            var putResp = await putTask;
-
-            if (ct.IsCancellationRequested) return;
-
-            lock (_proposalGate)
-            {
-                _proposals = new BotProposalState(
-                    Ready: true,
-                    CallProposalId: callResp.ProposalId,
-                    CallSubscriptionId: callResp.SubscriptionId,
-                    CallAskPrice: callResp.AskPrice,
-                    CallPayout: callResp.Payout,
-                    PutProposalId: putResp.ProposalId,
-                    PutSubscriptionId: putResp.SubscriptionId,
-                    PutAskPrice: putResp.AskPrice,
-                    PutPayout: putResp.Payout);
-            }
-
-            AppLogger.Info(Src, $"Bot proposals ready: CALL={callResp.ProposalId} ask={callResp.AskPrice}, PUT={putResp.ProposalId} ask={putResp.AskPrice}");
-        }
-        catch (Exception ex)
-        {
-            if (!ct.IsCancellationRequested)
-                AppLogger.Warn(Src, $"Bot proposal subscribe failed: {ex.Message}");
-            lock (_proposalGate) { _proposals = BotProposalState.Empty; }
-        }
-        finally
-        {
-            _proposalLock.Release();
-        }
+        var callType = _config.CallContractType;
+        var barrierParam = callType is "CALL" or "CALLE" ? null : _config.Barrier;
+        return new ProposalRequest(
+            Symbol: _symbol,
+            CallType: callType,
+            PutType: _config.PutContractType,
+            Stake: GetCurrentStake(),
+            Duration: _config.DurationApiValue,
+            DurationUnit: _config.DurationApiUnit,
+            Barrier: barrierParam);
     }
 
-    private async Task UnsubscribeBotProposalsAsync()
-    {
-        try
-        {
-            await _contractService.UnsubscribeProposalAsync(BotCallKey);
-            await _contractService.UnsubscribeProposalAsync(BotPutKey);
-        }
-        catch (Exception ex)
-        {
-            AppLogger.Warn(Src, $"Bot proposal unsubscribe error: {ex.Message}");
-        }
-    }
+    private Task SubscribeBotProposalsAsync()
+        => _proposalManager.SubscribeAsync(BuildProposalRequest);
 
-    private async Task ResubscribeAfterBuyAsync(SignalDirection usedDirection)
-    {
-        CancellationToken ct;
-        lock (_proposalGate) { ct = _proposalCts.Token; }
+    private Task UnsubscribeBotProposalsAsync()
+        => _proposalManager.UnsubscribeAsync();
 
-        await _proposalLock.WaitAsync();
-        try
-        {
-            if (ct.IsCancellationRequested) return;
-
-            var stake = GetCurrentStake();
-            var duration = _config.DurationApiValue;
-            var durationUnit = _config.DurationApiUnit;
-            var barrier = _config.Barrier;
-            var callType = _config.CallContractType;
-            var putType = _config.PutContractType;
-            var barrierParam = callType is "CALL" or "CALLE" ? null : barrier;
-
-            if (usedDirection == SignalDirection.Call)
-            {
-                var resp = await _contractService.SubscribeProposalAsync(
-                    _symbol, callType, stake, duration, durationUnit,
-                    barrier: barrierParam, subscriptionKey: BotCallKey);
-                if (ct.IsCancellationRequested) return;
-                lock (_proposalGate)
-                {
-                    _proposals = _proposals with
-                    {
-                        CallProposalId = resp.ProposalId,
-                        CallSubscriptionId = resp.SubscriptionId,
-                        CallAskPrice = resp.AskPrice,
-                        CallPayout = resp.Payout
-                    };
-                }
-            }
-            else
-            {
-                var resp = await _contractService.SubscribeProposalAsync(
-                    _symbol, putType, stake, duration, durationUnit,
-                    barrier: barrierParam, subscriptionKey: BotPutKey);
-                if (ct.IsCancellationRequested) return;
-                lock (_proposalGate)
-                {
-                    _proposals = _proposals with
-                    {
-                        PutProposalId = resp.ProposalId,
-                        PutSubscriptionId = resp.SubscriptionId,
-                        PutAskPrice = resp.AskPrice,
-                        PutPayout = resp.Payout
-                    };
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            if (!ct.IsCancellationRequested)
-                AppLogger.Warn(Src, $"Re-subscribe after buy failed: {ex.Message}");
-        }
-        finally
-        {
-            _proposalLock.Release();
-        }
-    }
+    private Task ResubscribeAfterBuyAsync(SignalDirection usedDirection)
+        => _proposalManager.ResubscribeAfterBuyAsync(usedDirection, BuildProposalRequest);
 
     private void OnBotProposalUpdated(object? sender, ProposalResponse proposal)
     {
-        if (!_active || string.IsNullOrEmpty(proposal.SubscriptionId)) return;
-
-        // Read-modify-write of the snapshot guarded by the gate so a concurrent
-        // (re)subscribe publication can't be lost.
-        lock (_proposalGate)
-        {
-            var current = _proposals;
-            if (proposal.SubscriptionId == current.CallSubscriptionId && !string.IsNullOrEmpty(proposal.ProposalId))
-            {
-                _proposals = current with
-                {
-                    CallProposalId = proposal.ProposalId,
-                    CallAskPrice = proposal.AskPrice,
-                    CallPayout = proposal.Payout
-                };
-            }
-            else if (proposal.SubscriptionId == current.PutSubscriptionId && !string.IsNullOrEmpty(proposal.ProposalId))
-            {
-                _proposals = current with
-                {
-                    PutProposalId = proposal.ProposalId,
-                    PutAskPrice = proposal.AskPrice,
-                    PutPayout = proposal.Payout
-                };
-            }
-        }
+        if (!_active) return;
+        _proposalManager.OnProposalUpdated(proposal);
     }
 
     private void OnSignalGenerated(object? sender, TradeSignal signal)
@@ -408,7 +252,7 @@ public sealed class StrategyExecutor : IDisposable
             if (CanUseSubscribedProposal(signal.Direction, stake))
             {
                 // Read the snapshot once so id and ask price come from the same atomic view.
-                var snapshot = _proposals;
+                var snapshot = _proposalManager.Snapshot;
                 var proposalId = signal.Direction == SignalDirection.Call
                     ? snapshot.CallProposalId
                     : snapshot.PutProposalId;
@@ -436,7 +280,7 @@ public sealed class StrategyExecutor : IDisposable
                 }
 
                 var barrierForBuy = _config.CallContractType is "CALL" or "CALLE" ? null : _config.Barrier;
-                AppLogger.Info(Src, $"Proposals stake mismatch or not ready (proposal={_proposalStake}, current={stake}) — using BuyDirectAsync");
+                AppLogger.Info(Src, $"Proposals stake mismatch or not ready (proposal={_proposalManager.ProposalStake}, current={stake}) — using BuyDirectAsync");
                 result = await _contractService.BuyDirectAsync(
                     _symbol,
                     contractType,
@@ -553,7 +397,7 @@ public sealed class StrategyExecutor : IDisposable
 
     private decimal GetVirtualWinProfit(SignalDirection direction, decimal stake)
     {
-        var snapshot = _proposals;
+        var snapshot = _proposalManager.Snapshot;
         var payout = direction == SignalDirection.Call ? snapshot.CallPayout : snapshot.PutPayout;
         if (snapshot.Ready && payout > 0 && stake > 0)
             return payout - stake;
@@ -726,8 +570,8 @@ public sealed class StrategyExecutor : IDisposable
 
     private bool CanUseSubscribedProposal(SignalDirection direction, decimal stake)
     {
-        var snapshot = _proposals;
-        if (!snapshot.Ready || !IsSameStake(_proposalStake, stake)) return false;
+        var snapshot = _proposalManager.Snapshot;
+        if (!snapshot.Ready || !IsSameStake(_proposalManager.ProposalStake, stake)) return false;
 
         var proposalId = direction == SignalDirection.Call ? snapshot.CallProposalId : snapshot.PutProposalId;
         var askPrice = direction == SignalDirection.Call ? snapshot.CallAskPrice : snapshot.PutAskPrice;
@@ -1031,30 +875,8 @@ public sealed class StrategyExecutor : IDisposable
         _virtualTradeSimulator.TradeCompleted -= OnVirtualTradeCompleted;
         _virtualTradeSimulator.TradeUpdated -= OnVirtualTradeUpdated;
         _virtualTradeSimulator.Dispose();
-        lock (_proposalGate)
-        {
-            _proposalCts.Cancel();
-            _proposalCts.Dispose();
-        }
-        _proposalLock.Dispose();
+        _proposalManager.Dispose();
         _signalLock.Dispose();
-    }
-
-    // Immutable snapshot of both pre-subscribed proposals. Published atomically via the
-    // volatile _proposals reference so cross-thread readers see a consistent view.
-    private sealed record BotProposalState(
-        bool Ready,
-        string CallProposalId,
-        string CallSubscriptionId,
-        decimal CallAskPrice,
-        decimal CallPayout,
-        string PutProposalId,
-        string PutSubscriptionId,
-        decimal PutAskPrice,
-        decimal PutPayout)
-    {
-        public static readonly BotProposalState Empty =
-            new(false, "", "", 0m, 0m, "", "", 0m, 0m);
     }
 
     private sealed class TrackedPosition
