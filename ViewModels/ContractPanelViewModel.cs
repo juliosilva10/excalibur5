@@ -39,13 +39,8 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
 
     // Recovery state
     private RecoverViewModel? _recoverVm;
-    private int _martingaleLevel;
-    private decimal _baseStake;
+    private readonly RecoveryController _recovery = new();
     private long _lastBoughtContractId;
-    private decimal _deficit;
-    private readonly decimal[] _payoutRatios = new decimal[5];
-    private int _payoutIndex;
-    private int _payoutCount;
 
     [ObservableProperty] private string _recoverMode = string.Empty;
     public List<string> RecoverModes { get; } = [.. RecoverModeKeys.WithNone];
@@ -182,22 +177,16 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
     {
         if (value == RecoverModeKeys.Martingale || value == RecoverModeKeys.Deficit)
         {
-            _baseStake = GetStakeValue();
-            if (_baseStake <= 0)
-                _baseStake = decimal.TryParse(StakeText, NumberStyles.Any, CultureInfo.InvariantCulture, out var v) ? v : 10m;
-            _martingaleLevel = 0;
-            _deficit = 0;
-            _payoutIndex = 0;
-            _payoutCount = 0;
+            var baseStake = GetStakeValue();
+            if (baseStake <= 0)
+                baseStake = decimal.TryParse(StakeText, NumberStyles.Any, CultureInfo.InvariantCulture, out var v) ? v : 10m;
+            _recovery.Start(baseStake);
         }
         else
         {
-            if (_martingaleLevel > 0 && _baseStake > 0)
-                StakeText = _baseStake.ToString("F2", CultureInfo.InvariantCulture);
-            if (_deficit > 0 && _baseStake > 0)
-                StakeText = _baseStake.ToString("F2", CultureInfo.InvariantCulture);
-            _martingaleLevel = 0;
-            _deficit = 0;
+            if (_recovery.HasActiveProgress && _recovery.BaseStake > 0)
+                StakeText = _recovery.BaseStake.ToString("F2", CultureInfo.InvariantCulture);
+            _recovery.ResetProgress();
         }
     }
 
@@ -215,48 +204,15 @@ public partial class ContractPanelViewModel : ObservableObject, IDisposable
 
             if (RecoverMode == RecoverModeKeys.Martingale)
             {
-                if (isLoss && _martingaleLevel < _recoverVm.MaxLevel)
-                {
-                    _martingaleLevel++;
-                    var newStake = _recoverVm.CalculateStake(_martingaleLevel);
-                    StakeText = newStake.ToString("F2", CultureInfo.InvariantCulture);
-                }
-                else
-                {
-                    _martingaleLevel = 0;
-                    StakeText = _baseStake.ToString("F2", CultureInfo.InvariantCulture);
-                }
+                var stake = _recovery.RegisterMartingaleResult(
+                    isLoss, _recoverVm.MaxLevel, _recoverVm.CalculateStake);
+                StakeText = stake.ToString("F2", CultureInfo.InvariantCulture);
             }
             else if (RecoverMode == RecoverModeKeys.Deficit)
             {
-                if (isLoss)
-                {
-                    _deficit += Math.Abs(update.Profit);
-                }
-                else
-                {
-                    _deficit = Math.Max(0, _deficit - update.Profit);
-                    if (_baseStake > 0)
-                    {
-                        var ratio = update.Profit / _baseStake;
-                        _payoutRatios[_payoutIndex] = ratio;
-                        _payoutIndex = (_payoutIndex + 1) % 5;
-                        if (_payoutCount < 5) _payoutCount++;
-                    }
-                }
-
-                if (_deficit <= 0)
-                {
-                    StakeText = _baseStake.ToString("F2", CultureInfo.InvariantCulture);
-                }
-                else
-                {
-                    var avgRatio = RecoveryStakeCalculator.AveragePayoutRatio(_payoutRatios, _payoutCount);
-                    var stake = RecoveryStakeCalculator.NextStake(
-                        _deficit, avgRatio, _recoverVm.DeficitRecoveryTrades,
-                        _baseStake, _recoverVm.DeficitMaxStake);
-                    StakeText = stake.ToString("F2", CultureInfo.InvariantCulture);
-                }
+                var stake = _recovery.RegisterDeficitResult(
+                    isLoss, update.Profit, _recoverVm.DeficitRecoveryTrades, _recoverVm.DeficitMaxStake);
+                StakeText = stake.ToString("F2", CultureInfo.InvariantCulture);
             }
 
             _lastBoughtContractId = 0;

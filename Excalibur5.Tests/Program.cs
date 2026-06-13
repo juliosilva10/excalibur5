@@ -32,7 +32,11 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Recovery: base stake when no deficit", RecoveryStakeTests.NextStakeReturnsBaseWhenNoDeficit),
     ("Recovery: sizes to recover deficit", RecoveryStakeTests.NextStakeRecoversDeficit),
     ("Recovery: clamped to max stake", RecoveryStakeTests.NextStakeClampedToMax),
-    ("Recovery: never below base stake", RecoveryStakeTests.NextStakeNeverBelowBase)
+    ("Recovery: never below base stake", RecoveryStakeTests.NextStakeNeverBelowBase),
+    ("Controller: martingale advance/reset", RecoveryControllerTests.MartingaleAdvancesOnLossResetsOnWin),
+    ("Controller: martingale caps at max", RecoveryControllerTests.MartingaleCapsAtMaxLevel),
+    ("Controller: deficit accumulate/recover", RecoveryControllerTests.DeficitAccumulatesThenRecovers),
+    ("Controller: reset clears progress", RecoveryControllerTests.ResetProgressClearsLadderAndDeficit)
 };
 
 var failures = 0;
