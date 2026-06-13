@@ -499,7 +499,7 @@ public partial class MarketTabView : UserControl
         {
             _crosshairLine = new Line
             {
-                Stroke = new SolidColorBrush(Color.FromArgb(60, 160, 200, 220)),
+                Stroke = CrosshairStrokeBrush,
                 StrokeThickness = 0.5,
                 StrokeDashArray = new DoubleCollection { 4, 3 },
                 IsHitTestVisible = false
@@ -530,14 +530,14 @@ public partial class MarketTabView : UserControl
         {
             _tooltipText = new TextBlock
             {
-                FontFamily = new FontFamily("Consolas"),
+                FontFamily = MonoFont,
                 FontSize = 11,
                 IsHitTestVisible = false
             };
             _tooltipBorder = new Border
             {
-                Background = new SolidColorBrush(Color.FromArgb(220, 20, 28, 38)),
-                BorderBrush = new SolidColorBrush(Color.FromArgb(180, 255, 255, 255)),
+                Background = CrosshairLabelBgBrush,
+                BorderBrush = CrosshairLabelBorderBrush,
                 BorderThickness = new Thickness(0.8),
                 CornerRadius = new CornerRadius(3),
                 Padding = new Thickness(4, 1, 4, 1),
@@ -586,7 +586,7 @@ public partial class MarketTabView : UserControl
         {
             _crosshairLine = new Line
             {
-                Stroke = new SolidColorBrush(Color.FromArgb(60, 160, 200, 220)),
+                Stroke = CrosshairStrokeBrush,
                 StrokeThickness = 0.5,
                 StrokeDashArray = new DoubleCollection { 4, 3 },
                 IsHitTestVisible = false
@@ -606,14 +606,14 @@ public partial class MarketTabView : UserControl
         {
             _tooltipText = new TextBlock
             {
-                FontFamily = new FontFamily("Consolas"),
+                FontFamily = MonoFont,
                 FontSize = 11,
                 IsHitTestVisible = false
             };
             _tooltipBorder = new Border
             {
-                Background = new SolidColorBrush(Color.FromArgb(220, 20, 28, 38)),
-                BorderBrush = new SolidColorBrush(Color.FromArgb(180, 255, 255, 255)),
+                Background = CrosshairLabelBgBrush,
+                BorderBrush = CrosshairLabelBorderBrush,
                 BorderThickness = new Thickness(0.8),
                 CornerRadius = new CornerRadius(3),
                 Padding = new Thickness(6, 4, 6, 4),
@@ -787,6 +787,7 @@ public partial class MarketTabView : UserControl
         if (_isPinned && _pinnedGlobalIdx >= 0)
             ShowMarkerAt(_pinnedGlobalIdx);
         }
+        // Geometry can briefly go out of range mid-resize/zoom; the next redraw corrects it.
         catch (ArgumentOutOfRangeException) { }
     }
 
@@ -799,6 +800,15 @@ public partial class MarketTabView : UserControl
     private static readonly SolidColorBrush CyanBrush = new(Color.FromRgb(0x00, 0xbc, 0xd4));
     private static readonly SolidColorBrush OrangeBrush = new(Color.FromRgb(0xff, 0x98, 0x00));
 
+    // Crosshair label brushes — drawn on every mouse-move, so share frozen instances
+    // instead of allocating per redraw.
+    private static readonly SolidColorBrush CrosshairStrokeBrush = new(Color.FromArgb(60, 160, 200, 220));
+    private static readonly SolidColorBrush CrosshairLabelBgBrush = new(Color.FromArgb(220, 20, 28, 38));
+    private static readonly SolidColorBrush CrosshairLabelBorderBrush = new(Color.FromArgb(180, 255, 255, 255));
+
+    // Monospace font for chart labels — shared so it isn't reallocated each redraw.
+    private static readonly FontFamily MonoFont = new("Consolas");
+
     static MarketTabView()
     {
         AxisBrush.Freeze();
@@ -808,6 +818,9 @@ public partial class MarketTabView : UserControl
         NeutralLightBrush.Freeze();
         CyanBrush.Freeze();
         OrangeBrush.Freeze();
+        CrosshairStrokeBrush.Freeze();
+        CrosshairLabelBgBrush.Freeze();
+        CrosshairLabelBorderBrush.Freeze();
     }
 
     private void DrawYAxis(double min, double max)
@@ -824,7 +837,7 @@ public partial class MarketTabView : UserControl
             var tb = new TextBlock
             {
                 Text = ((decimal)val).ToString("F" + pipSize),
-                FontFamily = new FontFamily("Consolas"),
+                FontFamily = MonoFont,
                 FontSize = 9,
                 Foreground = AxisBrush
             };
@@ -864,7 +877,7 @@ public partial class MarketTabView : UserControl
             var tb = new TextBlock
             {
                 Text = label,
-                FontFamily = new FontFamily("Consolas"),
+                FontFamily = MonoFont,
                 FontSize = 9,
                 Foreground = AxisBrush
             };
@@ -1046,7 +1059,7 @@ public partial class MarketTabView : UserControl
             var tb = new TextBlock
             {
                 Text = label,
-                FontFamily = new FontFamily("Consolas"),
+                FontFamily = MonoFont,
                 FontSize = 9,
                 Foreground = AxisBrush
             };
@@ -1156,7 +1169,7 @@ public partial class MarketTabView : UserControl
             var tb = new TextBlock
             {
                 Text = label,
-                FontFamily = new FontFamily("Consolas"),
+                FontFamily = MonoFont,
                 FontSize = 9,
                 Foreground = AxisBrush
             };

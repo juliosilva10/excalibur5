@@ -83,22 +83,23 @@ public partial class ContractPanelView : UserControl
         e.Handled = !Regex.IsMatch(newText, @"^[0-2]?[0-9]?:?[0-5]?[0-9]?$");
     }
 
+    // Cached reflection handle for DatePicker's private _calendar field (last-resort fallback).
+    private static readonly System.Reflection.FieldInfo? CalendarField =
+        typeof(DatePicker).GetField("_calendar",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
     private void DpEndDate_CalendarOpened(object sender, RoutedEventArgs e)
     {
         if (sender is not DatePicker dp) return;
 
-        // Access the internal Calendar via reflection (DatePicker._calendar field)
-        var calendarField = typeof(DatePicker).GetField("_calendar",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        var calendar = calendarField?.GetValue(dp) as Calendar;
+        // Prefer the public visual-tree path (stable across .NET versions); fall back to
+        // the cached private-field reflection only if the template lookup fails.
+        Calendar? calendar = null;
+        var popup = dp.Template.FindName("PART_Popup", dp) as Popup;
+        if (popup?.Child is FrameworkElement popupChild)
+            calendar = FindVisualChild<Calendar>(popupChild);
 
-        if (calendar == null)
-        {
-            // Fallback: try via Popup
-            var popup = dp.Template.FindName("PART_Popup", dp) as Popup;
-            if (popup?.Child is FrameworkElement popupChild)
-                calendar = FindVisualChild<Calendar>(popupChild);
-        }
+        calendar ??= CalendarField?.GetValue(dp) as Calendar;
 
         if (calendar == null) return;
 
