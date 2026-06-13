@@ -34,9 +34,11 @@ public sealed class StrategyExecutor : IDisposable
     private string _callProposalId = string.Empty;
     private string _callSubscriptionId = string.Empty;
     private decimal _callAskPrice;
+    private decimal _callPayout;
     private string _putProposalId = string.Empty;
     private string _putSubscriptionId = string.Empty;
     private decimal _putAskPrice;
+    private decimal _putPayout;
     private bool _proposalsReady;
     private decimal _proposalStake;
 
@@ -227,9 +229,11 @@ public sealed class StrategyExecutor : IDisposable
             _callProposalId = callResp.ProposalId;
             _callSubscriptionId = callResp.SubscriptionId;
             _callAskPrice = callResp.AskPrice;
+            _callPayout = callResp.Payout;
             _putProposalId = putResp.ProposalId;
             _putSubscriptionId = putResp.SubscriptionId;
             _putAskPrice = putResp.AskPrice;
+            _putPayout = putResp.Payout;
             _proposalsReady = true;
 
             AppLogger.Info(Src, $"Bot proposals ready: CALL={_callProposalId} ask={_callAskPrice}, PUT={_putProposalId} ask={_putAskPrice}");
@@ -284,6 +288,7 @@ public sealed class StrategyExecutor : IDisposable
                 _callProposalId = resp.ProposalId;
                 _callSubscriptionId = resp.SubscriptionId;
                 _callAskPrice = resp.AskPrice;
+                _callPayout = resp.Payout;
             }
             else
             {
@@ -294,6 +299,7 @@ public sealed class StrategyExecutor : IDisposable
                 _putProposalId = resp.ProposalId;
                 _putSubscriptionId = resp.SubscriptionId;
                 _putAskPrice = resp.AskPrice;
+                _putPayout = resp.Payout;
             }
         }
         catch (Exception ex)
@@ -315,11 +321,13 @@ public sealed class StrategyExecutor : IDisposable
         {
             _callProposalId = proposal.ProposalId;
             _callAskPrice = proposal.AskPrice;
+            _callPayout = proposal.Payout;
         }
         else if (proposal.SubscriptionId == _putSubscriptionId && !string.IsNullOrEmpty(proposal.ProposalId))
         {
             _putProposalId = proposal.ProposalId;
             _putAskPrice = proposal.AskPrice;
+            _putPayout = proposal.Payout;
         }
     }
 
@@ -483,12 +491,14 @@ public sealed class StrategyExecutor : IDisposable
         var durationTicks = _config.DurationApiUnit == "t"
             ? _config.DurationApiValue
             : 0;
+        var winProfit = GetVirtualWinProfit(signal.Direction, _config.Stake);
         var request = new VirtualTradeRequest(
             tradeId,
             signal,
             _currentSpot,
             _config.DurationSeconds,
-            durationTicks);
+            durationTicks,
+            winProfit);
 
         if (!_virtualTradeSimulator.TryStart(request))
         {
@@ -508,9 +518,19 @@ public sealed class StrategyExecutor : IDisposable
             contractType,
             _config.Stake,
             _currentSpot,
-            _config.DurationSeconds));
+            _config.DurationSeconds,
+            winProfit));
         AppLogger.Info(Src, $"Virtual {direction} started at {_currentSpot}");
         TradeExecuted?.Invoke(this, $"Entrada virtual {direction} iniciada");
+    }
+
+    private decimal GetVirtualWinProfit(SignalDirection direction, decimal stake)
+    {
+        var payout = direction == SignalDirection.Call ? _callPayout : _putPayout;
+        if (_proposalsReady && payout > 0 && stake > 0)
+            return payout - stake;
+
+        return 0m;
     }
 
     private void OnVirtualTradeCompleted(object? sender, Virtual.VirtualTradeCompleted result)
@@ -522,7 +542,7 @@ public sealed class StrategyExecutor : IDisposable
         _ownsVirtualReservation = false;
         VirtualTradeCompleted?.Invoke(
             this,
-            new VirtualTradeResult(result.TradeId, result.Won, realModeActivated));
+            new VirtualTradeResult(result.TradeId, result.Won, realModeActivated, result.ExitSpot, result.WinProfit));
 
         var outcome = result.Won ? "W" : "L";
         var suffix = realModeActivated ? " — próxima entrada será real" : string.Empty;
@@ -1074,12 +1094,13 @@ public sealed record BotPositionOpened(
     int? EntryCandleIndex,
     ChartSnapshotType? EntryCandleType);
 public sealed record TradeCompleted(long ContractId, decimal Profit, bool Won, long SellTime = 0);
-public sealed record VirtualTradeResult(long TradeId, bool Won, bool RealModeActivated);
+public sealed record VirtualTradeResult(long TradeId, bool Won, bool RealModeActivated, decimal ExitSpot, decimal WinProfit);
 public sealed record VirtualPositionOpened(
     long TradeId,
     string Symbol,
     string ContractType,
     decimal Stake,
     decimal EntrySpot,
-    int DurationSeconds);
+    int DurationSeconds,
+    decimal WinProfit);
 public sealed record VirtualPositionUpdated(long TradeId, decimal CurrentSpot);

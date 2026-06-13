@@ -62,6 +62,20 @@ internal static class SimulatorTests
         TestAssert.True(result.Won, "CALL with higher final price should win");
     }
 
+    public static Task CompletedTradeCarriesWinProfit()
+    {
+        using var simulator = new VirtualTradeSimulator();
+        VirtualTradeCompleted? completed = null;
+        simulator.TradeCompleted += (_, result) => completed = result;
+
+        simulator.TryStart(CreateRequest(SignalDirection.Call, 100m, ticks: 1, winProfit: 9.5m));
+        simulator.UpdateSpot(101m);
+
+        TestAssert.NotNull(completed, "Trade did not complete");
+        TestAssert.True(completed!.WinProfit == 9.5m, "WinProfit was not propagated to the result");
+        return Task.CompletedTask;
+    }
+
     private static VirtualTradeRequest CreateRequest(
         SignalDirection direction,
         decimal entrySpot,

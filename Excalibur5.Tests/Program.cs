@@ -13,6 +13,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Only one simulation is pending", SimulatorTests.OnlyOneSimulationIsPending),
     ("Equal final price is a loss", SimulatorTests.EqualFinalPriceIsLoss),
     ("Timed trade remains paused", SimulatorTests.TimedTradeRemainsPaused),
+    ("Completed trade carries win profit", SimulatorTests.CompletedTradeCarriesWinProfit),
     ("Market prices use selected pip size", PriceFormattingTests.UsesSelectedPipSize)
 };
 
