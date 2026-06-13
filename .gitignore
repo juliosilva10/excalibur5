@@ -29,3 +29,6 @@ desktop.ini
 
 # Local dotnet CLI home (build artifacts/telemetry)
 .dotnet-cli-home/
+
+# Backup/worktree acidental (gitlink, fora do build)
+.codex-push-*/
