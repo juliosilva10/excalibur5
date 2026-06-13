@@ -12,5 +12,6 @@ public enum DurationUnitType
 public enum ContractCategory
 {
     Vanillas,
-    RiseFall
+    RiseFall,
+    Digits
 }

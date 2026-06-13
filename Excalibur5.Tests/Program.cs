@@ -36,7 +36,12 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Controller: martingale advance/reset", RecoveryControllerTests.MartingaleAdvancesOnLossResetsOnWin),
     ("Controller: martingale caps at max", RecoveryControllerTests.MartingaleCapsAtMaxLevel),
     ("Controller: deficit accumulate/recover", RecoveryControllerTests.DeficitAccumulatesThenRecovers),
-    ("Controller: reset clears progress", RecoveryControllerTests.ResetProgressClearsLadderAndDeficit)
+    ("Controller: reset clears progress", RecoveryControllerTests.ResetProgressClearsLadderAndDeficit),
+    ("Digits: win probability matches rule", DigitOddsTests.WinProbabilityMatchesDigitRule),
+    ("Digits: barrier ranges enforced", DigitOddsTests.BarrierRangesEnforced),
+    ("Digits: Over5/Under5 has dead digit", DigitOddsTests.OverUnderSameBarrierHasDeadDigit),
+    ("Digits: overlapping barriers full coverage", DigitOddsTests.OverlappingBarriersAreFullCoverage),
+    ("Digits: wins respects side", DigitOddsTests.WinsRespectsSide)
 };
 
 var failures = 0;
