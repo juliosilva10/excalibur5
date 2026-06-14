@@ -666,6 +666,94 @@
             </Setter>
         </Style>
 
+        <!-- Add Button Style (cyan/teal, same structure as DerivToggleButtonStyle) -->
+        <Style x:Key="DerivAddButtonStyle" TargetType="Button">
+            <Setter Property="Background"    Value="Transparent"/>
+            <Setter Property="Foreground"    Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding"       Value="12,0,12,0"/>
+            <Setter Property="FontSize"      Value="11"/>
+            <Setter Property="Height"        Value="30"/>
+            <Setter Property="Cursor"        Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid>
+                            <Border x:Name="GlowBorder"
+                                    CornerRadius="8"
+                                    Background="#00f0ff"
+                                    Opacity="0.20">
+                                <Border.Effect>
+                                    <BlurEffect Radius="20"/>
+                                </Border.Effect>
+                            </Border>
+                            <Border x:Name="ShadowBorder"
+                                    CornerRadius="8"
+                                    Background="Black"
+                                    Opacity="0.4"
+                                    Margin="0,2,0,-2"/>
+                            <Border x:Name="MainBorder"
+                                    CornerRadius="8"
+                                    BorderThickness="1.5"
+                                    BorderBrush="#2a8da3">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                        <GradientStop Color="#185463" Offset="0.0"/>
+                                        <GradientStop Color="#123f4c" Offset="0.4"/>
+                                        <GradientStop Color="#0c2a34" Offset="1.0"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                                <Grid>
+                                    <Border CornerRadius="7,7,0,0" Height="8" VerticalAlignment="Top" Opacity="0.10"
+                                            IsHitTestVisible="False">
+                                        <Border.Background>
+                                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                                <GradientStop Color="White" Offset="0.0"/>
+                                                <GradientStop Color="Transparent" Offset="1.0"/>
+                                            </LinearGradientBrush>
+                                        </Border.Background>
+                                    </Border>
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                      Margin="{TemplateBinding Padding}"/>
+                                </Grid>
+                            </Border>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="GlowBorder" Property="Opacity" Value="0.55"/>
+                                <Setter TargetName="MainBorder" Property="BorderBrush" Value="#00f0ff"/>
+                                <Setter TargetName="MainBorder" Property="Background">
+                                    <Setter.Value>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                            <GradientStop Color="#206b7e" Offset="0.0"/>
+                                            <GradientStop Color="#164f5e" Offset="0.45"/>
+                                            <GradientStop Color="#0d3340" Offset="1.0"/>
+                                        </LinearGradientBrush>
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ShadowBorder" Property="Opacity" Value="0.1"/>
+                                <Setter TargetName="GlowBorder"   Property="Opacity" Value="0.7"/>
+                                <Setter TargetName="MainBorder" Property="Background">
+                                    <Setter.Value>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                            <GradientStop Color="#123f4c" Offset="0.0"/>
+                                            <GradientStop Color="#0c2a34" Offset="1.0"/>
+                                        </LinearGradientBrush>
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="MainBorder" Property="Opacity" Value="0.45"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- Sell Button Style (green - profit) -->
         <Style x:Key="DerivSellProfitButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>

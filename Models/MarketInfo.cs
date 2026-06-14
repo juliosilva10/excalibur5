@@ -14,6 +14,9 @@ public sealed class MarketInfo
     /// <summary>Outer barrier offset at 1-minute duration. Scales with dur^0.513.</summary>
     public decimal BarrierOuterBase { get; init; } = 0.86m;
 
+    /// <summary>Show only the market name (e.g. "V10") when bound without an explicit template.</summary>
+    public override string ToString() => DisplayName;
+
     public static IReadOnlyList<MarketInfo> SyntheticMarkets { get; } = new List<MarketInfo>
     {
         new() { Symbol = "R_10",    DisplayName = "V10",       FullName = "Volatility 10 Index",        Category = "Volatility",    PipSize = 3, BarrierInnerBase = 0.450m,  BarrierOuterBase = 0.860m },

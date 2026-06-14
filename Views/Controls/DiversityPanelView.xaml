@@ -31,9 +31,11 @@
                        Text="Vários contratos comprados juntos e tratados como um só: recover e virtual atuam sobre o líquido do grupo."/>
 
             <!-- Contracts list -->
-            <ItemsControl Grid.Row="2" ItemsSource="{Binding Contracts}" MaxHeight="280"
-                          ScrollViewer.VerticalScrollBarVisibility="Auto">
-                <ItemsControl.ItemTemplate>
+            <ScrollViewer Grid.Row="2" MaxHeight="280"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+                <ItemsControl ItemsSource="{Binding Contracts}" Margin="0,0,4,0">
+                    <ItemsControl.ItemTemplate>
                     <DataTemplate DataType="{x:Type vm:DiversityContractRow}">
                         <Border CornerRadius="4" Background="#0e2230" BorderBrush="#1d4957"
                                 BorderThickness="1" Margin="0,0,0,6" Padding="10,8">
@@ -121,25 +123,58 @@
                                                  ToolTip="Valor da entrada em USD"/>
                                     </StackPanel>
                                 </WrapPanel>
-                                <Button Grid.Column="1" Content="✕" Width="26" Height="26"
+                                <Button Grid.Column="1" Width="26" Height="26"
                                         VerticalAlignment="Top" Margin="8,18,0,0"
-                                        Foreground="#ff6b6b" Background="Transparent" BorderThickness="0"
                                         Cursor="Hand" ToolTip="Remover contrato"
+                                        Background="Transparent" BorderThickness="0"
                                         FocusVisualStyle="{x:Null}"
                                         Command="{Binding DataContext.RemoveContractCommand,
                                                   RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                        CommandParameter="{Binding}"/>
+                                        CommandParameter="{Binding}">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Grid>
+                                                <Border x:Name="CloseGlow" CornerRadius="6"
+                                                        Background="#ff5555" Opacity="0">
+                                                    <Border.Effect>
+                                                        <BlurEffect Radius="12"/>
+                                                    </Border.Effect>
+                                                </Border>
+                                                <Border x:Name="CloseBg" CornerRadius="6"
+                                                        Background="Transparent">
+                                                    <TextBlock x:Name="CloseGlyph" Text="✕"
+                                                               Foreground="#ff6b6b" FontSize="12"
+                                                               HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center"/>
+                                                </Border>
+                                            </Grid>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="CloseGlow" Property="Opacity" Value="0.6"/>
+                                                    <Setter TargetName="CloseBg" Property="Background" Value="#33ff5555"/>
+                                                    <Setter TargetName="CloseGlyph" Property="Foreground" Value="#ff5555"/>
+                                                </Trigger>
+                                                <Trigger Property="IsPressed" Value="True">
+                                                    <Setter TargetName="CloseBg" Property="Background" Value="#55ff4040"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
                             </Grid>
                         </Border>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
-            </ItemsControl>
+                </ItemsControl>
+            </ScrollViewer>
 
             <!-- Add contract -->
             <Button Grid.Row="3" HorizontalAlignment="Left" Margin="0,4,0,10"
-                    Padding="12,5" Foreground="#00f0ff" Background="#0e2230" BorderBrush="#2a5568"
-                    BorderThickness="1" Cursor="Hand" FontSize="11" FocusVisualStyle="{x:Null}"
-                    Content="+ Adicionar contrato" Command="{Binding AddContractCommand}"/>
+                    Style="{StaticResource DerivAddButtonStyle}" Height="30"
+                    Command="{Binding AddContractCommand}">
+                <TextBlock Text="+ Adicionar contrato" Foreground="White" FontSize="11"
+                           VerticalAlignment="Center"/>
+            </Button>
 
             <!-- Coverage / guidance -->
             <Border Grid.Row="4" CornerRadius="4" Background="#0e2230" Padding="10,6" Margin="0,0,0,10">
